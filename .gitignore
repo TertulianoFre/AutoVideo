@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Segredos / credenciais
+.env
+*credentials*.json
+client_secret*.json
+token.json
+
+# Saída gerada (vídeos, áudio, imagens grandes)
+output/
+*.mp4
+*.wav
+*.mp3
+
+# SO
+.DS_Store
+Thumbs.db
