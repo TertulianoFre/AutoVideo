@@ -2,6 +2,9 @@
 
 Uso:
     .venv\\Scripts\\python cli.py --titulo "..." --roteiro "..." [--idioma pt-BR] [--voz mulher] [--duracao-alvo 5]
+
+Se você não passar --roteiro, o motor escreve um roteiro automaticamente a
+partir do título, do tamanho certo pra bater --duracao-alvo (padrão: 1 minuto).
 """
 
 import argparse
@@ -10,9 +13,9 @@ from engine.pipeline import gerar_video
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Gera um vídeo (16:9 e Shorts) a partir de um roteiro.")
+    parser = argparse.ArgumentParser(description="Gera um vídeo (16:9 e Shorts) a partir de um título ou roteiro.")
     parser.add_argument("--titulo", required=True)
-    parser.add_argument("--roteiro", required=True)
+    parser.add_argument("--roteiro", default=None, help="se não passar, o roteiro é gerado automaticamente")
     parser.add_argument("--idioma", default="pt-BR")
     parser.add_argument("--voz", default="mulher", choices=["mulher", "homem", "crianca"])
     parser.add_argument("--imagem", default="procedural", choices=["procedural", "foto", "ia"])

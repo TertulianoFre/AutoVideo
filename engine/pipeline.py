@@ -4,7 +4,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from engine import render, scenes, subtitles, tts, visuals
+from engine import render, roteiro as roteiro_mod, scenes, subtitles, tts, visuals
+from engine.roteiro import PALAVRAS_POR_MINUTO
 
 RAIZ_SAIDA = Path(__file__).resolve().parent.parent / "output"
 
@@ -23,11 +24,6 @@ def _slug(texto: str) -> str:
     return texto.strip("-")[:60] or "video"
 
 
-# Ritmo médio de fala do edge-tts nas vozes usadas aqui — serve só pra dar um
-# palpite de quantas palavras escrever pra chegar numa duração alvo.
-PALAVRAS_POR_MINUTO = 150
-
-
 @dataclass
 class ResultadoGeracao:
     pasta: Path
@@ -35,11 +31,12 @@ class ResultadoGeracao:
     video_16_9: Path
     video_9_16: Path
     duracao_segundos: float
+    roteiro: str
 
 
 def gerar_video(
     titulo: str,
-    roteiro: str,
+    roteiro: str | None = None,
     idioma: str = "pt-BR",
     voz: str = "mulher",
     estilo_imagem: str = "procedural",
@@ -47,6 +44,11 @@ def gerar_video(
 ) -> ResultadoGeracao:
     pasta = RAIZ_SAIDA / _slug(titulo)
     pasta.mkdir(parents=True, exist_ok=True)
+
+    if roteiro is None:
+        roteiro = roteiro_mod.gerar_roteiro(titulo, duracao_alvo_minutos or 1.0)
+        print(f"[roteiro gerado]\n{roteiro}\n")
+        (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
 
     audio_path = pasta / "narracao.mp3"
     submaker = tts.sintetizar(roteiro, idioma, voz, audio_path)
@@ -92,4 +94,4 @@ def gerar_video(
             imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4"
         )
 
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real)
+    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro)
