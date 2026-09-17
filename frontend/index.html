@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto YT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-avatar">MC</div>
+      <div>
+        <div class="brand-name">Meu Canal</div>
+        <div class="brand-sub">Rodando localmente</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-tab="painel">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6" height="6" rx="1.2"></rect><rect x="11.5" y="2.5" width="6" height="6" rx="1.2"></rect><rect x="2.5" y="11.5" width="6" height="6" rx="1.2"></rect><rect x="11.5" y="11.5" width="6" height="6" rx="1.2"></rect></svg>
+        Painel
+      </button>
+      <button class="nav-item" data-tab="novo">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="7.3"></circle><path d="M10 6.7v6.6M6.7 10h6.6"></path></svg>
+        Novo vídeo
+      </button>
+      <button class="nav-item" data-tab="fila">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 5.5h12M4 10h12M4 14.5h8"></path></svg>
+        Fila
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <span class="dot dot-positive"></span> Motor conectado
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <h1 id="page-title">Painel</h1>
+    </header>
+
+    <div class="content">
+
+      <!-- ============ PAINEL ============ -->
+      <section id="tab-painel" class="tab active">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Vídeos gerados</div>
+            <div class="stat-value" id="stat-total">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Duração total</div>
+            <div class="stat-value" id="stat-duracao">0 min</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Vídeos recentes</div>
+          <div id="painel-lista" class="video-list">
+            <div class="empty">Nenhum vídeo ainda — vá em "Novo vídeo" pra gerar o primeiro.</div>
+          </div>
+        </div>
+
+        <form id="form-canal" class="card form">
+          <div class="card-head">Contexto do canal</div>
+          <label>
+            <span>Nicho, tom, público — o motor usa isso como base sempre que escreve um roteiro, pra manter a linha do canal (não precisa repetir em cada vídeo)</span>
+            <textarea name="contexto" rows="4" placeholder="Ex: canal de curiosidades científicas, tom leve e bem-humorado, público jovem adulto, sempre termina com uma pergunta pro espectador"></textarea>
+          </label>
+          <button type="submit" class="btn-secondary" style="align-self:flex-start">Salvar contexto</button>
+          <span id="canal-status" class="video-meta" style="margin-top:2px"></span>
+        </form>
+      </section>
+
+      <!-- ============ NOVO VIDEO ============ -->
+      <section id="tab-novo" class="tab">
+        <div class="novo-grid">
+          <form id="form-novo" class="card form">
+            <div class="modo-toggle">
+              <button type="button" class="modo-btn active" data-modo="narrado">Narrado</button>
+              <button type="button" class="modo-btn" data-modo="ambiente">Ambiente (chuva, sem narração)</button>
+            </div>
+            <input type="hidden" name="modo" id="campo-modo" value="narrado">
+
+            <div class="row-2">
+              <label>
+                <span>Título <em>(obrigatório)</em></span>
+                <input type="text" name="titulo" required placeholder="Ex: Por que os gatos ronronam">
+              </label>
+              <label>
+                <span>Data de postagem <em>(obrigatório)</em></span>
+                <input type="date" name="data_postagem" required>
+              </label>
+            </div>
+
+            <label>
+              <span>Descrição do vídeo (opcional — estilo visual, tom, público: "2D simples", "mais detalhado/realista", "infantil e colorido"...)</span>
+              <textarea name="descricao_video" rows="2" placeholder="Ex: estilo mais infantil e colorido, bem simples em 2D"></textarea>
+            </label>
+
+            <div id="campos-narrado">
+              <label>
+                <span>Roteiro (opcional — deixe em branco pra gerar automaticamente a partir do título + contexto do canal)</span>
+                <textarea name="roteiro" rows="4" placeholder="Cole aqui o roteiro pronto, ou deixe em branco pro motor escrever sozinho"></textarea>
+              </label>
+
+              <div class="row-2">
+                <label>
+                  <span>Voz (narração por IA)</span>
+                  <select name="voz">
+                    <option value="mulher">Mulher</option>
+                    <option value="homem">Homem</option>
+                    <option value="crianca">Criança</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Idioma</span>
+                  <select name="idioma">
+                    <option value="pt-BR">Português (Brasil)</option>
+                    <option value="en-US">Inglês</option>
+                    <option value="es-ES">Espanhol</option>
+                    <option value="fr-FR">Francês</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div id="campos-ambiente" hidden>
+              <label>
+                <span>Som ambiente</span>
+                <select name="tipo_som">
+                  <option value="chuva">Chuva</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="row-2">
+              <label>
+                <span>Estilo de imagem</span>
+                <select name="imagem">
+                  <option value="procedural">Procedural (rápido, sem internet)</option>
+                  <option value="ia" selected>Gerada por IA (desenho 2D)</option>
+                  <option value="foto">Foto real</option>
+                </select>
+              </label>
+              <label>
+                <span>Duração alvo (minutos)</span>
+                <input type="number" name="duracao_alvo" id="campo-duracao" min="0.3" step="0.5" value="1">
+              </label>
+            </div>
+
+            <button type="submit" class="btn-primary">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 4v12M4 10h12"></path></svg>
+              Gerar vídeo
+            </button>
+          </form>
+
+          <div class="card" id="progresso-card" hidden>
+            <div class="card-head">Progresso</div>
+            <div class="progresso-etapa" id="progresso-etapa">Iniciando…</div>
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progresso-pct" id="progresso-pct">0%</div>
+          </div>
+
+          <div class="card" id="resultado-card" hidden>
+            <div class="card-head">Vídeo pronto</div>
+            <div id="resultado-conteudo"></div>
+          </div>
+
+          <div class="card" id="erro-card" hidden>
+            <div class="card-head" style="color:var(--negative)">Deu erro</div>
+            <div id="erro-conteudo"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FILA ============ -->
+      <section id="tab-fila" class="tab">
+        <div class="card">
+          <div class="card-head">Todos os vídeos</div>
+          <div id="fila-lista" class="video-list">
+            <div class="empty">Nenhum vídeo gerado ainda.</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

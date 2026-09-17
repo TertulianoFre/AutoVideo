@@ -3,3 +3,7 @@ Pillow>=12.0
 requests>=2.34
 deep-translator>=1.11
 opencv-python-headless>=4.9,<5
+numpy>=2.0
+fastapi>=0.141
+uvicorn[standard]>=0.53
+python-multipart>=0.0.32

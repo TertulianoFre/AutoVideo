@@ -4,6 +4,8 @@ legenda queimada."""
 import subprocess
 from pathlib import Path
 
+from engine.ferramentas import caminho_ffmpeg
+
 FORMATOS = {
     "16:9": (1920, 1080),
     "9:16": (1080, 1920),
@@ -19,15 +21,16 @@ def _legenda_para_filtro(caminho_legenda: Path) -> str:
 def renderizar_slideshow(
     imagens_com_duracao: list,
     audio: Path,
-    legenda: Path,
+    legenda: Path | None,
     formato: str,
     saida: Path,
 ) -> Path:
     """imagens_com_duracao: lista de (caminho_da_imagem, duração_em_segundos),
-    uma por cena, na ordem em que aparecem no vídeo."""
+    uma por cena, na ordem em que aparecem no vídeo. legenda=None pra vídeo sem
+    legenda (ex: modo ambiente, que não tem narração)."""
     largura, altura = FORMATOS[formato]
 
-    comando = ["ffmpeg", "-y"]
+    comando = [caminho_ffmpeg(), "-y"]
     for imagem, duracao in imagens_com_duracao:
         comando += ["-loop", "1", "-t", f"{max(duracao, 0.1):.3f}", "-i", str(imagem)]
     comando += ["-i", str(audio)]
@@ -39,7 +42,10 @@ def renderizar_slideshow(
         trechos_filtro.append(f"[{i}:v]scale={largura}:{altura},setsar=1,format=yuv420p[v{i}]")
         labels.append(f"[v{i}]")
     trechos_filtro.append(f"{''.join(labels)}concat=n={n}:v=1:a=0[vcat]")
-    trechos_filtro.append(f"[vcat]{_legenda_para_filtro(legenda)}[vout]")
+    if legenda is not None:
+        trechos_filtro.append(f"[vcat]{_legenda_para_filtro(legenda)}[vout]")
+    else:
+        trechos_filtro.append("[vcat]null[vout]")
     filtro = ";".join(trechos_filtro)
 
     comando += [

@@ -31,11 +31,13 @@ PEXELS_URL = "https://api.pexels.com/v1/search"
 OPENVERSE_URL = "https://api.openverse.org/v1/images/"
 POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}"
 
-# Estilo simples (não fotorrealista, sem 3D) — pedido explícito: desenho/cartoon
-# 2D, mais fácil da IA acertar o assunto sem gerar anatomia esquisita.
+# Estilo simples (não fotorrealista, sem 3D) por padrão — pedido explícito:
+# desenho/cartoon 2D, mais fácil da IA acertar o assunto sem gerar anatomia
+# esquisita. Dá pra pedir outra coisa (mais detalhado, infantil...) via a
+# "descrição do vídeo" na tela de Novo Vídeo — vira o {extra} abaixo.
 ESTILO_PROMPT_IA = (
     "{cena}, flat 2d illustration, cartoon style, flat colors, no gradients, no 3d, "
-    "simple shapes, wide shot, full scene, no text, no watermark, no logo"
+    "simple shapes, wide shot, full scene, no text, no watermark, no logo{extra}"
 )
 
 # Verbos de expressão facial intensa (bocejar, gritar...) fazem esse modelo
@@ -264,13 +266,20 @@ def _rosto_grande_demais(imagem: Image.Image, limiar: float = LIMIAR_AREA_ROSTO)
 # ---------------------------------------------------------------------------
 
 def gerar_fundo_ia(
-    largura: int, altura: int, caminho: Path, cena: str, semente: int | None = None, tentativas: int = 3
+    largura: int,
+    altura: int,
+    caminho: Path,
+    cena: str,
+    semente: int | None = None,
+    tentativas: int = 3,
+    estilo_extra: str = "",
 ) -> Path:
     # Prompt curto: um texto de cena muito longo aumenta a chance de o serviço
     # gratuito (comunitário, às vezes instável) devolver erro.
     resumo_cena = _traduzir_para_ingles(cena.strip()[:200])[:200]
     resumo_cena = _evitar_gatilhos_de_rosto(resumo_cena)
-    prompt = ESTILO_PROMPT_IA.format(cena=resumo_cena)
+    extra = f", {_traduzir_para_ingles(estilo_extra.strip()[:150])}" if estilo_extra.strip() else ""
+    prompt = ESTILO_PROMPT_IA.format(cena=resumo_cena, extra=extra)
     url = POLLINATIONS_URL.format(prompt=urllib.parse.quote(prompt))
     params = {"width": largura, "height": altura, "nologo": "true"}
     if semente is not None:
@@ -300,9 +309,9 @@ def gerar_fundo_ia(
 # dispatcher
 # ---------------------------------------------------------------------------
 
-def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str) -> Path:
+def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "") -> Path:
     if estilo == "foto":
         return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena)
     if estilo == "ia":
-        return gerar_fundo_ia(largura, altura, caminho, cena=cena)
+        return gerar_fundo_ia(largura, altura, caminho, cena=cena, estilo_extra=estilo_extra)
     return gerar_fundo_procedural(largura, altura, caminho, semente=cena)
