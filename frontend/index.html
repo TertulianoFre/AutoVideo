@@ -412,8 +412,14 @@
 
       <!-- ============ BASE (biblioteca de mídia) ============ -->
       <section id="tab-base" class="tab">
-        <div class="card">
-          <div class="card-head">Áudios</div>
+        <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="video-meta">Mostrar itens do canal:</span>
+          <select id="base-filtro-canal" class="thumb-efeito"><option value="">Todos os canais (mostrar tudo)</option></select>
+          <span class="video-meta">Itens sem canal definido aparecem em todos. Tudo o que você importou fica listado abaixo.</span>
+        </div>
+
+        <details class="card secao-base" open>
+          <summary class="card-head">Áudios importados <span class="video-meta" id="base-audios-contagem"></span></summary>
           <p class="hint" style="margin:0 0 14px">
             Importe músicas ou efeitos livres de direito autoral da sua máquina — depois dá pra escolher qualquer um deles como som de fundo em "Novo vídeo" (opção "Um áudio da minha Base").
           </p>
@@ -423,10 +429,10 @@
           </label>
           <span id="base-audio-status" class="video-meta" style="margin-left:10px"></span>
           <div id="base-audios-lista" class="base-audios-lista" style="margin-top:14px"></div>
-        </div>
+        </details>
 
-        <div class="card">
-          <div class="card-head">Imagens</div>
+        <details class="card secao-base">
+          <summary class="card-head">Imagens importadas <span class="video-meta" id="base-imagens-contagem"></span></summary>
           <p class="hint" style="margin:0 0 14px">
             Importe imagens da sua máquina — dá pra usar como base de thumbnail de qualquer vídeo (na galeria de "editar thumbnail", na Fila).
           </p>
@@ -435,8 +441,8 @@
             Importar imagem
           </label>
           <span id="base-imagem-status" class="video-meta" style="margin-left:10px"></span>
-          <div id="base-imagens-grade" class="thumb-imagens-grade" style="margin-top:14px"></div>
-        </div>
+          <div id="base-imagens-grade" class="base-imagens-lista" style="margin-top:14px"></div>
+        </details>
       </section>
 
       <!-- ============ ANOTAÇÕES ============ -->
@@ -495,6 +501,7 @@
 
 <script src="/static/thumb_shorts.js"></script>
 <script src="/static/anotacoes.js"></script>
+<script src="/static/base.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

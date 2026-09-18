@@ -340,13 +340,70 @@ def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
 TAMANHO_MAX_BIBLIOTECA_BYTES = 40 * 1024 * 1024
 
 
+def _meta_biblioteca() -> dict:
+    caminho = biblioteca.RAIZ / "meta.json"
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _usos_biblioteca() -> dict:
+    """{("audios"|"imagens", nome): [títulos dos vídeos que usam]} — lido dos metadados de cada vídeo."""
+    usos: dict = {}
+    if not RAIZ_SAIDA.exists():
+        return usos
+    for pasta in RAIZ_SAIDA.iterdir():
+        caminho_meta = pasta / "metadata.json"
+        if not caminho_meta.exists():
+            continue
+        try:
+            meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        titulo = meta.get("titulo", pasta.name)
+        if meta.get("som_fundo_biblioteca"):
+            usos.setdefault(("audios", meta["som_fundo_biblioteca"]), []).append(titulo)
+        fonte = pasta / "thumbnail_fonte.txt"
+        if fonte.exists():
+            nome_fonte = fonte.read_text(encoding="utf-8").strip()
+            if nome_fonte.startswith("biblioteca-"):
+                usos.setdefault(("imagens", nome_fonte[len("biblioteca-"):]), []).append(titulo)
+    return usos
+
+
 @app.get("/api/biblioteca")
 def api_listar_biblioteca() -> dict:
+    meta, usos = _meta_biblioteca(), _usos_biblioteca()
+
+    def info(tipo: str, nome: str, url: str) -> dict:
+        extra = (meta.get(tipo) or {}).get(nome, {})
+        return {
+            "nome": nome, "url": url,
+            "descricao": extra.get("descricao", ""), "canal_id": extra.get("canal_id", ""),
+            "usado_em": usos.get((tipo, nome), []),
+        }
+
     return {
         "audios": [f"/biblioteca/audios/{nome}" for nome in biblioteca.listar_audios()],
         "audios_nomes": biblioteca.listar_audios(),
-        "imagens": [{"nome": nome, "url": f"/biblioteca/imagens/{nome}"} for nome in biblioteca.listar_imagens()],
+        "audios_info": [info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()],
+        "imagens": [info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()],
+        "canais": [{"id": c["id"], "nome": c["nome"]} for c in canal.listar_canais()],
     }
+
+
+@app.put("/api/biblioteca/{tipo}/{nome}/info")
+def api_info_biblioteca(tipo: str, nome: str, descricao: str = Form(""), canal_id: str = Form("")) -> dict:
+    """Descrição e canal de um item da Base (só metadado, não mexe no arquivo)."""
+    existentes = biblioteca.listar_audios() if tipo == "audios" else biblioteca.listar_imagens() if tipo == "imagens" else None
+    if existentes is None or nome not in existentes:
+        return JSONResponse({"erro": "item não encontrado"}, status_code=404)
+    meta = _meta_biblioteca()
+    meta.setdefault(tipo, {})[nome] = {"descricao": descricao.strip()[:300], "canal_id": canal_id.strip()[:80]}
+    biblioteca.RAIZ.mkdir(parents=True, exist_ok=True)
+    (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True}
 
 
 @app.post("/api/biblioteca/audios/upload")

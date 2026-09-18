@@ -895,6 +895,19 @@ campoSemNarracao.addEventListener("change", () => {
 
 campoSomFundoAtivo.addEventListener("change", aplicarEstadoSomFundo);
 
+campoSomFundoBiblioteca.addEventListener("change", async () => {
+  try {
+    const dados = await fetch("/api/biblioteca").then((r) => r.json());
+    const item = (dados.audios_info || []).find((a) => a.nome === campoSomFundoBiblioteca.value);
+    if (item?.usado_em?.length && !confirm(`Esse áudio já foi usado em: ${item.usado_em.join(", ")}. Usar de novo neste vídeo?`)) {
+      const outro = (dados.audios_info || []).find((a) => !a.usado_em.length);
+      campoSomFundoBiblioteca.value = outro ? outro.nome : "";
+    }
+  } catch {
+    // sem aviso se não deu pra checar
+  }
+});
+
 campoSomFundoTipo.addEventListener("change", () => {
   linhaSomFundoDescricao.hidden = campoSomFundoTipo.value !== "outro";
   linhaSomFundoBiblioteca.hidden = campoSomFundoTipo.value !== "biblioteca";
@@ -1400,56 +1413,6 @@ btnAgenteSugerir.addEventListener("click", async () => {
 });
 
 // ---------------- Base: biblioteca de áudios e imagens importados ----------------
-
-async function carregarBase() {
-  try {
-    const dados = await fetch("/api/biblioteca").then((r) => r.json());
-
-    const listaAudios = document.getElementById("base-audios-lista");
-    listaAudios.innerHTML = dados.audios_nomes?.length
-      ? dados.audios_nomes
-          .map(
-            (nome, i) => `
-        <div class="base-audio-item">
-          <audio controls src="${dados.audios[i]}" style="height:32px"></audio>
-          <span class="video-meta" style="flex:1">${nome}</span>
-          <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-audio-base" data-nome="${nome}">remover</button>
-        </div>`
-          )
-          .join("")
-      : '<div class="empty">Nenhum áudio importado ainda.</div>';
-
-    listaAudios.querySelectorAll(".btn-remover-audio-base").forEach((botao) => {
-      botao.addEventListener("click", async () => {
-        await fetch(`/api/biblioteca/audios/${encodeURIComponent(botao.dataset.nome)}`, { method: "DELETE" });
-        carregarBase();
-      });
-    });
-
-    const gradeImagens = document.getElementById("base-imagens-grade");
-    gradeImagens.innerHTML = dados.imagens?.length
-      ? dados.imagens
-          .map(
-            (img) => `
-        <div class="thumb-img-opcao" title="${img.nome}" style="position:relative">
-          <img src="${img.url}" alt="">
-          <button type="button" class="btn-remover-imagem-base" data-nome="${img.nome}" title="Remover" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:5px;width:20px;height:20px;cursor:pointer;line-height:1">×</button>
-        </div>`
-          )
-          .join("")
-      : '<div class="empty">Nenhuma imagem importada ainda.</div>';
-
-    gradeImagens.querySelectorAll(".btn-remover-imagem-base").forEach((botao) => {
-      botao.addEventListener("click", async (evento) => {
-        evento.stopPropagation();
-        await fetch(`/api/biblioteca/imagens/${encodeURIComponent(botao.dataset.nome)}`, { method: "DELETE" });
-        carregarBase();
-      });
-    });
-  } catch {
-    document.getElementById("base-audios-lista").innerHTML = '<div class="empty">Deu erro carregando a biblioteca.</div>';
-  }
-}
 
 document.getElementById("input-upload-audio-base").addEventListener("change", async (evento) => {
   const arquivo = evento.target.files[0];
