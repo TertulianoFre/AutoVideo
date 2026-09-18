@@ -41,13 +41,13 @@ TRANSICOES = {
     "nenhuma": None,
     "fade": "fade",
     "dissolver": "dissolve",
-    "deslizar": "slideleft",
-    "zoom": "zoomin",
-    "circulo": "circleopen",
+    "deslizar": "smoothleft",
+    "zoom": "fade",      # opções antigas (muito fortes) viram fade
+    "circulo": "fade",
     "aleatoria": "aleatoria",
 }
-_SORTEIO_TRANSICOES = ["fade", "dissolve", "slideleft", "slideright", "circleopen", "zoomin", "wipeleft", "smoothleft"]
-DURACAO_TRANSICAO = 0.6
+_SORTEIO_TRANSICOES = ["fade", "dissolve", "smoothleft", "smoothright", "fadeblack"]  # só as suaves
+DURACAO_TRANSICAO = 0.5
 
 
 def renderizar_slideshow(

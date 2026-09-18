@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from engine import canal as canal_mod
+from engine import roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import youtube
 from engine.pipeline import RAIZ_SAIDA
@@ -49,7 +50,16 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     tags_path = pasta / "tags.txt"
     tags = [t.strip() for t in tags_path.read_text(encoding="utf-8").split(",")] if tags_path.exists() else []
     roteiro_path = pasta / "roteiro.txt"
-    descricao = metadados.get("descricao_youtube") or (roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo)
+    descricao = metadados.get("descricao_youtube")
+    if not descricao:
+        # vídeo sem descrição própria (gerado antes desse recurso): escreve uma agora em vez de subir o roteiro inteiro
+        texto_roteiro = roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo
+        try:
+            descricao = roteiro_mod.gerar_descricao(titulo, texto_roteiro, tags)
+        except Exception:
+            descricao = roteiro_mod.descricao_basica(titulo, texto_roteiro, tags)
+        metadados["descricao_youtube"] = descricao
+        _salvar_metadados(caminho_meta, metadados)
 
     if v16.exists() and not metadados.get("youtube_video_id"):
         id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, privacidade, is_short=False)

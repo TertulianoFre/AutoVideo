@@ -41,7 +41,12 @@ def sugerir_ideias(contexto_canal: str = "", tendencias: list = None, quantidade
 
 
 PROMPT_SISTEMA_LIVRE = (
-    "Você é o assistente de um canal de YouTube, dentro de um app local de automação de vídeos. "
+    "Você é o FUNCIONÁRIO deste canal de YouTube, dentro de um app local de automação de vídeos. TODA pergunta do usuário é sobre "
+    "ESTE canal e ESTES vídeos (o nicho, o tom e a lista de vídeos vêm abaixo) — nunca responda de forma genérica sobre YouTube: "
+    "adapte ao nicho, ao público e ao que o canal já publicou (ex: se perguntarem a duração ideal de um tipo de vídeo, use as durações "
+    "dos vídeos existentes e o nicho pra dar um número concreto e uma recomendação direta). Quando o usuário falar de 'o vídeo', "
+    "'o último vídeo' ou citar um assunto, identifique qual é pela lista. "
+    "O usuário escreve um pedido em português (pode ser pergunta, pedido de ideias, ou comando). "
     "O usuário escreve um pedido em português (pode ser pergunta, pedido de ideias, ou comando). "
     "Você recebe o nicho/tom do canal e a lista de vídeos já gerados (com slug e data de postagem). "
     "Responda SEMPRE com um único objeto JSON válido, sem markdown, sem texto fora dele, num destes formatos:\n"
@@ -63,19 +68,55 @@ PROMPT_SISTEMA_LIVRE = (
 )
 
 
+def sugerir_duracao(titulo: str, num_cenas: int | None, descricao: str, contexto_canal: str, existentes: list) -> dict:
+    """Duração recomendada (minutos) pra um vídeo desse tipo neste canal. Devolve {"minutos": float, "motivo": str}."""
+    partes = [f"Título do vídeo: {titulo}"]
+    if num_cenas:
+        partes.append(f"Quantidade de cenas/itens: {num_cenas}")
+    if descricao:
+        partes.append(f"Instruções do vídeo: {descricao}")
+    partes.append(f"Nicho/tom do canal: {contexto_canal}" if contexto_canal else "Canal sem nicho definido.")
+    if existentes:
+        partes.append("Durações dos vídeos que o canal já tem:\n" + "\n".join(existentes))
+    texto = chamar_pollinations(
+        [
+            {"role": "system", "content": (
+                "Você recomenda a duração ideal de um vídeo narrado de YouTube (roteiro lido em voz alta, imagens estáticas com transição). "
+                'Responda SÓ com JSON: {"minutos": número entre 0.5 e 20, "motivo": "uma frase curta"}. Considere o tipo de vídeo, a '
+                "quantidade de itens (cerca de 30-60 segundos por item em vídeos de curiosidades/listas) e o histórico do canal."
+            )},
+            {"role": "user", "content": "\n".join(partes)},
+        ],
+        tentativas=2,
+    )
+    bruto = texto.strip().strip("`")
+    if bruto.lower().startswith("json"):
+        bruto = bruto[4:]
+    dados = json.loads(bruto.strip())
+    minutos = min(20.0, max(0.5, float(dados["minutos"])))
+    return {"minutos": round(minutos, 1), "motivo": str(dados.get("motivo") or "")}
+
+
 def responder_livre(mensagem: str, contexto_canal: str = "", videos: list | None = None) -> dict:
     """Interpreta um pedido em texto livre. Retorna sempre um dict com "acao"
     ("responder" ou "reagendar") e "texto"; se for "reagendar", também vêm
     "slug"/"data_postagem"/"hora_postagem" — quem chama ainda precisa validar
     esses campos antes de aplicar (o modelo pode errar ou alucinar)."""
     videos = videos or []
-    linhas_videos = [
-        f'- slug={v["slug"]} | título="{v["titulo"]}" | data atual='
-        + (f'{v.get("data_postagem")} {v["hora_postagem"]}' if v.get("hora_postagem") else str(v.get("data_postagem") or "sem data"))
-        for v in videos
-    ]
+    linhas_videos = []
+    for v in videos:
+        data = f'{v.get("data_postagem")} {v["hora_postagem"]}' if v.get("hora_postagem") else str(v.get("data_postagem") or "sem data")
+        duracao = f'{round(v["duracao_segundos"] / 60, 1)} min' if v.get("duracao_segundos") else "?"
+        linha = (
+            f'- slug={v["slug"]} | título="{v["titulo"]}" | situação={v.get("status")} | data atual={data} | duração={duracao} '
+            f'| cenas={v.get("n_cenas", "?")} | formatos={v.get("formatos", "?")} | privacidade={v.get("privacidade", "?")}'
+        )
+        if v.get("resumo"):
+            linha += f' | roteiro começa com: "{v["resumo"]}"'
+        linhas_videos.append(linha)
 
-    partes = [f"Pedido do usuário: {mensagem}"]
+    from datetime import date
+    partes = [f"Hoje é {date.today().isoformat()}.", f"Pedido do usuário: {mensagem}"]
     partes.append(f"Nicho/tom do canal: {contexto_canal}" if contexto_canal else "Sem nicho definido pro canal.")
     partes.append("Vídeos do canal:\n" + "\n".join(linhas_videos) if linhas_videos else "O canal ainda não tem nenhum vídeo gerado.")
 
@@ -102,51 +143,3 @@ def responder_livre(mensagem: str, contexto_canal: str = "", videos: list | None
     return {"acao": "responder", "texto": texto.strip()}
 
 
-PROMPT_SISTEMA_REVISAO = (
-    "Você é um editor experiente de canais de YouTube revisando um vídeo antes de ir ao ar. Recebe título, roteiro, "
-    "cenas, descrição e tags atuais. Responda SEMPRE com um único objeto JSON válido, sem markdown, neste formato:\n"
-    '{"resumo": "avaliação curta (1-2 frases)", "titulo": "título melhor (até 100 caracteres) ou null se o atual já está bom", '
-    '"descricao_youtube": "descrição completa e envolvente (2-4 parágrafos curtos, chamada pra se inscrever, hashtags no fim) ou null", '
-    '"tags": ["tag1", "tag2"] ou null, "thumbnail_texto": "texto curto e chamativo pra thumbnail (até 5 palavras) ou null", '
-    '"observacoes": ["problemas do ROTEIRO ou das CENAS que exigem regenerar o vídeo (erro de fato, trecho confuso, cena repetida...)"]}\n'
-    "Só sugira mudar o que realmente melhora; use null no que está bom. Não invente fatos novos na descrição além do que o roteiro diz."
-)
-
-
-def revisar_video(titulo: str, roteiro: str, descricao_atual: str, tags: str, cenas: list, thumbnail_texto: str, contexto_canal: str = "") -> dict:
-    """Revisão editorial de um vídeo pronto. Devolve sugestões de título/descrição/tags/thumbnail
-    (aplicáveis sem regenerar) e observações sobre roteiro/cenas (que exigem regenerar)."""
-    partes = [
-        f"Título atual: {titulo}",
-        f"Texto atual da thumbnail: {thumbnail_texto}",
-        f"Tags atuais: {tags or '(nenhuma)'}",
-        f"Descrição atual: {descricao_atual or '(usa o próprio roteiro como descrição)'}",
-        f"Nicho/tom do canal: {contexto_canal}" if contexto_canal else "",
-        "Roteiro:\n" + roteiro[:6000],
-        "Cenas (uma imagem por trecho):\n" + "\n".join(f"{i + 1}. {t[:200]}" for i, t in enumerate(cenas)),
-    ]
-    texto = chamar_pollinations(
-        [{"role": "system", "content": PROMPT_SISTEMA_REVISAO}, {"role": "user", "content": "\n\n".join(p for p in partes if p)}],
-        tentativas=3,
-    )
-    bruto = texto.strip()
-    if bruto.startswith("```"):
-        bruto = bruto.strip("`")
-        if bruto.lower().startswith("json"):
-            bruto = bruto[4:]
-        bruto = bruto.strip()
-    try:
-        dados = json.loads(bruto)
-        if isinstance(dados, dict):
-            tags_sug = dados.get("tags")
-            return {
-                "resumo": str(dados.get("resumo") or ""),
-                "titulo": str(dados["titulo"]).strip() if dados.get("titulo") else None,
-                "descricao_youtube": str(dados["descricao_youtube"]).strip() if dados.get("descricao_youtube") else None,
-                "tags": [str(t) for t in tags_sug] if isinstance(tags_sug, list) and tags_sug else None,
-                "thumbnail_texto": str(dados["thumbnail_texto"]).strip() if dados.get("thumbnail_texto") else None,
-                "observacoes": [str(o) for o in (dados.get("observacoes") or []) if o][:6],
-            }
-    except (json.JSONDecodeError, AttributeError, TypeError):
-        pass
-    return {"resumo": texto.strip()[:600], "titulo": None, "descricao_youtube": None, "tags": None, "thumbnail_texto": None, "observacoes": []}

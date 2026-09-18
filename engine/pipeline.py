@@ -95,6 +95,7 @@ def gerar_video(
     imagens_base: list | None = None,
     transicao: str = "fade",
     legenda: dict | None = None,
+    reaproveitar_imagens: bool = False,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -217,6 +218,16 @@ def gerar_video(
             print(f"[aviso] geração de hashtags falhou, seguindo sem elas: {erro}")
             tags = []
 
+        # descrição do YouTube: se o roteiro não mudou e já existe uma (ou você/o agente editou), mantém
+        try:
+            meta_atual = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta_atual = {}
+        roteiro_antigo = (pasta / "roteiro.txt").read_text(encoding="utf-8") if (pasta / "roteiro.txt").exists() else None
+        if not (meta_atual.get("descricao_youtube") and roteiro_antigo == roteiro_final):
+            avisar("Escrevendo a descrição do YouTube", 13)
+            _salvar_metadados(pasta, descricao_youtube=roteiro_mod.gerar_descricao(titulo, roteiro_final, tags, canal.obter_contexto(canal_id)))
+
         if som_fundo_tipo:
             som_fundo_path = pasta / "som_fundo.wav"
             if som_fundo_tipo == "biblioteca" and som_fundo_biblioteca:
@@ -249,6 +260,20 @@ def gerar_video(
             encoding="utf-8",
         )
 
+    # refazendo por causa de texto editado: as cenas cujo texto não mudou mantêm a imagem que já tinham
+    cenas_mantidas = set()
+    mapa_base_antigo = {}
+    if reaproveitar_imagens:
+        try:
+            meta_antiga = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta_antiga = {}
+        antigas = meta_antiga.get("cenas") or []
+        mapa_base_antigo = meta_antiga.get("imagens_base_cenas") or {}
+        for i, (texto_c, _) in enumerate(lista_cenas):
+            if i < len(antigas) and antigas[i].get("texto", "").strip() == texto_c.strip():
+                cenas_mantidas.add(i)
+
     # imagens da Base escolhidas de antemão: a 1ª vai na cena 1, a 2ª na cena 2...
     imagens_base_validas = []
     for nome_base in imagens_base or []:
@@ -262,7 +287,10 @@ def gerar_video(
     _salvar_metadados(
         pasta,
         cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
-        imagens_base_cenas={str(i): n for i, n in enumerate(imagens_base_validas)},
+        imagens_base_cenas=(
+            {k: v for k, v in mapa_base_antigo.items() if int(k) in cenas_mantidas}
+            if reaproveitar_imagens else {str(i): n for i, n in enumerate(imagens_base_validas)}
+        ),
         audio_arquivo=audio_path.name,
         duracao_segundos=round(duracao_real, 1),
     )
@@ -281,7 +309,12 @@ def gerar_video(
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
-            if i < len(imagens_base_validas):
+            if i in cenas_mantidas and caminho_imagem.exists():
+                imagens_com_duracao.append((caminho_imagem, duracao_cena))
+                imagens_feitas += 1
+                avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
+                continue
+            if not reaproveitar_imagens and i < len(imagens_base_validas):
                 base_img = Image.open(biblioteca.caminho_imagem_valida(imagens_base_validas[i])).convert("RGB")
                 visuals._cobrir(base_img, estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
                 imagens_com_duracao.append((caminho_imagem, duracao_cena))

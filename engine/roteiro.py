@@ -164,3 +164,41 @@ def gerar_hashtags(titulo: str, roteiro: str = "", quantidade: int = 10, tentati
     texto = chamar_pollinations(mensagens, tentativas)
     brutas = [t.strip().lstrip("#") for t in texto.replace("\n", ",").split(",")]
     return [t for t in brutas if t][:quantidade]
+
+
+def _hashtags_de(tags: list, limite: int = 8) -> str:
+    return " ".join("#" + "".join(t.split()) for t in tags[:limite] if t.strip())
+
+
+def descricao_basica(titulo: str, roteiro: str, tags: list) -> str:
+    """Descrição simples montada sem IA (plano B): abertura do roteiro + chamada + hashtags."""
+    frases = re.split(r"(?<=[.!?])\s+", " ".join(roteiro.split()))
+    abertura = " ".join(frases[:2]).strip() or titulo
+    partes = [abertura, "Gostou? Deixe o seu like, se inscreva no canal e conte aqui nos comentários o que achou!"]
+    hashtags = _hashtags_de(tags)
+    if hashtags:
+        partes.append(hashtags)
+    return "\n\n".join(partes)[:4900]
+
+
+def gerar_descricao(titulo: str, roteiro: str, tags: list, contexto_canal: str = "", tentativas: int = 2) -> str:
+    """Descrição pro YouTube (gancho + resumo do que o vídeo mostra + chamada + hashtags).
+    Se a IA falhar ou vier estranha, cai na descricao_basica."""
+    try:
+        texto = chamar_pollinations(
+            [
+                {"role": "system", "content": (
+                    "Você escreve descrições de vídeo de YouTube em português do Brasil. Formato: 1) um gancho de 1-2 frases "
+                    "com a palavra-chave do título; 2) 2-3 linhas resumindo o que o vídeo mostra, usando SÓ o que está no roteiro "
+                    "(não invente fatos); 3) uma chamada pra curtir, se inscrever e comentar; 4) 5 a 8 hashtags no fim. "
+                    "Máximo 1200 caracteres. Responda só com a descrição, sem aspas e sem títulos."
+                )},
+                {"role": "user", "content": f"Título: {titulo}\n" + (f"Canal: {contexto_canal}\n" if contexto_canal else "") + f"Roteiro:\n{roteiro[:4000]}"},
+            ],
+            tentativas,
+        ).strip()
+    except RuntimeError:
+        texto = ""
+    if not (80 <= len(texto) <= 4900):
+        return descricao_basica(titulo, roteiro, tags)
+    return texto

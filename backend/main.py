@@ -29,6 +29,7 @@ from backend import jobs
 from engine import afiliados, agendador, agente, biblioteca, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import tts as tts_mod
+from engine import estimativa as estimativa_mod
 from engine import pipeline as pipeline_mod
 from engine import render as render_mod
 from engine import subtitles as subtitles_mod
@@ -274,6 +275,17 @@ def _aplicar_edicao_do_agente(pedido: dict) -> dict:
     return {"acao": "editar", "resposta": resposta, "slug": slug}
 
 
+@app.post("/api/agente/duracao")
+def api_sugerir_duracao(titulo: str = Form(""), num_cenas: int | None = Form(None), descricao_video: str = Form("")) -> dict:
+    """O agente recomenda quantos minutos esse tipo de vídeo deve ter neste canal (usado no botão "Sugerir" do Novo vídeo)."""
+    existentes = [f'"{v["titulo"]}": {round(v["duracao_segundos"] / 60, 1)} min' for v in api_listar_videos() if v.get("duracao_segundos")][:15]
+    try:
+        return agente.sugerir_duracao(titulo.strip(), num_cenas, descricao_video.strip(), canal.obter_contexto(), existentes)
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        minutos = round(max(1.0, (num_cenas or 3) * 0.6), 1)  # plano B sem IA: ~35 s por item
+        return {"minutos": minutos, "motivo": "Estimativa simples (o agente não respondeu): cerca de 35 segundos por cena."}
+
+
 @app.post("/api/agente/perguntar")
 def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
     """Campo livre do agente: responde perguntas/pede ideias, ou executa um
@@ -285,6 +297,17 @@ def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
         return JSONResponse({"erro": "escreve alguma coisa pro agente"}, status_code=400)
 
     videos = api_listar_videos()
+    for v in videos:  # o agente precisa "ver" cada vídeo: duração, cenas, formatos, começo do roteiro
+        pasta_v = RAIZ_SAIDA / v["slug"]
+        try:
+            meta_v = json.loads((pasta_v / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta_v = {}
+        v["n_cenas"] = len(meta_v.get("cenas") or []) or "?"
+        v["formatos"] = meta_v.get("formatos", "ambos")
+        v["privacidade"] = meta_v.get("privacidade", "public")
+        roteiro_v = pasta_v / "roteiro.txt"
+        v["resumo"] = " ".join(roteiro_v.read_text(encoding="utf-8").split())[:160] if roteiro_v.exists() else ""
     try:
         resultado = agente.responder_livre(mensagem, canal.obter_contexto(), videos)
     except RuntimeError as erro:
@@ -501,6 +524,22 @@ def api_remover_afiliado(item_id: str) -> JSONResponse:
 # pré-visualização do roteiro (antes de gerar o vídeo inteiro)
 # ---------------------------------------------------------------------------
 
+@app.post("/api/estimativa")
+def api_estimativa(
+    duracao_alvo: float | None = Form(None), num_cenas: int | None = Form(None), imagem: str = Form("ia"),
+    formatos: str = Form("ambos"), sem_narracao: bool = Form(False), tem_roteiro: bool = Form(False),
+    narracao_propria: bool = Form(False), som_fundo: bool = Form(False), transicao: str = Form("fade"),
+    n_imagens_base: int = Form(0),
+) -> dict:
+    """Quanto tempo esse vídeo deve levar pra ficar pronto (mostrado no Novo vídeo enquanto você escolhe)."""
+    segundos = estimativa_mod.estimar({
+        "duracao_min": duracao_alvo, "n_cenas": num_cenas, "estilo_imagem": imagem, "formatos": formatos,
+        "sem_narracao": sem_narracao, "tem_roteiro": tem_roteiro, "narracao_propria": narracao_propria,
+        "som_fundo": som_fundo, "transicao": transicao, "n_imagens_base": n_imagens_base,
+    })
+    return {"segundos": int(segundos)}
+
+
 @app.post("/api/roteiro/preview")
 def api_preview_roteiro(
     titulo: str = Form(...),
@@ -685,82 +724,48 @@ def _resultado_videos(slug: str, r: dict) -> dict:
     }
 
 
-@app.post("/api/videos/{slug}/revisar")
-def api_revisar_video(slug: str) -> JSONResponse:
-    """O agente lê o vídeo (título, roteiro, cenas, descrição, tags) e sugere melhorias aplicáveis sem regenerar."""
+@app.put("/api/videos/{slug}/cenas/textos")
+def api_editar_textos_das_cenas(slug: str, edicoes: str = Form(...)) -> dict:
+    """Aplica de uma vez o texto novo de várias cenas ({"indice": "texto"}) no roteiro.
+    Não refaz nada sozinho: quem chama em seguida pede "regenerar" mantendo o roteiro
+    (e reaproveitando as imagens das cenas que não mudaram)."""
     pasta = RAIZ_SAIDA / slug
     caminho_meta = pasta / "metadata.json"
-    if "/" in slug or "\\" in slug or not caminho_meta.exists():
-        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    roteiro = (pasta / "roteiro.txt").read_text(encoding="utf-8") if (pasta / "roteiro.txt").exists() else ""
-    tags = (pasta / "tags.txt").read_text(encoding="utf-8") if (pasta / "tags.txt").exists() else ""
-    try:
-        sugestao = agente.revisar_video(
-            titulo=metadados.get("titulo", slug),
-            roteiro=roteiro,
-            descricao_atual=metadados.get("descricao_youtube") or "",
-            tags=tags,
-            cenas=[c.get("texto", "") for c in (metadados.get("cenas") or [])],
-            thumbnail_texto=metadados.get("thumbnail_texto") or "",
-            contexto_canal=canal.obter_contexto(metadados.get("canal_id")),
-        )
-    except RuntimeError as erro:
-        return JSONResponse({"erro": str(erro)}, status_code=502)
-    sugestao["atual"] = {
-        "titulo": metadados.get("titulo", slug),
-        "descricao_youtube": metadados.get("descricao_youtube") or "(hoje a descrição é o próprio roteiro)",
-        "tags": tags,
-        "thumbnail_texto": metadados.get("thumbnail_texto") or metadados.get("titulo", ""),
-    }
-    return JSONResponse(sugestao)
-
-
-@app.post("/api/videos/{slug}/revisar/aplicar")
-def api_aplicar_revisao(
-    slug: str,
-    titulo: str = Form(""), descricao_youtube: str = Form(""), tags: str = Form(""), thumbnail_texto: str = Form(""),
-) -> JSONResponse:
-    """Aplica só os campos marcados pelo usuário (sem regenerar o vídeo)."""
-    pedido = {
-        "slug": slug, "titulo": titulo, "descricao_youtube": descricao_youtube,
-        "tags": [t.strip() for t in tags.split(",") if t.strip()] or None, "thumbnail_texto": thumbnail_texto,
-    }
-    return JSONResponse(_aplicar_edicao_do_agente(pedido))
-
-
-@app.get("/api/videos/{slug}/roteiro")
-def api_ler_roteiro(slug: str) -> dict:
-    pasta = RAIZ_SAIDA / slug
-    caminho = pasta / "roteiro.txt"
-    if "/" in slug or "\\" in slug or not (pasta / "metadata.json").exists() or not caminho.exists():
-        return JSONResponse({"erro": "roteiro não encontrado"}, status_code=404)
-    metadados = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
-    return {"roteiro": caminho.read_text(encoding="utf-8"), "narracao_propria": bool(metadados.get("narracao_customizada")), "publicado": bool(metadados.get("publicado"))}
-
-
-@app.put("/api/videos/{slug}/roteiro")
-def api_salvar_roteiro(slug: str, roteiro: str = Form(...)) -> dict:
-    """Guarda o roteiro editado. Não regenera nada sozinho: o "Regenerar" (que mantém o roteiro) é que
-    refaz narração, legenda e cenas a partir dele."""
-    pasta = RAIZ_SAIDA / slug
-    caminho_meta = pasta / "metadata.json"
-    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+    if "/" in slug or "\\" in slug or not caminho_meta.exists() or not (pasta / "roteiro.txt").exists():
         return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     if metadados.get("publicado"):
         return JSONResponse({"erro": "esse vídeo já foi publicado — mudar o roteiro não altera o que está no YouTube"}, status_code=409)
-    if metadados.get("narracao_customizada"):
-        return JSONResponse({"erro": "esse vídeo usa a narração que você gravou/enviou — o texto tem que continuar igual ao áudio"}, status_code=409)
-    roteiro = roteiro.strip()
-    if len(roteiro) < 20:
-        return JSONResponse({"erro": "roteiro curto demais"}, status_code=400)
-    (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
-    return {"ok": True}
+    if metadados.get("narracao_customizada") or metadados.get("sem_narracao"):
+        return JSONResponse({"erro": "esse vídeo não usa narração por IA — o texto tem que continuar igual ao áudio"}, status_code=409)
+    cenas = metadados.get("cenas") or []
+    try:
+        mudancas = {int(k): str(v).strip() for k, v in json.loads(edicoes).items()}
+    except (ValueError, AttributeError):
+        return JSONResponse({"erro": "edições inválidas"}, status_code=400)
+    if not mudancas or any(not (0 <= i < len(cenas)) or len(t) < 3 for i, t in mudancas.items()):
+        return JSONResponse({"erro": "edição inválida (cena inexistente ou texto vazio)"}, status_code=400)
+
+    roteiro = (pasta / "roteiro.txt").read_text(encoding="utf-8")
+    paragrafos = [p for p in roteiro.replace("\r", "").split("\n") if p.strip()]
+    if len(paragrafos) == len(cenas):
+        for i, texto in mudancas.items():
+            paragrafos[i] = texto
+        novo = "\n\n".join(paragrafos)
+    else:
+        novo = roteiro
+        for i, texto in mudancas.items():
+            palavras = cenas[i].get("texto", "").split()
+            achou = re.search(r"\s+".join(re.escape(p) for p in palavras), novo) if palavras else None
+            if not achou:
+                return JSONResponse({"erro": f"não consegui localizar o texto da cena {i + 1} no roteiro — use \"Regenerar\" e tente de novo"}, status_code=409)
+            novo = novo[:achou.start()] + texto + novo[achou.end():]
+    (pasta / "roteiro.txt").write_text(novo, encoding="utf-8")
+    return {"ok": True, "alteradas": len(mudancas)}
 
 
 @app.post("/api/videos/{slug}/regenerar")
-def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
+def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveitar_imagens: bool = Form(False)) -> dict:
     """Gera tudo de novo — narração, imagens, montagem. Por padrão mantém o
     roteiro já existente (o problema geralmente é imagem, não texto); passe
     manter_roteiro=false pra escrever um roteiro novo também."""
@@ -799,6 +804,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         imagens_base=metadados.get("imagens_base") or [],
         transicao=metadados.get("transicao", "fade"),
         legenda=metadados.get("legenda") or None,
+        reaproveitar_imagens=reaproveitar_imagens,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
@@ -1203,6 +1209,7 @@ def api_status_job(job_id: str) -> JSONResponse:
             "status": job.status,
             "etapa": job.etapa,
             "progresso": job.progresso,
+            "restante_segundos": jobs.tempo_ate_terminar(job) if job.status in ("rodando", "aguardando") else 0,
             "resultado": job.resultado,
             "erro": job.erro,
         }
@@ -1299,6 +1306,7 @@ def api_listar_videos() -> list[dict]:
                 "status": "processando",
                 "job_etapa": f"Na fila — {jobs.posicao_na_fila(job)}º" if job.status == "aguardando" else job.etapa,
                 "job_progresso": job.progresso,
+                "job_restante_segundos": jobs.tempo_ate_terminar(job),
                 "video_16_9": None,
                 "video_9_16": None,
                 "thumbnail": None,

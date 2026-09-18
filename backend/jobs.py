@@ -7,7 +7,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from engine.pipeline import gerar_video, regenerar_cena
+from engine import estimativa
+from engine.pipeline import gerar_video, regenerar_cena, regenerar_legenda
 
 _jobs: dict[str, "Job"] = {}
 _lock = threading.Lock()
@@ -24,6 +25,9 @@ class Job:
     resultado: dict | None = None
     erro: str | None = None
     canal_id: str | None = None  # só pra job de vídeo novo — usado pra mostrar "processando" na Fila
+    estimativa_bruta: float = 0.0  # segundos previstos, sem a correção aprendida
+    estimativa: float = 0.0        # segundos previstos, com a correção
+    iniciado_em: float = 0.0
 
 
 _fila: "queue.Queue" = queue.Queue()
@@ -59,6 +63,7 @@ def posicao_na_fila(job: "Job") -> int:
 def _rodar(job: Job, params: dict) -> None:
     job.status = "rodando"
     job.etapa = "Iniciando"
+    job.iniciado_em = time.time()
 
     def progresso_cb(etapa: str, percentual: float) -> None:
         job.etapa = etapa
@@ -78,6 +83,7 @@ def _rodar(job: Job, params: dict) -> None:
         job.status = "pronto"
         job.progresso = 100
         job.etapa = "Pronto"
+        estimativa.registrar(job.estimativa_bruta, time.time() - job.iniciado_em)  # aprende com o tempo real
     except Exception as erro:  # qualquer falha do motor vira um status legível pro front
         job.status = "erro"
         job.erro = str(erro)
@@ -88,9 +94,26 @@ def criar_job(titulo: str, params: dict) -> Job:
     with _lock:
         _jobs[job.id] = job
 
+    try:
+        job.estimativa_bruta = estimativa.estimar_bruto(estimativa.de_parametros_do_job(params))
+        job.estimativa = job.estimativa_bruta * estimativa._fator()
+    except Exception:
+        pass
     _garantir_trabalhador()
     _fila.put((job, params))
     return job
+
+
+def tempo_ate_terminar(job: "Job") -> int:
+    """Segundos até ESSE job acabar: o que falta dos que estão na frente (e rodando) + o dele."""
+    def restante(j: "Job") -> float:
+        if j.status == "rodando":
+            return max(3.0, j.estimativa * (1 - j.progresso / 100))
+        return j.estimativa if j.status == "aguardando" else 0.0
+
+    with _lock:
+        antes = [j for j in _jobs.values() if j.status in ("rodando", "aguardando") and j.criado_em <= job.criado_em]
+    return int(sum(restante(j) for j in antes))
 
 
 def listar_rodando() -> list[Job]:
