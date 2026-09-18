@@ -4,12 +4,12 @@ Canal de YouTube com vídeos gerados por automação (texto → narração → i
 
 ## Como funciona (visão geral do produto)
 
-1. **Agente** combina o contexto do canal ativo com o que está em alta no YouTube agora e sugere títulos — implementado (aba "Agente"); pesquisar tendências na web em geral (fora do YouTube) ainda não.
+1. **Agente** combina o contexto do canal ativo com o que está em alta no YouTube agora e sugere títulos — implementado (aba "Agente"); também tem um campo de texto livre pra perguntar qualquer coisa sobre o canal, pedir ideias num formato específico, ou reagendar um vídeo já gerado por nome ("muda a data do vídeo X pra sexta"). Pesquisar tendências na web em geral (fora do YouTube) ainda não.
 2. **Você** aprova uma sugestão (clica em "Usar esse título") ou digita seu próprio título/descrição.
-3. **Geração**: um único fluxo pra tudo — roteiro (levando em conta o contexto do canal ativo), narração (voz de IA — mulher, homem ou criança, em vários idiomas — ou sua própria gravação), legenda sincronizada, e opcionalmente um som de fundo (chuva, música suave...) baixinho por baixo da narração. Também dá pra marcar "sem narração" e usar só o som de fundo como áudio do vídeo (ex: 30 min de chuva pra relaxar) — tudo no mesmo formulário, sem telas separadas.
+3. **Geração**: um único fluxo pra tudo — roteiro (levando em conta o contexto do canal ativo e a descrição do vídeo), narração (voz de IA — mulher, homem ou criança, em vários idiomas — ou sua própria gravação/upload), legenda sincronizada, e opcionalmente um som de fundo (chuva, música suave, ou um áudio importado por você na aba "Base") baixinho por baixo da narração. Também dá pra marcar "sem narração" e usar só o som de fundo como áudio do vídeo (ex: 30 min de chuva pra relaxar) — tudo no mesmo formulário, sem telas separadas.
 4. **Montagem** via FFmpeg: exporta em 16:9 (vídeo normal) e 9:16 (Shorts), com thumbnail automática.
-5. **Publicação**: você agenda a data e o app publica sozinho no YouTube (16:9 como vídeo normal, 9:16 como Short), na conta do canal a que o vídeo pertence — desde que o app fique rodando e essa conta esteja conectada.
-6. **Painel**: acompanha inscritos e visualizações do canal ativo (tempo de exibição e receita estimada ainda não implementados).
+5. **Publicação**: você agenda a data (e opcionalmente a hora) e o app publica sozinho no YouTube (16:9 como vídeo normal, 9:16 como Short), na conta do canal a que o vídeo pertence — desde que o app fique rodando e essa conta esteja conectada.
+6. **Painel**: acompanha inscritos e visualizações do canal ativo (tempo de exibição e receita estimada ainda não implementados), com um gráfico de vídeos gerados por semana.
 
 Suporta **múltiplos canais** (nicho/contexto e conta do YouTube próprios de cada um) rodando no mesmo app — veja a seção "Canais" abaixo.
 
@@ -23,13 +23,15 @@ Rodar: dê dois cliques em `iniciar.bat` (ativa o venv, sobe o servidor na porta
 ```
 .venv\Scripts\uvicorn backend.main:app --reload --port 8080
 ```
-Abre em `http://localhost:8080`, com 5 telas: **Painel** (vídeos recentes, estatísticas do canal ativo), **Canais** (gerenciar canais — nome, contexto, qual está ativo), **Agente** (sugestões de título), **Novo vídeo** (formulário único com progresso real) e **Fila** (todos os vídeos de todos os canais, com **Regenerar**, **roteiro novo**, **nova thumbnail**, **editar thumbnail** e **cenas**). O seletor de canal ativo fica no topo do menu lateral; logo abaixo, o perfil mostra a conexão com o YouTube **do canal ativo** — clique nele pra conectar/reconectar.
+Abre em `http://localhost:8080`, com 6 telas: **Painel** (vídeos recentes, estatísticas do canal ativo, gráfico de vídeos por semana), **Canais** (gerenciar canais — nome, contexto, qual está ativo), **Agente** (campo livre + sugestões de título), **Novo vídeo** (formulário único com progresso real), **Fila** (todos os vídeos de todos os canais, com filtros de canal/status/duração, status calculado, e **Regenerar**, **roteiro novo**, **nova thumbnail**, **editar thumbnail** e **cenas**) e **Base** (biblioteca de áudios/imagens importados por você, reutilizáveis em qualquer vídeo). O seletor de canal ativo fica no topo do menu lateral; logo abaixo, o perfil mostra a conexão com o YouTube **do canal ativo** — clique nele pra conectar/reconectar.
 
 Na tela "Novo vídeo", só **título** e **data de postagem** são obrigatórios. É um formulário só — nada de tela separada pra "vídeo ambiente". Tudo mais é opcional:
+- **Hora de postagem**: opcional, junto da data — em branco publica assim que o dia chegar (comportamento de sempre).
 - **Descrição do vídeo**: texto livre que ajusta o estilo — ex: "2D simples", "mais detalhado/realista", "infantil e colorido". Influencia tanto o roteiro quanto a imagem gerada por IA.
 - **Roteiro**: se deixar em branco, o motor escreve sozinho a partir do título (+ contexto do canal + descrição do vídeo). Tem um botão **"Pré-visualizar roteiro"** que gera só o texto primeiro (sem imagem/narração/vídeo) pra você ler, editar ou pedir de novo antes de gastar tempo gerando o vídeo inteiro.
+- **Narração gravada por você**: opcional — grave pelo microfone ou envie um arquivo de áudio, no lugar da narração por IA. Precisa colar no Roteiro o texto exato que você leu (é o que permite gerar cenas/legenda, de forma aproximada — sem os timestamps reais que só o TTS local dá).
 - **Vídeo sem narração**: vira só som de fundo + imagem (ideal pra vídeos longos, 15-60 min).
-- **Som de fundo**: chuva ou música suave, mixados bem baixo por baixo da narração — funciona tanto num vídeo narrado normal quanto sozinho (sem narração). "Outro" permite descrever o que você quer, mas hoje ainda usa a síntese mais parecida (chuva ou música) — não sintetiza qualquer som descrito ainda.
+- **Som de fundo**: chuva, música suave, ou um áudio importado por você na aba "Base", mixados bem baixo por baixo da narração — funciona tanto num vídeo narrado normal quanto sozinho (sem narração). "Outro" permite descrever o que você quer: escolhe o tipo-base mais parecido e ainda soma camadas extra combináveis por cima (pássaros, trovão, multidão, passos, sino, trânsito) se a descrição mencionar.
 
 ## Motor de geração — como funciona por dentro
 
@@ -85,19 +87,31 @@ Com isso feito, um agendador roda em segundo plano junto com o backend (`agendad
 
 ### Agente (`engine/agente.py`)
 
-Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal **ativo** com os títulos em alta na conta do YouTube desse canal agora (`youtube.obter_tendencias`, região BR — só como inspiração, nunca copia) pra gerar títulos novos via Pollinations.ai. Cada sugestão tem um botão "Usar esse título" que já leva pra "Novo vídeo" com o título preenchido. Sem conexão com o YouTube, ainda sugere ideias — só fica sem o contexto de tendências.
+Aba própria com dois jeitos de usar:
+- **Campo livre**: digite qualquer pedido em português — pergunta sobre o canal, pedido de ideias num formato específico, ou "reagenda o vídeo X pra dia Y". O modelo responde em JSON (`agente.responder_livre`): texto normal, ou uma ação de reagendamento com o slug do vídeo e a nova data/hora. O backend (`POST /api/agente/perguntar`) nunca executa a ação cegamente — revalida o slug contra vídeos que existem de verdade e a data/hora contra um regex estrito antes de tocar no `metadata.json`; se o modelo não seguir o formato JSON pedido ou apontar pra um vídeo que não existe, cai de volta pra uma resposta em texto simples.
+- **"Sugerir ideias"**: combina o contexto do canal **ativo** com os títulos em alta na conta do YouTube desse canal agora (`youtube.obter_tendencias`, região BR — só como inspiração, nunca copia) pra gerar títulos novos via Pollinations.ai. Cada sugestão tem um botão "Usar esse título" que já leva pra "Novo vídeo" com o título preenchido.
+
+Sem conexão com o YouTube, os dois ainda funcionam — só ficam sem o contexto de tendências.
+
+### Base — biblioteca de mídia (`engine/biblioteca.py`, aba "Base")
+
+Áudios e imagens que você mesmo importa da sua máquina (ex: músicas livres de direito autoral baixadas por você), guardados em `dados/biblioteca/` — fora da pasta de qualquer vídeo específico, então ficam disponíveis pra qualquer vídeo novo, não só o que estava sendo criado na hora do upload. Não é versionado no git (mesma lógica de `output/`).
+
+- **Áudios**: aparecem como opção "Um áudio da minha Base" no som de fundo de "Novo vídeo" — o arquivo é cortado ou repetido em loop (ffmpeg) pra caber exatamente na duração do vídeo. Upload é sempre reencodado com ffmpeg antes de salvar (rejeita qualquer coisa que não seja áudio de verdade, mesma lógica do upload de thumbnail com Pillow).
+- **Imagens**: aparecem também na galeria de "editar thumbnail" (Fila), junto das cenas geradas — escolher uma copia ela pra dentro da pasta do vídeo. Upload sempre passa pelo Pillow (decodifica, converte, resalva como PNG).
 
 ### Limitações conhecidas
 
 - O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).
 - Checagem automática de "imagem com qualidade ruim, refazer" foi tentada com detector de rosto (OpenCV) — funciona bem em foto real, mas **não funciona em desenho/ilustração**, então só está ligada no estilo `foto`.
 - O roteiro automático passa por uma segunda chamada de revisão (corrige gramática/frases estranhas antes de devolver) mas ainda é um modelo pequeno e gratuito — de vez em quando sai uma frase esquisita mesmo assim. Use o "Pré-visualizar roteiro" pra revisar antes.
-- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar. Pedir "outro" com descrição livre escolhe o mais parecido desses 5 como base e ainda soma camadas extra por cima se a descrição menciona pássaros, trovão ou multidão/cafeteria; fora essas combinações reconhecidas, ainda não sintetiza um som totalmente novo e arbitrário.
+- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar (ou importar um áudio de verdade na aba "Base"). Pedir "outro" com descrição livre escolhe o mais parecido desses 5 como base e ainda soma camadas extra por cima se a descrição menciona pássaros, trovão, multidão/cafeteria, passos, sino/carrilhão ou trânsito/buzina; fora essas combinações reconhecidas, ainda não sintetiza um som totalmente novo e arbitrário.
+- Narração gravada por você não tem timestamp real por palavra (só o TTS local gera isso) — cenas e legenda usam um ritmo de fala aproximado (constante), então podem sair levemente fora de sincronia se você tiver pausas grandes ou ritmo bem irregular na leitura.
 - Publicação automática depende do app ficar rodando (não é um serviço em nuvem) e da conta reconectada a cada 7 dias (limitação do modo "teste" do Google).
 
 ## Requisitos já levantados, ainda não implementados
 
-- Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 3 camadas combináveis (pássaros, trovão, multidão) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo.
+- Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 6 camadas combináveis (pássaros, trovão, multidão, passos, sino, trânsito) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo. Importar um áudio próprio na aba "Base" já cobre boa parte desse caso na prática.
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
 
@@ -116,7 +130,7 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal **ati
 
 ## Status
 
-App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do YouTube próprios de cada um, publicação sempre na conta certa), Agente sugerindo ideias, pré-visualização de roteiro (com revisão automática), narração opcional, som de fundo opcional (5 tipos, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e totalmente editável (texto/cor/posição arrastável/tamanho deslizante/imagem de fundo, com upload próprio), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro e o canal original), editar uma cena específica sem regenerar tudo, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal ativo no perfil.
+App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do YouTube próprios de cada um, publicação sempre na conta certa), Agente com campo livre (perguntas, ideias, reagendar por nome) e sugestão de ideias, pré-visualização de roteiro (com revisão automática), narração opcional (por IA ou gravada/enviada por você), som de fundo opcional (5 tipos sintetizados + 6 camadas combináveis + áudio importado na Base, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e totalmente editável (texto/cor/posição arrastável/tamanho deslizante/imagem de fundo, com upload próprio ou da Base), biblioteca de mídia importada (Base), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro e o canal original), editar uma cena específica sem regenerar tudo, fila com filtros/status/duração, agendamento com data e hora, gráfico de vídeos por semana no Painel, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal ativo no perfil.
 
 ## Checklist do Google Cloud Console (feito uma vez, por você — vale pra todos os canais)
 
@@ -129,4 +143,4 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 
 ## Próximos passos
 
-1. Mais camadas de som combináveis (hoje só pássaros/trovão/multidão) e, mais pra frente, sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição
+1. Sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição de som de fundo (hoje são 6 camadas combináveis reconhecidas por palavra-chave, mais importar um áudio pronto na Base — ainda não é "descreva qualquer coisa e sintetiza")
