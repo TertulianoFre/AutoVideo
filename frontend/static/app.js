@@ -49,7 +49,8 @@ function linhaDeVideo(v, comRegenerar) {
     : ICONE_VIDEO;
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
-       ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}`
+       ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
+       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-nova-thumb" data-slug="${v.slug}" title="Sorteia outra imagem de cena pra thumbnail">nova thumbnail</button>`
     : "";
   const publicacao = statusPublicacao(v);
   return `
@@ -89,9 +90,28 @@ async function carregarFila() {
     ? videos.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo gerado ainda.</div>';
 
-  lista.querySelectorAll(".btn-regenerar").forEach((botao) => {
+  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
   });
+  lista.querySelectorAll(".btn-nova-thumb").forEach((botao) => {
+    botao.addEventListener("click", () => regenerarThumbnail(botao));
+  });
+}
+
+async function regenerarThumbnail(botao) {
+  const slug = botao.dataset.slug;
+  const linha = botao.closest(".video-row");
+  const imagem = linha.querySelector(".video-thumb img");
+  botao.disabled = true;
+
+  const resposta = await fetch(`/api/videos/${slug}/thumbnail/regenerar`, { method: "POST" });
+  const dados = await resposta.json();
+  botao.disabled = false;
+  if (dados.erro) {
+    alert(dados.erro);
+    return;
+  }
+  if (imagem) imagem.src = dados.thumbnail;
 }
 
 async function regenerarVideo(botao) {

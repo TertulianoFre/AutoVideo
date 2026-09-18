@@ -4,8 +4,10 @@ Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 """
 
 import json
+import random
 import sys
 import threading
+import time
 from pathlib import Path
 
 # O texto gerado por IA às vezes traz pontuação Unicode especial (hífen
@@ -21,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import jobs
 from engine import agendador, canal, roteiro as roteiro_mod
+from engine import thumbnail as thumbnail_mod
 from engine import youtube as youtube_mod
 from engine.pipeline import RAIZ_SAIDA
 
@@ -194,6 +197,34 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
     return {"job_id": job.id}
 
 
+@app.post("/api/videos/{slug}/thumbnail/regenerar")
+def api_regenerar_thumbnail(slug: str) -> dict:
+    """Refaz só a thumbnail (rápido, não mexe no vídeo) — sorteia uma imagem
+    de cena diferente da atual como base, pra você poder ficar pedindo outra
+    até gostar."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    candidatas = sorted(pasta.glob("cena*_16x9.png"))
+    if not candidatas:
+        return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    titulo = metadados.get("titulo", slug)
+
+    atual = pasta / "thumbnail_fonte.txt"
+    fonte_anterior = atual.read_text(encoding="utf-8").strip() if atual.exists() else None
+    opcoes = [c for c in candidatas if c.name != fonte_anterior] or candidatas
+    escolhida = random.choice(opcoes)
+
+    thumbnail_mod.gerar_thumbnail(escolhida, titulo, pasta / "thumbnail.png")
+    atual.write_text(escolhida.name, encoding="utf-8")
+
+    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
+
+
 @app.get("/api/jobs/{job_id}")
 def api_status_job(job_id: str) -> JSONResponse:
     job = jobs.obter_job(job_id)
@@ -241,7 +272,7 @@ def api_listar_videos() -> list[dict]:
                 "data_postagem": metadados.get("data_postagem"),
                 "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4",
                 "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4",
-                "thumbnail": f"/videos/{pasta.name}/thumbnail.png" if thumb_path.exists() else None,
+                "thumbnail": f"/videos/{pasta.name}/thumbnail.png?v={int(thumb_path.stat().st_mtime)}" if thumb_path.exists() else None,
                 "modificado_em": pasta.stat().st_mtime,
                 "tags": tags,
                 "publicado": metadados.get("publicado", False),
