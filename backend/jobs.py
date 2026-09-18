@@ -84,7 +84,7 @@ def _rodar(job: Job, params: dict) -> None:
         job.status = "pronto"
         job.progresso = 100
         job.etapa = "Pronto"
-        estimativa.registrar(job.estimativa_bruta, time.time() - job.iniciado_em)  # aprende com o tempo real
+        estimativa.registrar(job.estimativa_bruta, time.time() - job.iniciado_em, params.get("estilo_imagem", "ia"))  # aprende com o tempo real
     except Exception as erro:  # qualquer falha do motor vira um status legível pro front
         job.status = "erro"
         job.erro = str(erro)
@@ -97,7 +97,7 @@ def criar_job(titulo: str, params: dict) -> Job:
 
     try:
         job.estimativa_bruta = estimativa.estimar_bruto(estimativa.de_parametros_do_job(params))
-        job.estimativa = job.estimativa_bruta * estimativa._fator()
+        job.estimativa = job.estimativa_bruta * estimativa._fator(params.get("estilo_imagem", "ia"))
     except Exception:
         pass
     _garantir_trabalhador()

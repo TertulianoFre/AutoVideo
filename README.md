@@ -160,3 +160,11 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 
 - Depois de clicar em "Gerar vídeo" o formulário fica livre: dá para pedir outro na hora. Os vídeos são gerados **um de cada vez**, na ordem, e aparecem na Fila como "processando" ou "na fila".
 - Fotos reais: fontes sem direitos autorais (Openverse CC0/domínio público, Wikimedia Commons, NASA). Para mais variedade, crie uma chave grátis em pexels.com/api e coloque no arquivo `.env` (raiz do projeto): `PEXELS_API_KEY=sua_chave`. Reinicie o servidor.
+
+## Fila, edição e estimativas (atualização)
+
+- **Fila:** cada vídeo tem **Editar vídeo ▾** (Cenas e roteiro, Legenda e transição, Thumbnail), **Confirmar publicação** e **Regenerar ▾** (pede confirmação). Nada é publicado sem a sua confirmação.
+- **Cenas:** o lápis (✎) edita o texto de cada cena; um único botão salva todas as edições e refaz só a narração (imagens das cenas que não mudaram são mantidas). A cena aceita imagem, imagem da Base ou **vídeo da Base** (cortado no formato, em loop, sem o áudio dele).
+- **Legenda e transição:** estilo, tamanho, posição, cor e fundo, com prévia ao vivo, no Novo vídeo e na Fila. Transições só suaves.
+- **Tempo:** estimativa de produção no Novo vídeo (aprende com os vídeos que você gera, em `dados/tempos.json`), e barra + tempo restante na Fila, nas cenas e na legenda. O roteiro mostra o tempo de narração por parágrafo enquanto você escreve.
+- **Agente:** conhece o canal e todos os vídeos; o botão "Sugerir" da duração usa o agente. A descrição do YouTube é escrita automaticamente para cada vídeo.

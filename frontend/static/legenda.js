@@ -6,8 +6,11 @@
 function formatarRestante(segundos) {
   const s = Math.round(segundos || 0);
   if (s <= 0) return "";
-  if (s < 60) return `~${Math.max(5, Math.round(s / 5) * 5)} s`;
-  return `~${(Math.round(s / 30) / 2).toString().replace(".", ",")} min`;
+  const r = Math.max(5, Math.round(s / 5) * 5); // arredonda de 5 em 5 segundos
+  const m = Math.floor(r / 60);
+  const x = r % 60;
+  if (!m) return `~${x} s`;
+  return x ? `~${m} min ${x} s` : `~${m} min`;
 }
 
 function atualizarMiniBarra(container, pct) {

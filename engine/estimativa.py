@@ -11,9 +11,9 @@ SEGUNDOS_POR_CENA_MEDIA = 13  # duração típica de uma cena (5 cenas em ~1 min
 SEGUNDOS_POR_IMAGEM = {"ia": 14.0, "foto": 12.0, "procedural": 1.5}
 
 
-def _fator() -> float:
+def _fator(estilo: str = "ia") -> float:
     try:
-        return float(json.loads(ARQUIVO.read_text(encoding="utf-8")).get("fator", 1.0))
+        return float(json.loads(ARQUIVO.read_text(encoding="utf-8")).get(f"fator_{estilo}", 1.0))
     except (OSError, ValueError, TypeError):
         return 1.0
 
@@ -46,7 +46,7 @@ def estimar_bruto(p: dict) -> float:
 
 
 def estimar(p: dict) -> float:
-    return estimar_bruto(p) * _fator()
+    return estimar_bruto(p) * _fator(p.get("estilo_imagem", "ia"))
 
 
 def de_parametros_do_job(params: dict) -> dict:
@@ -65,13 +65,15 @@ def de_parametros_do_job(params: dict) -> dict:
     }
 
 
-def registrar(bruto: float, real: float) -> None:
-    """Aprende com um vídeo que terminou: mistura o erro dessa vez no fator (média móvel)."""
+def registrar(bruto: float, real: float, estilo: str = "ia") -> None:
+    """Aprende com um vídeo que terminou: mistura o erro dessa vez no fator daquele estilo de imagem (média móvel)."""
     if bruto <= 0 or real <= 0:
         return
-    novo = min(5.0, max(0.3, 0.6 * _fator() + 0.4 * (real / bruto)))
+    novo = min(5.0, max(0.3, 0.6 * _fator(estilo) + 0.4 * (real / bruto)))
     try:
+        dados = json.loads(ARQUIVO.read_text(encoding="utf-8")) if ARQUIVO.exists() else {}
+        dados[f"fator_{estilo}"] = round(novo, 3)
         ARQUIVO.parent.mkdir(parents=True, exist_ok=True)
-        ARQUIVO.write_text(json.dumps({"fator": round(novo, 3)}), encoding="utf-8")
-    except OSError:
+        ARQUIVO.write_text(json.dumps(dados), encoding="utf-8")
+    except (OSError, ValueError):
         pass

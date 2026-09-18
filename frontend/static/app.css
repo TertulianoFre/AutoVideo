@@ -505,3 +505,5 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .linha-duracao input { flex: 1; }
 .estimativa-novo { align-self: flex-start; }
 .base-item-video { width: 240px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border); background: #000; }
+
+.leg-preview-bloco { flex: 1 1 260px; max-width: 360px; }

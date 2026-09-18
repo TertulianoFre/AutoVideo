@@ -106,12 +106,12 @@ def gerar_ass(
         # destaque (cor de "já falado") vai em primary, e o normal em secondary.
         primary=_ass_cor(cor_destaque if karaoke else COR_TEXTO),
         secondary=_ass_cor(COR_TEXTO),
-        outline=_ass_cor("000000"),
+        outline=_ass_cor(COR_CAIXA, "38") if cfg["caixa"] else _ass_cor("000000"),  # com BorderStyle 3 é a cor da caixa
         back=_ass_cor(COR_CAIXA, "40"),
         marginv=marginv,
         alignment=alinhamento,
         borderstyle=3 if cfg["caixa"] else 1,
-        outlinew=0 if cfg["caixa"] else 4,
+        outlinew=max(6, round(fontsize * 0.14)) if cfg["caixa"] else 4,  # com caixa, é o "respiro" em volta do texto
     )
 
     caminho.write_text(cabecalho + "\n".join(eventos) + "\n", encoding="utf-8")
