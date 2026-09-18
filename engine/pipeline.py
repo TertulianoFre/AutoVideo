@@ -1,7 +1,8 @@
 """Orquestra o pipeline completo: roteiro -> narração -> cenas -> imagens -> legenda -> vídeo final.
 
-Também tem o modo "ambiente" (gerar_video_ambiente): som contínuo (ex: chuva) +
-imagem, sem narração nem legenda, pra vídeos longos de relaxar/dormir."""
+Um único fluxo pra tudo: vídeo narrado normal, com ou sem som de fundo
+(chuva/música bem baixa por baixo da narração), ou sem narração nenhuma (só o
+som de fundo + imagem, pra vídeos longos de relaxar/dormir)."""
 
 import json
 import re
@@ -22,9 +23,11 @@ ESTILO_LEGENDA_POR_FORMATO = {
     "9:16": {"largura": 1080, "altura": 1920, "fontsize": 62, "marginv": 130, "palavras_por_legenda": 5},
 }
 
-# Vídeo ambiente: uma imagem nova a cada tantos segundos — bem calmo, não
-# precisa (nem deve) trocar como se fosse uma cena narrada.
-SEGUNDOS_POR_IMAGEM_AMBIENTE = 240
+# Sem narração: uma imagem nova a cada tantos segundos — bem calmo, não troca
+# como se fosse uma cena narrada.
+SEGUNDOS_POR_IMAGEM_SEM_NARRACAO = 240
+
+VOLUME_SOM_DE_FUNDO = 0.2  # por baixo da narração, propositalmente baixo
 
 
 def _slug(texto: str) -> str:
@@ -61,8 +64,16 @@ def gerar_video(
     duracao_alvo_minutos: float | None = None,
     descricao_video: str = "",
     data_postagem: str | None = None,
+    sem_narracao: bool = False,
+    som_fundo_tipo: str = "",
+    som_fundo_descricao: str = "",
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
+    """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
+    por padrão) + imagem, sem roteiro/voz/legenda — pensado pra vídeos longos.
+    sem_narracao=False (padrão): vídeo narrado normal; som_fundo_tipo opcional
+    mistura um som de fundo bem baixo por baixo da narração."""
+
     def avisar(etapa: str, percentual: float) -> None:
         if progresso is not None:
             progresso(etapa, percentual)
@@ -74,69 +85,104 @@ def gerar_video(
         titulo=titulo,
         data_postagem=data_postagem,
         descricao_video=descricao_video,
-        modo="narrado",
+        sem_narracao=sem_narracao,
+        som_fundo_tipo=som_fundo_tipo,
+        som_fundo_descricao=som_fundo_descricao,
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
         duracao_alvo_minutos=duracao_alvo_minutos,
     )
 
-    if roteiro is None:
-        avisar("Escrevendo o roteiro", 3)
-        # o contexto do canal é sempre levado em conta aqui, como base — não
-        # precisa repetir isso na descrição de cada vídeo.
-        roteiro = roteiro_mod.gerar_roteiro(
-            titulo,
-            duracao_alvo_minutos or 1.0,
-            contexto_canal=canal.obter_contexto(),
-            descricao_video=descricao_video,
-        )
-        print(f"[roteiro gerado]\n{roteiro}\n")
-        (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
+    tags: list = []
 
-    avisar("Gerando a narração", 8)
-    audio_path = pasta / "narracao.mp3"
-    submaker = tts.sintetizar(roteiro, idioma, voz, audio_path)
-
-    duracao_real = (submaker.cues[-1].end - submaker.cues[0].start).total_seconds()
-    if duracao_alvo_minutos is not None:
-        alvo_segundos = duracao_alvo_minutos * 60
-        if duracao_real < alvo_segundos * 0.9:
-            palavras_faltando = round((alvo_segundos - duracao_real) / 60 * PALAVRAS_POR_MINUTO)
-            print(
-                f"[aviso] roteiro dá ~{duracao_real / 60:.1f} min, abaixo da meta de "
-                f"{duracao_alvo_minutos:.1f} min. Escreva mais ~{palavras_faltando} palavras "
-                f"({PALAVRAS_POR_MINUTO} palavras/min é a média dessa narração)."
+    if sem_narracao:
+        # --- sem fala: o som de fundo É o áudio do vídeo inteiro ---
+        duracao_real = (duracao_alvo_minutos or 15.0) * 60
+        tipo_efetivo = som_fundo_tipo or "chuva"
+        avisar(f"Gerando o som de fundo ({tipo_efetivo})", 15)
+        audio_path = pasta / "audio.wav"
+        ambiente.gerar_som_ambiente(tipo_efetivo, duracao_real, audio_path, descricao=som_fundo_descricao)
+        submaker = None
+        roteiro_final = ""
+    else:
+        # --- com fala: roteiro + narração, som de fundo é opcional e mixado por baixo ---
+        if roteiro is None:
+            avisar("Escrevendo o roteiro", 3)
+            # o contexto do canal é sempre levado em conta aqui, como base — não
+            # precisa repetir isso na descrição de cada vídeo.
+            roteiro = roteiro_mod.gerar_roteiro(
+                titulo,
+                duracao_alvo_minutos or 1.0,
+                contexto_canal=canal.obter_contexto(),
+                descricao_video=descricao_video,
             )
-        elif duracao_real > alvo_segundos * 1.1:
-            print(
-                f"[aviso] roteiro dá ~{duracao_real / 60:.1f} min, acima da meta de "
-                f"{duracao_alvo_minutos:.1f} min. Considere cortar texto."
+            print(f"[roteiro gerado]\n{roteiro}\n")
+            (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
+        roteiro_final = roteiro
+
+        avisar("Gerando a narração", 8)
+        narracao_path = pasta / "narracao.mp3"
+        submaker = tts.sintetizar(roteiro, idioma, voz, narracao_path)
+
+        duracao_real = (submaker.cues[-1].end - submaker.cues[0].start).total_seconds()
+        if duracao_alvo_minutos is not None:
+            alvo_segundos = duracao_alvo_minutos * 60
+            if duracao_real < alvo_segundos * 0.9:
+                palavras_faltando = round((alvo_segundos - duracao_real) / 60 * PALAVRAS_POR_MINUTO)
+                print(
+                    f"[aviso] roteiro dá ~{duracao_real / 60:.1f} min, abaixo da meta de "
+                    f"{duracao_alvo_minutos:.1f} min. Escreva mais ~{palavras_faltando} palavras "
+                    f"({PALAVRAS_POR_MINUTO} palavras/min é a média dessa narração)."
+                )
+            elif duracao_real > alvo_segundos * 1.1:
+                print(
+                    f"[aviso] roteiro dá ~{duracao_real / 60:.1f} min, acima da meta de "
+                    f"{duracao_alvo_minutos:.1f} min. Considere cortar texto."
+                )
+
+        avisar("Gerando hashtags", 12)
+        try:
+            tags = roteiro_mod.gerar_hashtags(titulo, roteiro)
+            (pasta / "tags.txt").write_text(", ".join(tags), encoding="utf-8")
+        except RuntimeError as erro:
+            print(f"[aviso] geração de hashtags falhou, seguindo sem elas: {erro}")
+            tags = []
+
+        if som_fundo_tipo:
+            avisar(f"Gerando o som de fundo ({som_fundo_tipo})", 14)
+            som_fundo_path = pasta / "som_fundo.wav"
+            ambiente.gerar_som_ambiente(som_fundo_tipo, duracao_real, som_fundo_path, descricao=som_fundo_descricao)
+            avisar("Misturando o som de fundo", 16)
+            audio_path = render.mixar_audio_com_fundo(
+                narracao_path, som_fundo_path, pasta / "audio_final.m4a", VOLUME_SOM_DE_FUNDO
             )
+        else:
+            audio_path = narracao_path
 
-    avisar("Gerando hashtags", 12)
-    try:
-        tags = roteiro_mod.gerar_hashtags(titulo, roteiro)
-        (pasta / "tags.txt").write_text(", ".join(tags), encoding="utf-8")
-    except RuntimeError as erro:
-        print(f"[aviso] geração de hashtags falhou, seguindo sem elas: {erro}")
-        tags = []
+    # --- cenas/imagens: com narração, uma cena por frase; sem narração, imagens em intervalo fixo ---
+    if sem_narracao:
+        n_imagens = max(1, round(duracao_real / SEGUNDOS_POR_IMAGEM_SEM_NARRACAO))
+        duracao_por_imagem = duracao_real / n_imagens
+        contexto_cena = f"{titulo}. {descricao_video}".strip(". ") or titulo
+        lista_cenas = [(contexto_cena, duracao_por_imagem) for _ in range(n_imagens)]
+    else:
+        avisar("Dividindo o roteiro em cenas", 18)
+        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final)
+        lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
-    avisar("Dividindo o roteiro em cenas", 18)
-    cenas = scenes.dividir_em_cenas(submaker, roteiro)
-
-    # imagens de todas as cenas, nos dois formatos, são a etapa mais demorada
-    # (sobretudo com foto/ia, que dependem de internet) — vão de 20% a 85%.
-    total_imagens = len(cenas) * len(ESTILO_LEGENDA_POR_FORMATO)
+    total_imagens = len(lista_cenas) * len(ESTILO_LEGENDA_POR_FORMATO)
     imagens_feitas = 0
 
     videos = {}
     for formato, estilo in ESTILO_LEGENDA_POR_FORMATO.items():
         sufixo = formato.replace(":", "x")
-        legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro, **estilo)
+        legenda_path = None
+        if not sem_narracao:
+            legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro_final, **estilo)
 
         imagens_com_duracao = []
-        for i, cena in enumerate(cenas):
+        for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
             try:
                 visuals.gerar_fundo(
@@ -144,15 +190,15 @@ def gerar_video(
                     estilo["largura"],
                     estilo["altura"],
                     caminho_imagem,
-                    cena=cena.texto,
+                    cena=texto_cena,
                     estilo_extra=descricao_video,
                 )
             except RuntimeError as erro:
                 # Fonte externa (foto/ia) falhou (rede, serviço fora do ar) — não
                 # trava o vídeo inteiro por causa de uma cena, usa o procedural.
                 print(f"[aviso] cena {i} ({estilo_imagem}) falhou, usando procedural: {erro}")
-                visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=cena.texto)
-            imagens_com_duracao.append((caminho_imagem, cena.duracao_segundos))
+                visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=texto_cena)
+            imagens_com_duracao.append((caminho_imagem, duracao_cena))
 
             imagens_feitas += 1
             avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
@@ -166,80 +212,4 @@ def gerar_video(
     caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
 
     avisar("Pronto", 100)
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro, tags, caminho_thumb)
-
-
-def gerar_video_ambiente(
-    titulo: str,
-    duracao_alvo_minutos: float = 15.0,
-    tipo_som: str = "chuva",
-    estilo_imagem: str = "procedural",
-    descricao_video: str = "",
-    data_postagem: str | None = None,
-    progresso: Callable[[str, float], None] | None = None,
-) -> ResultadoGeracao:
-    """Vídeo sem narração: som ambiente em loop (ex: chuva) + imagem que troca
-    bem devagar. Pra vídeos longos (15-60 min) de relaxar/dormir/estudar."""
-
-    def avisar(etapa: str, percentual: float) -> None:
-        if progresso is not None:
-            progresso(etapa, percentual)
-
-    pasta = RAIZ_SAIDA / _slug(titulo)
-    pasta.mkdir(parents=True, exist_ok=True)
-    _salvar_metadados(
-        pasta,
-        titulo=titulo,
-        data_postagem=data_postagem,
-        descricao_video=descricao_video,
-        modo="ambiente",
-        tipo_som=tipo_som,
-        estilo_imagem=estilo_imagem,
-        duracao_alvo_minutos=duracao_alvo_minutos,
-    )
-
-    duracao_segundos = duracao_alvo_minutos * 60
-
-    avisar(f"Gerando o som ambiente ({tipo_som})", 10)
-    audio_path = pasta / "ambiente.wav"
-    ambiente.gerar_som_ambiente(tipo_som, duracao_segundos, audio_path)
-
-    n_imagens = max(1, round(duracao_segundos / SEGUNDOS_POR_IMAGEM_AMBIENTE))
-    duracao_por_imagem = duracao_segundos / n_imagens
-    contexto_cena = f"{titulo}. {descricao_video}".strip(". ") or titulo
-
-    videos = {}
-    formatos = list(ESTILO_LEGENDA_POR_FORMATO.items())
-    for indice_formato, (formato, estilo) in enumerate(formatos):
-        sufixo = formato.replace(":", "x")
-
-        imagens_com_duracao = []
-        for i in range(n_imagens):
-            caminho_imagem = pasta / f"ambiente{i:02d}_{sufixo}.png"
-            try:
-                visuals.gerar_fundo(
-                    estilo_imagem,
-                    estilo["largura"],
-                    estilo["altura"],
-                    caminho_imagem,
-                    cena=contexto_cena,
-                    estilo_extra=descricao_video,
-                )
-            except RuntimeError as erro:
-                print(f"[aviso] imagem {i} ({estilo_imagem}) falhou, usando procedural: {erro}")
-                visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=contexto_cena)
-            imagens_com_duracao.append((caminho_imagem, duracao_por_imagem))
-
-            progresso_imagens = (indice_formato * n_imagens + i + 1) / (len(formatos) * n_imagens)
-            avisar(f"Gerando imagens ({formato})", 20 + 60 * progresso_imagens)
-
-        avisar(f"Montando o vídeo ({formato})", 88 if formato == "16:9" else 94)
-        videos[formato] = render.renderizar_slideshow(
-            imagens_com_duracao, audio_path, None, formato, pasta / f"video_{sufixo}.mp4"
-        )
-
-    avisar("Gerando a thumbnail", 97)
-    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "ambiente00_16x9.png", titulo, pasta / "thumbnail.png")
-
-    avisar("Pronto", 100)
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_segundos, "", [], caminho_thumb)
+    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro_final, tags, caminho_thumb)

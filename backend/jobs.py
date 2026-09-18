@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from engine.pipeline import gerar_video, gerar_video_ambiente
+from engine.pipeline import gerar_video
 
 _jobs: dict[str, "Job"] = {}
 _lock = threading.Lock()
@@ -23,14 +23,13 @@ class Job:
     erro: str | None = None
 
 
-def _rodar(job: Job, modo: str, params: dict) -> None:
+def _rodar(job: Job, params: dict) -> None:
     def progresso_cb(etapa: str, percentual: float) -> None:
         job.etapa = etapa
         job.progresso = round(percentual, 1)
 
     try:
-        funcao = gerar_video_ambiente if modo == "ambiente" else gerar_video
-        resultado = funcao(progresso=progresso_cb, **params)
+        resultado = gerar_video(progresso=progresso_cb, **params)
         job.resultado = {
             "slug": resultado.pasta.name,
             "video_16_9": f"/videos/{resultado.pasta.name}/{resultado.video_16_9.name}",
@@ -48,12 +47,12 @@ def _rodar(job: Job, modo: str, params: dict) -> None:
         job.erro = str(erro)
 
 
-def criar_job(titulo: str, modo: str, params: dict) -> Job:
+def criar_job(titulo: str, params: dict) -> Job:
     job = Job(id=str(uuid.uuid4()), titulo=titulo)
     with _lock:
         _jobs[job.id] = job
 
-    threading.Thread(target=_rodar, args=(job, modo, params), daemon=True).start()
+    threading.Thread(target=_rodar, args=(job, params), daemon=True).start()
     return job
 
 

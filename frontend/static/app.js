@@ -29,7 +29,10 @@ function formatarDataPostagem(iso) {
 const ICONE_VIDEO = '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="10" height="9" rx="1.5"></rect><path d="M12.5 9l5-3v8l-5-3z"></path></svg>';
 
 function linhaDeVideo(v, comRegenerar) {
-  const modoLabel = v.modo === "ambiente" ? "· ambiente" : "";
+  const rotulos = [];
+  if (v.sem_narracao) rotulos.push("sem narração");
+  if (v.som_fundo_tipo) rotulos.push(`som: ${v.som_fundo_tipo}`);
+  const modoLabel = rotulos.length ? `· ${rotulos.join(", ")}` : "";
   const thumb = v.thumbnail
     ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
     : ICONE_VIDEO;
@@ -125,22 +128,84 @@ formCanal.addEventListener("submit", async (ev) => {
   setTimeout(() => (canalStatus.textContent = ""), 4000);
 });
 
-// ---------------- Novo vídeo: alternância de modo ----------------
+// ---------------- Novo vídeo: sem narração + som de fundo ----------------
 
 const camposNarrado = document.getElementById("campos-narrado");
-const camposAmbiente = document.getElementById("campos-ambiente");
-const campoModo = document.getElementById("campo-modo");
 const campoDuracao = document.getElementById("campo-duracao");
+const campoSemNarracao = document.getElementById("campo-sem-narracao");
+const campoSomFundoAtivo = document.getElementById("campo-som-fundo-ativo");
+const camposSomFundo = document.getElementById("campos-som-fundo");
+const campoSomFundoTipo = document.getElementById("campo-som-fundo-tipo");
+const campoSomFundoDescricao = document.querySelector("[name=som_fundo_descricao]");
+const linhaSomFundoDescricao = document.getElementById("linha-som-fundo-descricao");
 
-document.querySelectorAll(".modo-btn").forEach((botao) => {
-  botao.addEventListener("click", () => {
-    document.querySelectorAll(".modo-btn").forEach((b) => b.classList.toggle("active", b === botao));
-    const modo = botao.dataset.modo;
-    campoModo.value = modo;
-    camposNarrado.hidden = modo === "ambiente";
-    camposAmbiente.hidden = modo === "narrado";
-    campoDuracao.value = modo === "ambiente" ? 15 : 1;
-  });
+function aplicarEstadoSomFundo() {
+  const ativo = campoSomFundoAtivo.checked;
+  camposSomFundo.hidden = !ativo;
+  // desabilitado = não entra no formulário — assim, quando o som de fundo
+  // está desligado, nenhum som_fundo_tipo é enviado por engano.
+  campoSomFundoTipo.disabled = !ativo;
+  campoSomFundoDescricao.disabled = !ativo || campoSomFundoTipo.value !== "outro";
+}
+
+campoSemNarracao.addEventListener("change", () => {
+  const semNarracao = campoSemNarracao.checked;
+  camposNarrado.hidden = semNarracao;
+  campoDuracao.value = semNarracao ? 15 : 1;
+
+  // sem narração, o som de fundo é o áudio inteiro do vídeo — obrigatório
+  if (semNarracao) campoSomFundoAtivo.checked = true;
+  campoSomFundoAtivo.disabled = semNarracao;
+  aplicarEstadoSomFundo();
+});
+
+campoSomFundoAtivo.addEventListener("change", aplicarEstadoSomFundo);
+
+campoSomFundoTipo.addEventListener("change", () => {
+  linhaSomFundoDescricao.hidden = campoSomFundoTipo.value !== "outro";
+  aplicarEstadoSomFundo();
+});
+
+aplicarEstadoSomFundo();
+
+// ---------------- Novo vídeo: pré-visualizar roteiro ----------------
+
+const btnPreviewRoteiro = document.getElementById("btn-preview-roteiro");
+const previewRoteiroStatus = document.getElementById("preview-roteiro-status");
+const campoRoteiro = document.getElementById("campo-roteiro");
+const campoTitulo = document.querySelector("[name=titulo]");
+const campoDescricaoVideo = document.querySelector("[name=descricao_video]");
+
+btnPreviewRoteiro.addEventListener("click", async () => {
+  const titulo = campoTitulo.value.trim();
+  if (!titulo) {
+    previewRoteiroStatus.textContent = "Escreve o título primeiro.";
+    campoTitulo.focus();
+    return;
+  }
+
+  btnPreviewRoteiro.disabled = true;
+  previewRoteiroStatus.textContent = "Escrevendo o roteiro…";
+
+  const dados = new FormData();
+  dados.set("titulo", titulo);
+  dados.set("duracao_alvo", campoDuracao.value || "1");
+  dados.set("descricao_video", campoDescricaoVideo.value || "");
+
+  try {
+    const resposta = await fetch("/api/roteiro/preview", { method: "POST", body: dados });
+    const dadosResposta = await resposta.json();
+    if (dadosResposta.erro) {
+      previewRoteiroStatus.textContent = `Deu erro: ${dadosResposta.erro}`;
+    } else {
+      campoRoteiro.value = dadosResposta.roteiro;
+      previewRoteiroStatus.textContent = "Pronto — revise e edite à vontade antes de gerar o vídeo.";
+    }
+  } catch {
+    previewRoteiroStatus.textContent = "Deu erro de conexão, tenta de novo.";
+  } finally {
+    btnPreviewRoteiro.disabled = false;
+  }
 });
 
 // ---------------- Novo vídeo: envio + progresso ----------------

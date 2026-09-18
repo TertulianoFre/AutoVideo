@@ -4,14 +4,22 @@ Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 """
 
 import json
+import sys
 from pathlib import Path
+
+# O texto gerado por IA às vezes traz pontuação Unicode especial (hífen
+# não-quebrável, travessão...) que quebra o print() no console do Windows
+# (codepage padrão não sabe codificar) — evita que um log derrube o servidor.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import jobs
-from engine import canal
+from engine import canal, roteiro as roteiro_mod
 from engine.pipeline import RAIZ_SAIDA
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -46,6 +54,28 @@ def api_salvar_canal(contexto: str = Form("")) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# pré-visualização do roteiro (antes de gerar o vídeo inteiro)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/roteiro/preview")
+def api_preview_roteiro(
+    titulo: str = Form(...),
+    duracao_alvo: float | None = Form(None),
+    descricao_video: str = Form(""),
+) -> JSONResponse:
+    try:
+        roteiro = roteiro_mod.gerar_roteiro(
+            titulo.strip(),
+            duracao_alvo or 1.0,
+            contexto_canal=canal.obter_contexto(),
+            descricao_video=descricao_video.strip(),
+        )
+        return JSONResponse({"roteiro": roteiro})
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
 # geração de vídeo
 # ---------------------------------------------------------------------------
 
@@ -53,38 +83,32 @@ def api_salvar_canal(contexto: str = Form("")) -> dict:
 def api_criar_video(
     titulo: str = Form(...),
     data_postagem: str = Form(...),
-    modo: str = Form("narrado"),
     roteiro: str = Form(""),
     descricao_video: str = Form(""),
     idioma: str = Form("pt-BR"),
     voz: str = Form("mulher"),
     imagem: str = Form("procedural"),
     duracao_alvo: float | None = Form(None),
-    tipo_som: str = Form("chuva"),
+    sem_narracao: bool = Form(False),
+    som_fundo_tipo: str = Form(""),
+    som_fundo_descricao: str = Form(""),
 ) -> dict:
     titulo = titulo.strip()
-    if modo == "ambiente":
-        params = dict(
-            titulo=titulo,
-            duracao_alvo_minutos=duracao_alvo or 15.0,
-            tipo_som=tipo_som,
-            estilo_imagem=imagem,
-            descricao_video=descricao_video.strip(),
-            data_postagem=data_postagem,
-        )
-    else:
-        params = dict(
-            titulo=titulo,
-            roteiro=roteiro.strip() or None,
-            idioma=idioma,
-            voz=voz,
-            estilo_imagem=imagem,
-            duracao_alvo_minutos=duracao_alvo,
-            descricao_video=descricao_video.strip(),
-            data_postagem=data_postagem,
-        )
+    params = dict(
+        titulo=titulo,
+        roteiro=None if sem_narracao else (roteiro.strip() or None),
+        idioma=idioma,
+        voz=voz,
+        estilo_imagem=imagem,
+        duracao_alvo_minutos=duracao_alvo,
+        descricao_video=descricao_video.strip(),
+        data_postagem=data_postagem,
+        sem_narracao=sem_narracao,
+        som_fundo_tipo=som_fundo_tipo,
+        som_fundo_descricao=som_fundo_descricao.strip(),
+    )
 
-    job = jobs.criar_job(titulo, modo, params)
+    job = jobs.criar_job(titulo, params)
     return {"job_id": job.id}
 
 
@@ -99,30 +123,23 @@ def api_regenerar_video(slug: str) -> dict:
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     titulo = metadados.get("titulo", slug)
-    modo = metadados.get("modo", "narrado")
+    sem_narracao = metadados.get("sem_narracao", False)
 
-    if modo == "ambiente":
-        params = dict(
-            titulo=titulo,
-            duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or 15.0,
-            tipo_som=metadados.get("tipo_som", "chuva"),
-            estilo_imagem=metadados.get("estilo_imagem", "procedural"),
-            descricao_video=metadados.get("descricao_video", ""),
-            data_postagem=metadados.get("data_postagem"),
-        )
-    else:
-        params = dict(
-            titulo=titulo,
-            roteiro=None,  # regenerar sempre escreve um roteiro novo
-            idioma=metadados.get("idioma", "pt-BR"),
-            voz=metadados.get("voz", "mulher"),
-            estilo_imagem=metadados.get("estilo_imagem", "procedural"),
-            duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or 1.0,
-            descricao_video=metadados.get("descricao_video", ""),
-            data_postagem=metadados.get("data_postagem"),
-        )
+    params = dict(
+        titulo=titulo,
+        roteiro=None,  # regenerar sempre escreve um roteiro novo (quando tem narração)
+        idioma=metadados.get("idioma", "pt-BR"),
+        voz=metadados.get("voz", "mulher"),
+        estilo_imagem=metadados.get("estilo_imagem", "procedural"),
+        duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or (15.0 if sem_narracao else 1.0),
+        descricao_video=metadados.get("descricao_video", ""),
+        data_postagem=metadados.get("data_postagem"),
+        sem_narracao=sem_narracao,
+        som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
+        som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
+    )
 
-    job = jobs.criar_job(titulo, modo, params)
+    job = jobs.criar_job(titulo, params)
     return {"job_id": job.id}
 
 
@@ -168,7 +185,8 @@ def api_listar_videos() -> list[dict]:
             {
                 "slug": pasta.name,
                 "titulo": metadados.get("titulo") or pasta.name.replace("-", " "),
-                "modo": metadados.get("modo", "narrado"),
+                "sem_narracao": metadados.get("sem_narracao", False),
+                "som_fundo_tipo": metadados.get("som_fundo_tipo", ""),
                 "data_postagem": metadados.get("data_postagem"),
                 "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4",
                 "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4",

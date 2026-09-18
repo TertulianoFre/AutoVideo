@@ -8,6 +8,13 @@ partir do título, do tamanho certo pra bater --duracao-alvo (padrão: 1 minuto)
 """
 
 import argparse
+import sys
+
+# Texto gerado por IA às vezes traz pontuação Unicode especial que quebra o
+# print() no console do Windows (codepage padrão não sabe codificar).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from engine.pipeline import gerar_video
 
@@ -20,9 +27,22 @@ def main() -> None:
     parser.add_argument("--voz", default="mulher", choices=["mulher", "homem", "crianca"])
     parser.add_argument("--imagem", default="procedural", choices=["procedural", "foto", "ia"])
     parser.add_argument("--duracao-alvo", type=float, default=None, help="duração desejada, em minutos")
+    parser.add_argument("--descricao", default="", help="descrição livre: estilo visual, tom (ex: '2D infantil')")
+    parser.add_argument("--sem-narracao", action="store_true", help="vídeo só com som de fundo, sem fala")
+    parser.add_argument("--som-fundo", default="", choices=["", "chuva", "musica"], help="som de fundo (baixo, por baixo da narração; ou o áudio inteiro se --sem-narracao)")
     args = parser.parse_args()
 
-    resultado = gerar_video(args.titulo, args.roteiro, args.idioma, args.voz, args.imagem, args.duracao_alvo)
+    resultado = gerar_video(
+        args.titulo,
+        args.roteiro,
+        args.idioma,
+        args.voz,
+        args.imagem,
+        args.duracao_alvo,
+        descricao_video=args.descricao,
+        sem_narracao=args.sem_narracao,
+        som_fundo_tipo=args.som_fundo,
+    )
 
     minutos, segundos = divmod(round(resultado.duracao_segundos), 60)
     print(f"Pronto! Duração: {minutos}:{segundos:02d} — arquivos em: {resultado.pasta}")

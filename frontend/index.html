@@ -83,12 +83,6 @@
       <section id="tab-novo" class="tab">
         <div class="novo-grid">
           <form id="form-novo" class="card form">
-            <div class="modo-toggle">
-              <button type="button" class="modo-btn active" data-modo="narrado">Narrado</button>
-              <button type="button" class="modo-btn" data-modo="ambiente">Ambiente (chuva, sem narração)</button>
-            </div>
-            <input type="hidden" name="modo" id="campo-modo" value="narrado">
-
             <div class="row-2">
               <label>
                 <span>Título <em>(obrigatório)</em></span>
@@ -105,11 +99,20 @@
               <textarea name="descricao_video" rows="2" placeholder="Ex: estilo mais infantil e colorido, bem simples em 2D"></textarea>
             </label>
 
+            <label class="checkbox-row">
+              <input type="checkbox" name="sem_narracao" id="campo-sem-narracao">
+              <span>Vídeo sem narração (só som de fundo + imagem — ideal pra vídeos longos, tipo 15-60 min de chuva pra relaxar)</span>
+            </label>
+
             <div id="campos-narrado">
               <label>
                 <span>Roteiro (opcional — deixe em branco pra gerar automaticamente a partir do título + contexto do canal)</span>
-                <textarea name="roteiro" rows="4" placeholder="Cole aqui o roteiro pronto, ou deixe em branco pro motor escrever sozinho"></textarea>
+                <textarea name="roteiro" id="campo-roteiro" rows="6" placeholder="Cole aqui o roteiro pronto, ou clique em &quot;Pré-visualizar roteiro&quot; pra deixar o motor escrever e você revisar antes"></textarea>
               </label>
+              <div class="preview-row">
+                <button type="button" class="btn-secondary" id="btn-preview-roteiro">Pré-visualizar roteiro</button>
+                <span id="preview-roteiro-status" class="video-meta"></span>
+              </div>
 
               <div class="row-2">
                 <label>
@@ -132,13 +135,27 @@
               </div>
             </div>
 
-            <div id="campos-ambiente" hidden>
-              <label>
-                <span>Som ambiente</span>
-                <select name="tipo_som">
-                  <option value="chuva">Chuva</option>
-                </select>
-              </label>
+            <label class="checkbox-row" id="linha-som-fundo">
+              <input type="checkbox" name="som_fundo_ativo" id="campo-som-fundo-ativo">
+              <span>Som de fundo (baixo, por baixo da narração)</span>
+            </label>
+
+            <div id="campos-som-fundo" hidden>
+              <div class="row-2">
+                <label>
+                  <span>Tipo</span>
+                  <select name="som_fundo_tipo" id="campo-som-fundo-tipo">
+                    <option value="chuva">Chuva</option>
+                    <option value="musica">Música suave</option>
+                    <option value="outro">Outro (descrever)</option>
+                  </select>
+                </label>
+                <label id="linha-som-fundo-descricao" hidden>
+                  <span>Descreva o som que quer</span>
+                  <input type="text" name="som_fundo_descricao" placeholder="Ex: som de floresta com pássaros">
+                </label>
+              </div>
+              <p class="hint">Hoje só chuva e música suave são sintetizadas de verdade (localmente, grátis); "outro" usa a mais parecida das duas por enquanto.</p>
             </div>
 
             <div class="row-2">
