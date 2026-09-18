@@ -1130,6 +1130,80 @@ async function atualizarStatusYoutube() {
   return dados;
 }
 
+function desenharLinha(canvasId, dias, valores, formato) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  const L = canvas.clientWidth || 600;
+  const A = 140;
+  canvas.width = L;
+  canvas.height = A;
+  ctx.clearRect(0, 0, L, A);
+
+  const estilo = getComputedStyle(document.documentElement);
+  const cor = estilo.getPropertyValue("--accent").trim() || "#E2793D";
+  const dim = estilo.getPropertyValue("--text-dim").trim() || "#A79E8E";
+  const min = Math.min(...valores);
+  const max = Math.max(...valores);
+  const faixa = max - min || 1;
+  const mx = 42, topo = 12, base = A - 24;
+  const x = (i) => mx + (i / (valores.length - 1)) * (L - mx - 8);
+  const y = (v) => base - ((v - min) / faixa) * (base - topo);
+
+  ctx.font = "10px sans-serif";
+  ctx.fillStyle = dim;
+  ctx.textAlign = "right";
+  ctx.fillText(formato(max), mx - 6, topo + 4);
+  ctx.fillText(formato(min), mx - 6, base + 3);
+  [0, Math.floor(valores.length / 2), valores.length - 1].forEach((i) => {
+    const [, m, d] = dias[i].split("-");
+    ctx.textAlign = i === 0 ? "left" : i === valores.length - 1 ? "right" : "center";
+    ctx.fillText(`${d}/${m}`, x(i), A - 8);
+  });
+
+  ctx.strokeStyle = cor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  valores.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+  ctx.stroke();
+  ctx.lineTo(x(valores.length - 1), base);
+  ctx.lineTo(x(0), base);
+  ctx.closePath();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = cor;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+async function carregarGraficosYoutube() {
+  const card = document.getElementById("card-graficos-youtube");
+  const aviso = document.getElementById("graficos-youtube-aviso");
+  let dados;
+  try {
+    dados = await fetch("/api/youtube/serie?dias=28").then((r) => r.json());
+  } catch {
+    return;
+  }
+  card.hidden = false;
+
+  if (dados.erro) {
+    aviso.textContent =
+      "Não consegui carregar os gráficos: ative a \"YouTube Analytics API\" no Google Cloud Console (mesmo projeto) e clique em Reconectar no perfil, pra liberar a permissão nova.";
+    return;
+  }
+  aviso.textContent = "";
+  const dias = dados.serie.map((s) => s.dia);
+  desenharLinha("grafico-views", dias, dados.serie.map((s) => s.views), (v) => v.toLocaleString("pt-BR"));
+
+  // total de inscritos ao longo do tempo: parte do número atual e volta somando os líquidos de trás pra frente
+  let total = dados.inscritos_atual;
+  const acumulado = new Array(dados.serie.length);
+  for (let i = dados.serie.length - 1; i >= 0; i--) {
+    acumulado[i] = total;
+    total -= dados.serie[i].inscritos_liquidos;
+  }
+  desenharLinha("grafico-inscritos", dias, acumulado, (v) => Math.round(v).toLocaleString("pt-BR"));
+}
+
 async function carregarEstatisticasCanal() {
   const linha = document.getElementById("stats-row-youtube");
   const resposta = await fetch("/api/youtube/estatisticas");
@@ -1147,6 +1221,7 @@ async function carregarEstatisticasCanal() {
   document.getElementById("stat-inscritos").textContent = dados.inscritos.toLocaleString("pt-BR");
   document.getElementById("stat-visualizacoes").textContent = dados.visualizacoes.toLocaleString("pt-BR");
   linha.hidden = false;
+  carregarGraficosYoutube();
 
   brandName.textContent = dados.nome_canal || "Meu Canal";
   brandSub.textContent = `${dados.inscritos.toLocaleString("pt-BR")} inscritos — ver canal ↗`;

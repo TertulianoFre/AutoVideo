@@ -197,7 +197,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 }
 
 #card-grafico-videos { margin-top: 16px; }
-#grafico-videos { width: 100%; display: block; }
+#grafico-videos, #grafico-inscritos, #grafico-views { width: 100%; display: block; }
 
 .base-audios-lista { display: flex; flex-direction: column; gap: 8px; }
 .base-audio-item {

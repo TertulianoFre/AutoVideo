@@ -160,6 +160,18 @@ def api_youtube_estatisticas(canal_id: str | None = None) -> JSONResponse:
         return JSONResponse({"erro": str(erro)}, status_code=409)
 
 
+@app.get("/api/youtube/serie")
+def api_youtube_serie(dias: int = 28, canal_id: str | None = None) -> JSONResponse:
+    dias = max(7, min(dias, 90))
+    conta = _conta_do_canal(canal_id)
+    try:
+        serie = youtube_mod.obter_serie_diaria(conta, dias)
+        atual = youtube_mod.obter_estatisticas_canal(conta)["inscritos"]
+    except Exception as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=409)
+    return JSONResponse({"serie": serie, "inscritos_atual": atual})
+
+
 # ---------------------------------------------------------------------------
 # agente: sugere ideias de vídeo (opcionalmente inspirado em tendências)
 # ---------------------------------------------------------------------------

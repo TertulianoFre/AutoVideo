@@ -20,6 +20,7 @@ PASTA_TOKENS = RAIZ / "dados" / "tokens"
 ESCOPOS = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",  # pro painel: inscritos, visualizações
+    "https://www.googleapis.com/auth/yt-analytics.readonly",  # pro painel: gráficos por dia (YouTube Analytics API)
 ]
 CATEGORIA_PADRAO = "22"  # "Pessoas e blogs" — genérica, serve pra a maioria dos vídeos do canal
 
@@ -105,6 +106,43 @@ def obter_estatisticas_canal(nome_conta: str) -> dict:
         "visualizacoes": int(estatisticas.get("viewCount", 0)),
         "total_videos": int(estatisticas.get("videoCount", 0)),
     }
+
+
+def obter_serie_diaria(nome_conta: str, dias: int = 28) -> list:
+    """Views e inscritos (ganhos - perdidos) por dia, dos últimos `dias` dias.
+    Usa a YouTube Analytics API: precisa dela ativada no Google Cloud e do
+    escopo yt-analytics.readonly (contas conectadas antes precisam reconectar)."""
+    from datetime import date, timedelta
+
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+
+    analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    fim = date.today()
+    inicio = fim - timedelta(days=dias - 1)
+    resposta = analytics.reports().query(
+        ids="channel==MINE",
+        startDate=inicio.isoformat(),
+        endDate=fim.isoformat(),
+        metrics="views,subscribersGained,subscribersLost",
+        dimensions="day",
+        sort="day",
+    ).execute()
+
+    por_dia = {linha[0]: linha for linha in resposta.get("rows", [])}
+    serie = []
+    for i in range(dias):
+        dia = (inicio + timedelta(days=i)).isoformat()
+        linha = por_dia.get(dia)
+        serie.append(
+            {
+                "dia": dia,
+                "views": int(linha[1]) if linha else 0,
+                "inscritos_liquidos": int(linha[2]) - int(linha[3]) if linha else 0,
+            }
+        )
+    return serie
 
 
 def obter_tendencias(nome_conta: str, regiao: str = "BR", quantidade: int = 15) -> list:
