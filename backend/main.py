@@ -7,6 +7,7 @@ import io
 import json
 import random
 import re
+import shutil
 import sys
 import threading
 import time
@@ -26,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from backend import jobs
-from engine import agendador, agente, canal, roteiro as roteiro_mod
+from engine import agendador, agente, biblioteca, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import youtube as youtube_mod
 from engine.pipeline import RAIZ_SAIDA
@@ -52,8 +53,12 @@ def _estado_de(canal_id: str) -> dict:
     return _estado_conexao_youtube.setdefault(canal_id, {"status": "ocioso", "erro": None})
 
 
+biblioteca.PASTA_AUDIOS.mkdir(parents=True, exist_ok=True)
+biblioteca.PASTA_IMAGENS.mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 app.mount("/videos", StaticFiles(directory=RAIZ_SAIDA), name="videos")
+app.mount("/biblioteca", StaticFiles(directory=biblioteca.RAIZ), name="biblioteca")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -237,6 +242,60 @@ def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# biblioteca: áudios e imagens importados por você, reutilizáveis em qualquer vídeo
+# ---------------------------------------------------------------------------
+
+TAMANHO_MAX_BIBLIOTECA_BYTES = 40 * 1024 * 1024
+
+
+@app.get("/api/biblioteca")
+def api_listar_biblioteca() -> dict:
+    return {
+        "audios": [f"/biblioteca/audios/{nome}" for nome in biblioteca.listar_audios()],
+        "audios_nomes": biblioteca.listar_audios(),
+        "imagens": [{"nome": nome, "url": f"/biblioteca/imagens/{nome}"} for nome in biblioteca.listar_imagens()],
+    }
+
+
+@app.post("/api/biblioteca/audios/upload")
+async def api_upload_audio_biblioteca(arquivo: UploadFile = File(...)) -> JSONResponse:
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAX_BIBLIOTECA_BYTES:
+        return JSONResponse({"erro": "arquivo maior que 40MB"}, status_code=400)
+    try:
+        nome = biblioteca.salvar_audio(arquivo.filename or "audio", conteudo)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    return JSONResponse({"nome": nome, "url": f"/biblioteca/audios/{nome}"})
+
+
+@app.delete("/api/biblioteca/audios/{nome}")
+def api_remover_audio_biblioteca(nome: str) -> JSONResponse:
+    if not biblioteca.remover_audio(Path(nome).name):
+        return JSONResponse({"erro": "áudio não encontrado"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/biblioteca/imagens/upload")
+async def api_upload_imagem_biblioteca(arquivo: UploadFile = File(...)) -> JSONResponse:
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAX_BIBLIOTECA_BYTES:
+        return JSONResponse({"erro": "arquivo maior que 40MB"}, status_code=400)
+    try:
+        nome = biblioteca.salvar_imagem(arquivo.filename or "imagem", conteudo)
+    except Exception:
+        return JSONResponse({"erro": "não consegui abrir esse arquivo como imagem"}, status_code=400)
+    return JSONResponse({"nome": nome, "url": f"/biblioteca/imagens/{nome}"})
+
+
+@app.delete("/api/biblioteca/imagens/{nome}")
+def api_remover_imagem_biblioteca(nome: str) -> JSONResponse:
+    if not biblioteca.remover_imagem(Path(nome).name):
+        return JSONResponse({"erro": "imagem não encontrada"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # pré-visualização do roteiro (antes de gerar o vídeo inteiro)
 # ---------------------------------------------------------------------------
 
@@ -276,6 +335,7 @@ def api_criar_video(
     sem_narracao: bool = Form(False),
     som_fundo_tipo: str = Form(""),
     som_fundo_descricao: str = Form(""),
+    som_fundo_biblioteca: str = Form(""),
 ) -> dict:
     titulo = titulo.strip()
     params = dict(
@@ -291,6 +351,7 @@ def api_criar_video(
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao.strip(),
+        som_fundo_biblioteca=som_fundo_biblioteca.strip(),
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -330,6 +391,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         sem_narracao=sem_narracao,
         som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
+        som_fundo_biblioteca=metadados.get("som_fundo_biblioteca", ""),
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
@@ -474,12 +536,17 @@ def api_listar_imagens_thumbnail(slug: str) -> dict:
     if custom.exists():
         candidatas.append(custom)
 
-    return {
-        "imagens": [
-            {"nome": c.name, "url": f"/videos/{slug}/{c.name}?v={int(c.stat().st_mtime)}", "atual": c.name == atual}
-            for c in candidatas
-        ]
-    }
+    imagens = [
+        {"nome": c.name, "url": f"/videos/{slug}/{c.name}?v={int(c.stat().st_mtime)}", "atual": c.name == atual}
+        for c in candidatas
+    ]
+    # imagens importadas na Base também podem virar fundo de thumbnail —
+    # identificadas com o prefixo "biblioteca:" pra distinguir de cenas locais
+    imagens += [
+        {"nome": f"biblioteca:{nome}", "url": f"/biblioteca/imagens/{nome}", "atual": f"biblioteca-{nome}" == atual}
+        for nome in biblioteca.listar_imagens()
+    ]
+    return {"imagens": imagens}
 
 
 @app.post("/api/videos/{slug}/thumbnail/escolher-imagem")
@@ -491,15 +558,25 @@ def api_escolher_imagem_thumbnail(slug: str, imagem: str = Form(...)) -> dict:
     if not caminho_meta.exists():
         return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
 
-    # só aceita nomes que já existem de verdade na pasta do vídeo (cena*_16x9.png
-    # ou a customizada) — nunca um caminho arbitrário vindo do cliente
-    nome = Path(imagem).name
-    validos = {c.name for c in pasta.glob("cena*_16x9.png")}
-    custom = pasta / "thumbnail_custom.png"
-    if custom.exists():
-        validos.add(custom.name)
-    if nome not in validos:
-        return JSONResponse({"erro": "imagem inválida"}, status_code=400)
+    if imagem.startswith("biblioteca:"):
+        # imagem da Base: valida contra o que existe de verdade na biblioteca
+        # (nunca um caminho arbitrário) e copia pra dentro da pasta do vídeo,
+        # assim o resto do fluxo (thumbnail_fonte.txt etc.) funciona igual
+        origem = biblioteca.caminho_imagem_valida(imagem[len("biblioteca:"):])
+        if origem is None:
+            return JSONResponse({"erro": "imagem inválida"}, status_code=400)
+        nome = f"biblioteca-{origem.name}"
+        shutil.copyfile(origem, pasta / nome)
+    else:
+        # só aceita nomes que já existem de verdade na pasta do vídeo (cena*_16x9.png
+        # ou a customizada) — nunca um caminho arbitrário vindo do cliente
+        nome = Path(imagem).name
+        validos = {c.name for c in pasta.glob("cena*_16x9.png")}
+        custom = pasta / "thumbnail_custom.png"
+        if custom.exists():
+            validos.add(custom.name)
+        if nome not in validos:
+            return JSONResponse({"erro": "imagem inválida"}, status_code=400)
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     _rerenderizar_thumbnail(pasta, pasta / nome, metadados)

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from engine import ambiente, canal, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
+from engine import ambiente, biblioteca, canal, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
 from engine.roteiro import PALAVRAS_POR_MINUTO
 
 RAIZ_SAIDA = Path(__file__).resolve().parent.parent / "output"
@@ -68,6 +68,7 @@ def gerar_video(
     sem_narracao: bool = False,
     som_fundo_tipo: str = "",
     som_fundo_descricao: str = "",
+    som_fundo_biblioteca: str = "",
     canal_id: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
@@ -95,6 +96,7 @@ def gerar_video(
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao,
+        som_fundo_biblioteca=som_fundo_biblioteca,
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -107,10 +109,14 @@ def gerar_video(
     if sem_narracao:
         # --- sem fala: o som de fundo É o áudio do vídeo inteiro ---
         duracao_real = (duracao_alvo_minutos or 15.0) * 60
-        tipo_efetivo = som_fundo_tipo or "chuva"
-        avisar(f"Gerando o som de fundo ({tipo_efetivo})", 15)
         audio_path = pasta / "audio.wav"
-        ambiente.gerar_som_ambiente(tipo_efetivo, duracao_real, audio_path, descricao=som_fundo_descricao)
+        if som_fundo_tipo == "biblioteca" and som_fundo_biblioteca:
+            avisar(f"Preparando o áudio da biblioteca ({som_fundo_biblioteca})", 15)
+            biblioteca.preparar_audio_para_video(som_fundo_biblioteca, duracao_real, audio_path)
+        else:
+            tipo_efetivo = som_fundo_tipo or "chuva"
+            avisar(f"Gerando o som de fundo ({tipo_efetivo})", 15)
+            ambiente.gerar_som_ambiente(tipo_efetivo, duracao_real, audio_path, descricao=som_fundo_descricao)
         submaker = None
         roteiro_final = ""
     else:
@@ -160,9 +166,13 @@ def gerar_video(
             tags = []
 
         if som_fundo_tipo:
-            avisar(f"Gerando o som de fundo ({som_fundo_tipo})", 14)
             som_fundo_path = pasta / "som_fundo.wav"
-            ambiente.gerar_som_ambiente(som_fundo_tipo, duracao_real, som_fundo_path, descricao=som_fundo_descricao)
+            if som_fundo_tipo == "biblioteca" and som_fundo_biblioteca:
+                avisar(f"Preparando o som de fundo ({som_fundo_biblioteca})", 14)
+                biblioteca.preparar_audio_para_video(som_fundo_biblioteca, duracao_real, som_fundo_path)
+            else:
+                avisar(f"Gerando o som de fundo ({som_fundo_tipo})", 14)
+                ambiente.gerar_som_ambiente(som_fundo_tipo, duracao_real, som_fundo_path, descricao=som_fundo_descricao)
             avisar("Misturando o som de fundo", 16)
             audio_path = render.mixar_audio_com_fundo(
                 narracao_path, som_fundo_path, pasta / "audio_final.m4a", VOLUME_SOM_DE_FUNDO

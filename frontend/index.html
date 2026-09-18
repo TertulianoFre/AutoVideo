@@ -44,6 +44,10 @@
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 5.5h12M4 10h12M4 14.5h8"></path></svg>
         Fila
       </button>
+      <button class="nav-item" data-tab="base">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6.5l7-4 7 4-7 4-7-4z"></path><path d="M3 6.5v7l7 4 7-4v-7"></path></svg>
+        Base
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -243,14 +247,21 @@
                     <option value="fogueira">Fogueira</option>
                     <option value="vento">Vento</option>
                     <option value="outro">Outro (descrever)</option>
+                    <option value="biblioteca">Um áudio da minha Base</option>
                   </select>
                 </label>
                 <label id="linha-som-fundo-descricao" hidden>
                   <span>Descreva o som que quer</span>
                   <input type="text" name="som_fundo_descricao" placeholder="Ex: som de floresta com pássaros">
                 </label>
+                <label id="linha-som-fundo-biblioteca" hidden>
+                  <span>Qual áudio da Base</span>
+                  <select name="som_fundo_biblioteca" id="campo-som-fundo-biblioteca">
+                    <option value="">Nenhum importado ainda</option>
+                  </select>
+                </label>
               </div>
-              <p class="hint">Chuva, música, ondas do mar, fogueira e vento são sintetizados de verdade (localmente, grátis); em "outro", o texto descrito escolhe o mais parecido desses e ainda soma pássaros/trovão/multidão por cima se aparecerem na descrição (ex: "floresta com pássaros", "tempestade com trovão", "cafeteria movimentada") — sem nada reconhecido, cai pra chuva.</p>
+              <p class="hint">Chuva, música, ondas do mar, fogueira e vento são sintetizados de verdade (localmente, grátis); em "outro", o texto descrito escolhe o mais parecido desses e ainda soma pássaros/trovão/multidão por cima se aparecerem na descrição (ex: "floresta com pássaros", "tempestade com trovão", "cafeteria movimentada") — sem nada reconhecido, cai pra chuva. Em "Base", usa um áudio que você mesmo importou (aba Base).</p>
             </div>
 
             <div class="row-2">
@@ -324,6 +335,35 @@
           <div id="fila-lista" class="video-list">
             <div class="empty">Nenhum vídeo gerado ainda.</div>
           </div>
+        </div>
+      </section>
+
+      <!-- ============ BASE (biblioteca de mídia) ============ -->
+      <section id="tab-base" class="tab">
+        <div class="card">
+          <div class="card-head">Áudios</div>
+          <p class="hint" style="margin:0 0 14px">
+            Importe músicas ou efeitos livres de direito autoral da sua máquina — depois dá pra escolher qualquer um deles como som de fundo em "Novo vídeo" (opção "Um áudio da minha Base").
+          </p>
+          <label class="btn-secondary" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;width:fit-content">
+            <input type="file" id="input-upload-audio-base" accept="audio/*" hidden>
+            Importar áudio
+          </label>
+          <span id="base-audio-status" class="video-meta" style="margin-left:10px"></span>
+          <div id="base-audios-lista" class="base-audios-lista" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Imagens</div>
+          <p class="hint" style="margin:0 0 14px">
+            Importe imagens da sua máquina — dá pra usar como base de thumbnail de qualquer vídeo (na galeria de "editar thumbnail", na Fila).
+          </p>
+          <label class="btn-secondary" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;width:fit-content">
+            <input type="file" id="input-upload-imagem-base" accept="image/*" hidden>
+            Importar imagem
+          </label>
+          <span id="base-imagem-status" class="video-meta" style="margin-left:10px"></span>
+          <div id="base-imagens-grade" class="thumb-imagens-grade" style="margin-top:14px"></div>
         </div>
       </section>
 

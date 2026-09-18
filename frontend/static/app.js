@@ -1,4 +1,4 @@
-const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila" };
+const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila", base: "Base" };
 
 function trocarAba(nome) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === nome));
@@ -7,6 +7,7 @@ function trocarAba(nome) {
   if (nome === "painel") carregarPainel();
   if (nome === "fila") carregarFila();
   if (nome === "canais") carregarCanais();
+  if (nome === "base") carregarBase();
 }
 
 document.querySelectorAll(".nav-item").forEach((botao) => {
@@ -778,6 +779,8 @@ const camposSomFundo = document.getElementById("campos-som-fundo");
 const campoSomFundoTipo = document.getElementById("campo-som-fundo-tipo");
 const campoSomFundoDescricao = document.querySelector("[name=som_fundo_descricao]");
 const linhaSomFundoDescricao = document.getElementById("linha-som-fundo-descricao");
+const campoSomFundoBiblioteca = document.getElementById("campo-som-fundo-biblioteca");
+const linhaSomFundoBiblioteca = document.getElementById("linha-som-fundo-biblioteca");
 
 function aplicarEstadoSomFundo() {
   const ativo = campoSomFundoAtivo.checked;
@@ -786,6 +789,21 @@ function aplicarEstadoSomFundo() {
   // está desligado, nenhum som_fundo_tipo é enviado por engano.
   campoSomFundoTipo.disabled = !ativo;
   campoSomFundoDescricao.disabled = !ativo || campoSomFundoTipo.value !== "outro";
+  campoSomFundoBiblioteca.disabled = !ativo || campoSomFundoTipo.value !== "biblioteca";
+}
+
+async function popularSelectAudiosBiblioteca() {
+  try {
+    const dados = await fetch("/api/biblioteca").then((r) => r.json());
+    const nomes = dados.audios_nomes || [];
+    const valorAtual = campoSomFundoBiblioteca.value;
+    campoSomFundoBiblioteca.innerHTML = nomes.length
+      ? nomes.map((nome) => `<option value="${nome}">${nome}</option>`).join("")
+      : '<option value="">Nenhum importado ainda — vá na aba Base</option>';
+    if (nomes.includes(valorAtual)) campoSomFundoBiblioteca.value = valorAtual;
+  } catch {
+    // silencioso — se falhar, o select só fica com a opção padrão
+  }
 }
 
 campoSemNarracao.addEventListener("change", () => {
@@ -803,6 +821,8 @@ campoSomFundoAtivo.addEventListener("change", aplicarEstadoSomFundo);
 
 campoSomFundoTipo.addEventListener("change", () => {
   linhaSomFundoDescricao.hidden = campoSomFundoTipo.value !== "outro";
+  linhaSomFundoBiblioteca.hidden = campoSomFundoTipo.value !== "biblioteca";
+  if (campoSomFundoTipo.value === "biblioteca") popularSelectAudiosBiblioteca();
   aplicarEstadoSomFundo();
 });
 
@@ -1100,6 +1120,94 @@ btnAgenteSugerir.addEventListener("click", async () => {
     agenteAviso.textContent = "Deu erro de conexão, tenta de novo.";
   } finally {
     btnAgenteSugerir.disabled = false;
+  }
+});
+
+// ---------------- Base: biblioteca de áudios e imagens importados ----------------
+
+async function carregarBase() {
+  try {
+    const dados = await fetch("/api/biblioteca").then((r) => r.json());
+
+    const listaAudios = document.getElementById("base-audios-lista");
+    listaAudios.innerHTML = dados.audios_nomes?.length
+      ? dados.audios_nomes
+          .map(
+            (nome, i) => `
+        <div class="base-audio-item">
+          <audio controls src="${dados.audios[i]}" style="height:32px"></audio>
+          <span class="video-meta" style="flex:1">${nome}</span>
+          <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-audio-base" data-nome="${nome}">remover</button>
+        </div>`
+          )
+          .join("")
+      : '<div class="empty">Nenhum áudio importado ainda.</div>';
+
+    listaAudios.querySelectorAll(".btn-remover-audio-base").forEach((botao) => {
+      botao.addEventListener("click", async () => {
+        await fetch(`/api/biblioteca/audios/${encodeURIComponent(botao.dataset.nome)}`, { method: "DELETE" });
+        carregarBase();
+      });
+    });
+
+    const gradeImagens = document.getElementById("base-imagens-grade");
+    gradeImagens.innerHTML = dados.imagens?.length
+      ? dados.imagens
+          .map(
+            (img) => `
+        <div class="thumb-img-opcao" title="${img.nome}" style="position:relative">
+          <img src="${img.url}" alt="">
+          <button type="button" class="btn-remover-imagem-base" data-nome="${img.nome}" title="Remover" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:5px;width:20px;height:20px;cursor:pointer;line-height:1">×</button>
+        </div>`
+          )
+          .join("")
+      : '<div class="empty">Nenhuma imagem importada ainda.</div>';
+
+    gradeImagens.querySelectorAll(".btn-remover-imagem-base").forEach((botao) => {
+      botao.addEventListener("click", async (evento) => {
+        evento.stopPropagation();
+        await fetch(`/api/biblioteca/imagens/${encodeURIComponent(botao.dataset.nome)}`, { method: "DELETE" });
+        carregarBase();
+      });
+    });
+  } catch {
+    document.getElementById("base-audios-lista").innerHTML = '<div class="empty">Deu erro carregando a biblioteca.</div>';
+  }
+}
+
+document.getElementById("input-upload-audio-base").addEventListener("change", async (evento) => {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const status = document.getElementById("base-audio-status");
+  status.textContent = "Enviando…";
+  const dados = new FormData();
+  dados.set("arquivo", arquivo);
+  try {
+    const resultado = await fetch("/api/biblioteca/audios/upload", { method: "POST", body: dados }).then((r) => r.json());
+    status.textContent = resultado.erro ? `Deu erro: ${resultado.erro}` : "Importado!";
+    carregarBase();
+  } catch {
+    status.textContent = "Deu erro de conexão.";
+  } finally {
+    evento.target.value = "";
+  }
+});
+
+document.getElementById("input-upload-imagem-base").addEventListener("change", async (evento) => {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const status = document.getElementById("base-imagem-status");
+  status.textContent = "Enviando…";
+  const dados = new FormData();
+  dados.set("arquivo", arquivo);
+  try {
+    const resultado = await fetch("/api/biblioteca/imagens/upload", { method: "POST", body: dados }).then((r) => r.json());
+    status.textContent = resultado.erro ? `Deu erro: ${resultado.erro}` : "Importada!";
+    carregarBase();
+  } catch {
+    status.textContent = "Deu erro de conexão.";
+  } finally {
+    evento.target.value = "";
   }
 });
 

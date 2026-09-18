@@ -198,6 +198,12 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 #card-grafico-videos { margin-top: 16px; }
 #grafico-videos { width: 100%; display: block; }
 
+.base-audios-lista { display: flex; flex-direction: column; gap: 8px; }
+.base-audio-item {
+  display: flex; align-items: center; gap: 12px; padding: 8px 10px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+}
+
 /* ---------- canais (aba de gerenciar) ---------- */
 
 .canais-lista { display: flex; flex-direction: column; gap: 14px; }

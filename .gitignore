@@ -14,6 +14,9 @@ dados/tokens/
 # Dados pessoais de uso (canais, contexto de cada um — evolui com o uso, não é template)
 dados/canais.json
 
+# Biblioteca de mídia importada por você (áudios/imagens reutilizáveis entre vídeos)
+dados/biblioteca/
+
 # Saída gerada (vídeos, áudio, imagens grandes)
 output/
 *.mp4
