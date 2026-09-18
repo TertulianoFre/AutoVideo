@@ -1015,6 +1015,45 @@ brandLink.addEventListener("click", async (ev) => {
   await fetch("/api/youtube/conectar", { method: "POST" });
 });
 
+// ---------------- Agente: campo livre (perguntas, ideias, comandos) ----------------
+
+const formAgenteLivre = document.getElementById("form-agente-livre");
+const btnAgenteEnviar = document.getElementById("btn-agente-enviar");
+const agenteLivreResposta = document.getElementById("agente-livre-resposta");
+
+formAgenteLivre.addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const campoMensagem = document.getElementById("campo-agente-mensagem");
+  const mensagem = campoMensagem.value.trim();
+  if (!mensagem) return;
+
+  btnAgenteEnviar.disabled = true;
+  agenteLivreResposta.textContent = "Pensando…";
+
+  try {
+    const dados = new FormData();
+    dados.set("mensagem", mensagem);
+    const resposta = await fetch("/api/agente/perguntar", { method: "POST", body: dados });
+    const resultado = await resposta.json();
+
+    if (resultado.erro) {
+      agenteLivreResposta.textContent = `Deu erro: ${resultado.erro}`;
+      return;
+    }
+
+    agenteLivreResposta.textContent = resultado.resposta || "";
+    if (resultado.acao === "reagendar") {
+      campoMensagem.value = "";
+      carregarFila();
+      carregarPainel();
+    }
+  } catch {
+    agenteLivreResposta.textContent = "Deu erro de conexão, tenta de novo.";
+  } finally {
+    btnAgenteEnviar.disabled = false;
+  }
+});
+
 // ---------------- Agente: sugestões de ideias ----------------
 
 const btnAgenteSugerir = document.getElementById("btn-agente-sugerir");

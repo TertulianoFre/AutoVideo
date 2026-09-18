@@ -6,6 +6,7 @@ Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 import io
 import json
 import random
+import re
 import sys
 import threading
 import time
@@ -178,6 +179,61 @@ def api_agente_sugestoes() -> JSONResponse:
         return JSONResponse({"erro": str(erro)}, status_code=502)
 
     return JSONResponse({"ideias": ideias, "aviso": aviso_tendencias})
+
+
+_RE_DATA_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
+_RE_HORA = re.compile(r"\d{2}:\d{2}")
+
+
+@app.post("/api/agente/perguntar")
+def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
+    """Campo livre do agente: responde perguntas/pede ideias, ou executa um
+    comando simples reconhecido (por enquanto só reagendar um vídeo). Toda
+    ação vinda do modelo é validada contra o estado real antes de aplicar —
+    nunca confia cegamente no que ele disser."""
+    mensagem = mensagem.strip()
+    if not mensagem:
+        return JSONResponse({"erro": "escreve alguma coisa pro agente"}, status_code=400)
+
+    videos = api_listar_videos()
+    try:
+        resultado = agente.responder_livre(mensagem, canal.obter_contexto(), videos)
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=502)
+
+    if resultado.get("acao") != "reagendar":
+        return JSONResponse({"acao": "responder", "resposta": resultado.get("texto", "")})
+
+    slug = str(resultado.get("slug") or "")
+    data_postagem = str(resultado.get("data_postagem") or "")
+    hora_postagem = resultado.get("hora_postagem")
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+
+    if not slug or not caminho_meta.exists():
+        return JSONResponse({"acao": "erro", "resposta": f'Não achei nenhum vídeo "{slug}" pra reagendar — confira o título e tente de novo.'})
+    if not _RE_DATA_ISO.fullmatch(data_postagem):
+        return JSONResponse({"acao": "erro", "resposta": "Não entendi pra qual data reagendar — pode repetir com uma data mais clara?"})
+    if hora_postagem and not _RE_HORA.fullmatch(str(hora_postagem)):
+        hora_postagem = None
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["data_postagem"] = data_postagem
+    if hora_postagem:
+        metadados["hora_postagem"] = hora_postagem
+    else:
+        metadados.pop("hora_postagem", None)
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return JSONResponse(
+        {
+            "acao": "reagendar",
+            "resposta": resultado.get("texto") or f"Reagendado \"{metadados.get('titulo', slug)}\" pra {data_postagem}.",
+            "slug": slug,
+            "data_postagem": data_postagem,
+            "hora_postagem": hora_postagem,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

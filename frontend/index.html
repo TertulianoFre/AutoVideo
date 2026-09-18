@@ -134,6 +134,18 @@
       <!-- ============ AGENTE ============ -->
       <section id="tab-agente" class="tab">
         <div class="card">
+          <div class="card-head">Pergunte ou peça alguma coisa</div>
+          <p class="hint" style="margin:0 0 14px">
+            Peça ideias de título, tire dúvidas sobre o canal, ou peça pra reagendar um vídeo já gerado (ex: "reagenda o vídeo sobre gatos pra dia 20/09 às 15h").
+          </p>
+          <form id="form-agente-livre" class="form" style="gap:10px">
+            <textarea name="mensagem" id="campo-agente-mensagem" rows="3" placeholder='Ex: "me dá 5 ideias de título sobre curiosidades do espaço" ou "muda a data do vídeo X pra sexta"' required></textarea>
+            <button type="submit" class="btn-primary" style="align-self:flex-start" id="btn-agente-enviar">Enviar</button>
+          </form>
+          <div id="agente-livre-resposta" class="hint" style="margin-top:12px; white-space:pre-wrap"></div>
+        </div>
+
+        <div class="card">
           <div class="card-head">Sugestões de ideias</div>
           <p class="hint" style="margin:0 0 14px">
             Combina o contexto do canal ativo com o que está em alta no YouTube agora (se estiver conectado) e sugere títulos novos. Não copia os títulos em alta, só usa como pista.
