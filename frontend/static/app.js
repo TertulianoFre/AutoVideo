@@ -70,7 +70,7 @@ function linhaDeVideo(v, comRegenerar) {
           ${botaoRegenerar}
         </div>
       </div>
-      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-titulo="${v.titulo.replace(/"/g, "&quot;")}"></div>` : ""}
+      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho="${v.thumbnail_tamanho || "medio"}"></div>` : ""}
       ${comRegenerar && v.tem_cenas ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
@@ -120,6 +120,18 @@ const CORES_THUMB = [
   { nome: "Azul", hex: "4DA6FF" },
 ];
 
+const POSICOES_THUMB = [
+  "topo-esquerda", "topo-centro", "topo-direita",
+  "centro-esquerda", "centro", "centro-direita",
+  "baixo-esquerda", "baixo-centro", "baixo-direita",
+];
+
+const TAMANHOS_THUMB = [
+  { valor: "pequeno", nome: "Pequena" },
+  { valor: "medio", nome: "Média" },
+  { valor: "grande", nome: "Grande" },
+];
+
 function alternarPainelThumb(botao) {
   const slug = botao.dataset.slug;
   const painel = document.querySelector(`.thumb-painel[data-slug="${slug}"]`);
@@ -131,23 +143,41 @@ function alternarPainelThumb(botao) {
   if (!abrindo || painel.dataset.montado === "true") return;
 
   painel.dataset.montado = "true";
-  const tituloPadrao = painel.dataset.titulo || "";
+  const textoAtual = painel.dataset.texto || "";
+  const corAtual = painel.dataset.cor || "";
+  const posicaoAtual = painel.dataset.posicao || "baixo-centro";
+  const tamanhoAtual = painel.dataset.tamanho || "medio";
   const swatches = CORES_THUMB.map(
-    (c, i) => `<button type="button" class="cor-swatch${i === 0 ? " selecionada" : ""}" data-hex="${c.hex}" title="${c.nome}" style="background:${c.hex ? "#" + c.hex : "#F6F2E9"}"></button>`
+    (c) => `<button type="button" class="cor-swatch${c.hex === corAtual ? " selecionada" : ""}" data-hex="${c.hex}" title="${c.nome}" style="background:${c.hex ? "#" + c.hex : "#F6F2E9"}"></button>`
+  ).join("");
+  const grade = POSICOES_THUMB.map(
+    (p) => `<button type="button" class="pos-cel${p === posicaoAtual ? " selecionada" : ""}" data-posicao="${p}" title="${p.replace("-", " ")}"></button>`
+  ).join("");
+  const tamanhos = TAMANHOS_THUMB.map(
+    (t) => `<option value="${t.valor}"${t.valor === tamanhoAtual ? " selected" : ""}>${t.nome}</option>`
   ).join("");
 
   painel.innerHTML = `
     <div class="thumb-form">
-      <input type="text" class="thumb-texto" value="${tituloPadrao}" maxlength="80" placeholder="Texto que aparece na thumbnail">
+      <input type="text" class="thumb-texto" value="${textoAtual}" maxlength="80" placeholder="Texto que aparece na thumbnail">
       <div class="cor-swatches">${swatches}</div>
+      <select class="thumb-tamanho">${tamanhos}</select>
       <button type="button" class="btn-secondary btn-salvar-thumb">Salvar</button>
       <span class="video-meta thumb-status"></span>
-    </div>`;
+    </div>
+    <div class="pos-grade" title="Posição do texto na thumbnail">${grade}</div>`;
 
   painel.querySelectorAll(".cor-swatch").forEach((sw) => {
     sw.addEventListener("click", () => {
       painel.querySelectorAll(".cor-swatch").forEach((s) => s.classList.remove("selecionada"));
       sw.classList.add("selecionada");
+    });
+  });
+
+  painel.querySelectorAll(".pos-cel").forEach((cel) => {
+    cel.addEventListener("click", () => {
+      painel.querySelectorAll(".pos-cel").forEach((c) => c.classList.remove("selecionada"));
+      cel.classList.add("selecionada");
     });
   });
 
@@ -157,6 +187,8 @@ function alternarPainelThumb(botao) {
 async function salvarThumb(slug, painel) {
   const texto = painel.querySelector(".thumb-texto").value.trim();
   const corSelecionada = painel.querySelector(".cor-swatch.selecionada");
+  const posSelecionada = painel.querySelector(".pos-cel.selecionada");
+  const tamanho = painel.querySelector(".thumb-tamanho").value;
   const status = painel.querySelector(".thumb-status");
   const botaoSalvar = painel.querySelector(".btn-salvar-thumb");
 
@@ -168,9 +200,13 @@ async function salvarThumb(slug, painel) {
   botaoSalvar.disabled = true;
   status.textContent = "Salvando…";
 
+  const cor = corSelecionada ? corSelecionada.dataset.hex : "";
+  const posicao = posSelecionada ? posSelecionada.dataset.posicao : "baixo-centro";
   const dados = new FormData();
   dados.set("texto", texto);
-  dados.set("cor", corSelecionada ? corSelecionada.dataset.hex : "");
+  dados.set("cor", cor);
+  dados.set("posicao", posicao);
+  dados.set("tamanho", tamanho);
 
   try {
     const resposta = await fetch(`/api/videos/${slug}/thumbnail/editar`, { method: "POST", body: dados });
@@ -182,6 +218,10 @@ async function salvarThumb(slug, painel) {
     }
     status.textContent = "Salvo!";
     setTimeout(() => (status.textContent = ""), 3000);
+    painel.dataset.texto = texto;
+    painel.dataset.cor = cor;
+    painel.dataset.posicao = posicao;
+    painel.dataset.tamanho = tamanho;
     const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
     if (thumbImg) thumbImg.src = resultado.thumbnail;
   } catch {

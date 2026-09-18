@@ -180,6 +180,17 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
   cursor: pointer; padding: 0;
 }
 .cor-swatch.selecionada { border-color: var(--accent); }
+.thumb-form select.thumb-tamanho {
+  padding: 9px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 12.5px;
+}
+.pos-grade {
+  display: grid; grid-template-columns: repeat(3, 28px); grid-template-rows: repeat(3, 28px);
+  gap: 4px; margin-top: 10px; width: fit-content;
+}
+.pos-cel { border: 1px solid var(--border); border-radius: 4px; background: var(--bg); cursor: pointer; padding: 0; }
+.pos-cel:hover { border-color: var(--accent); }
+.pos-cel.selecionada { background: var(--accent); border-color: var(--accent); }
 
 /* ---------- form ---------- */
 

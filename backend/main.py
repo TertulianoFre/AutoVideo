@@ -248,23 +248,31 @@ def api_regenerar_thumbnail(slug: str) -> dict:
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     texto = metadados.get("thumbnail_texto") or metadados.get("titulo", slug)
     cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
+    posicao = metadados.get("thumbnail_posicao", "baixo-centro")
+    tamanho_fonte = thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
 
     atual = pasta / "thumbnail_fonte.txt"
     fonte_anterior = atual.read_text(encoding="utf-8").strip() if atual.exists() else None
     opcoes = [c for c in candidatas if c.name != fonte_anterior] or candidatas
     escolhida = random.choice(opcoes)
 
-    thumbnail_mod.gerar_thumbnail(escolhida, texto, pasta / "thumbnail.png", cor)
+    thumbnail_mod.gerar_thumbnail(escolhida, texto, pasta / "thumbnail.png", cor, posicao, tamanho_fonte)
     atual.write_text(escolhida.name, encoding="utf-8")
 
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
 
 
 @app.post("/api/videos/{slug}/thumbnail/editar")
-def api_editar_thumbnail(slug: str, texto: str = Form(...), cor: str = Form("")) -> dict:
-    """Troca o texto (e opcionalmente a cor) da thumbnail, mantendo a mesma
-    imagem de base atual. Fica salvo pro vídeo (sobrevive a "nova thumbnail"
-    e a regenerar a cena 0) até você editar de novo."""
+def api_editar_thumbnail(
+    slug: str,
+    texto: str = Form(...),
+    cor: str = Form(""),
+    posicao: str = Form("baixo-centro"),
+    tamanho: str = Form("medio"),
+) -> dict:
+    """Troca o texto, a cor, a posição e o tamanho da thumbnail, mantendo a
+    mesma imagem de base atual. Fica salvo pro vídeo (sobrevive a "nova
+    thumbnail" e a regenerar a cena 0) até você editar de novo."""
     pasta = RAIZ_SAIDA / slug
     caminho_meta = pasta / "metadata.json"
     if not caminho_meta.exists():
@@ -284,11 +292,15 @@ def api_editar_thumbnail(slug: str, texto: str = Form(...), cor: str = Form(""))
         base = candidatas[0]
 
     cor_rgb = thumbnail_mod.cor_de_hex(cor)
-    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb)
+    posicao = posicao if posicao in thumbnail_mod.POSICOES else "baixo-centro"
+    tamanho = tamanho if tamanho in thumbnail_mod.TAMANHOS else "medio"
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb, posicao, thumbnail_mod.TAMANHOS[tamanho])
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     metadados["thumbnail_texto"] = texto
     metadados["thumbnail_cor"] = cor.strip().lstrip("#") if cor_rgb else ""
+    metadados["thumbnail_posicao"] = posicao
+    metadados["thumbnail_tamanho"] = tamanho
     caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
@@ -394,6 +406,10 @@ def api_listar_videos() -> list[dict]:
                 "youtube_video_id": metadados.get("youtube_video_id"),
                 "publicacao_erro": metadados.get("publicacao_erro"),
                 "tem_cenas": bool(metadados.get("cenas")),
+                "thumbnail_texto": metadados.get("thumbnail_texto") or metadados.get("titulo") or pasta.name.replace("-", " "),
+                "thumbnail_cor": metadados.get("thumbnail_cor", ""),
+                "thumbnail_posicao": metadados.get("thumbnail_posicao", "baixo-centro"),
+                "thumbnail_tamanho": metadados.get("thumbnail_tamanho", "medio"),
             }
         )
     return videos

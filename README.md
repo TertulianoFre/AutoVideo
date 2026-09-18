@@ -50,7 +50,7 @@ Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, test
 
 **Editar uma cena específica** (`engine.pipeline.regenerar_cena`, botão "cenas" na Fila): mostra cada cena do vídeo (texto + imagem) com um botão "Regenerar essa cena" — refaz só a imagem daquela cena (a IA sorteia de novo) e remonta o vídeo com ffmpeg, sem tocar no roteiro, na narração, na legenda nem nas outras cenas. Só funciona em vídeos gerados depois desse recurso existir (precisa do `metadata.json` ter a lista de cenas salva — clique em "Regenerar" uma vez em vídeos antigos pra habilitar).
 
-**Editar a thumbnail** (botão "editar thumbnail" na Fila): troca o texto exibido (independente do título do vídeo) e a cor (5 opções) sem mexer na imagem de base. Fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`) — sobrevive a "nova thumbnail" (só troca a imagem) e a regenerar a cena 0. Não é um editor visual (sem arrastar/redimensionar texto na tela).
+**Editar a thumbnail** (botão "editar thumbnail" na Fila): troca o texto exibido (independente do título do vídeo), a cor (5 opções), a posição (grade 3x3: topo/centro/baixo × esquerda/centro/direita) e o tamanho da fonte (pequena/média/grande) — sem mexer na imagem de base. Fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`, `thumbnail_posicao`, `thumbnail_tamanho`) — sobrevive a "nova thumbnail" (só troca a imagem) e a regenerar a cena 0. É posicionamento por grade fixa, não arrastar/redimensionar livre.
 
 ### Publicação automática (`engine/youtube.py`, `engine/agendador.py`)
 
@@ -78,7 +78,7 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dad
 
 ## Requisitos já levantados, ainda não implementados
 
-- Editor visual de thumbnail de verdade (arrastar/redimensionar o texto na tela, trocar fonte) — hoje só dá pra trocar o texto, a cor (5 opções) e a imagem-base, com posição/tamanho fixos.
+- Editor visual de thumbnail com posição livre (arrastar o texto pra qualquer lugar, trocar fonte) — hoje a posição é uma grade fixa de 9 pontos + 3 tamanhos, não drag-and-drop.
 - Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 3 camadas combináveis (pássaros, trovão, multidão) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo.
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
@@ -113,4 +113,4 @@ App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pr
 
 1. Suporte a mais de um canal/conta ao mesmo tempo (hoje é hardcoded pra uma conta "principal")
 2. Mais camadas de som combináveis (hoje só pássaros/trovão/multidão) e, mais pra frente, sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição
-3. Editor visual de thumbnail (posição/tamanho do texto, não só texto/cor)
+3. Posição livre (arrastar) da thumbnail, em vez da grade fixa de 9 pontos de hoje
