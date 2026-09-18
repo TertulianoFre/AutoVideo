@@ -47,6 +47,39 @@ def chamar_pollinations(mensagens: list, tentativas: int = 4) -> str:
     raise RuntimeError(f"Chamada à Pollinations falhou {tentativas}x ({ultimo_erro})")
 
 
+PROMPT_SISTEMA_REVISAO = (
+    "Você revisa roteiros de narração em português do Brasil. Corrija erros de "
+    "gramática, concordância e frases estranhas, artificiais ou mal construídas, "
+    "mantendo o mesmo sentido, a mesma estrutura, o mesmo tom e aproximadamente o "
+    "mesmo tamanho. Não resuma, não adicione nem remova ideias — só melhore a "
+    "fluência de quem vai narrar isso em voz alta. Responda só com o texto "
+    "revisado, sem comentários, sem explicações, sem aspas."
+)
+
+
+def _revisar_roteiro(roteiro: str, tentativas: int = 2) -> str:
+    """Segunda passada pedindo pro modelo revisar o próprio texto — o modelo é
+    pequeno e às vezes escreve frase torta na primeira tentativa, mas revisar
+    um texto pronto costuma sair melhor do que escrever direto. Revisão é um
+    bônus: se falhar ou vier estranha (tamanho muito diferente do original,
+    sinal de que resumiu/alucinou), mantém o roteiro original em vez de arriscar."""
+    try:
+        revisado = chamar_pollinations(
+            [
+                {"role": "system", "content": PROMPT_SISTEMA_REVISAO},
+                {"role": "user", "content": roteiro},
+            ],
+            tentativas,
+        )
+    except RuntimeError:
+        return roteiro
+
+    proporcao = len(revisado.split()) / max(1, len(roteiro.split()))
+    if not revisado or not (0.7 <= proporcao <= 1.3):
+        return roteiro
+    return revisado
+
+
 def gerar_roteiro(
     titulo: str,
     duracao_alvo_minutos: float = 1.0,
@@ -66,7 +99,8 @@ def gerar_roteiro(
         {"role": "system", "content": PROMPT_SISTEMA},
         {"role": "user", "content": "\n".join(partes)},
     ]
-    return chamar_pollinations(mensagens, tentativas)
+    rascunho = chamar_pollinations(mensagens, tentativas)
+    return _revisar_roteiro(rascunho)
 
 
 PROMPT_SISTEMA_TAGS = (
