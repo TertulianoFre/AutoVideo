@@ -600,12 +600,14 @@ function cardDeCena(slug, cena, tempoEditavel) {
     ? `<div class="video-meta cena-da-base">▶ Vídeo da Base: ${escaparAttr(cena.video_base)}</div>`
     : cena.imagem_base ? `<div class="video-meta cena-da-base">Imagem da Base: ${escaparAttr(cena.imagem_base)}</div>` : "";
   const texto = escaparAttr(cena.texto || "");
-  const natural = Math.ceil((cena.duracao_natural_segundos ?? cena.duracao_segundos ?? 0) * 10) / 10;
+  const natural = Math.round((cena.duracao_natural_segundos ?? cena.duracao_segundos ?? 0) * 10) / 10;
+  const minimo = cena.duracao_minima_segundos ?? natural;
+  const atual = Math.round((cena.duracao_segundos || 0) * 10) / 10;
   const tempo = tempoEditavel
-    ? `<label class="cena-tempo" title="Tempo que a cena fica na tela. Só pode aumentar: o extra vira uma pausa depois da fala e as próximas cenas andam pra frente.">
+    ? `<label class="cena-tempo" title="Tempo que a cena fica na tela. As outras cenas não mudam de duração: só andam pra frente (se você aumentar) ou pra trás (se diminuir).">
          Tempo da cena
-         <input type="number" class="cena-duracao" min="${natural}" step="0.5" value="${(Math.round((cena.duracao_segundos || 0) * 10) / 10)}" data-natural="${natural}" data-original="${(Math.round((cena.duracao_segundos || 0) * 10) / 10)}"> s
-         <span class="video-meta">(mínimo ${natural} s — o tempo da fala)</span>
+         <input type="number" class="cena-duracao" min="${minimo}" step="0.5" value="${atual}" data-natural="${natural}" data-minimo="${minimo}" data-original="${atual}"> s
+         <span class="video-meta cena-tempo-info">A fala dessa cena dura ${natural} s. Mais que isso vira pausa; menos acelera a fala (mínimo ${minimo} s).</span>
        </label>`
     : "";
   return `

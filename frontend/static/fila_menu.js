@@ -168,7 +168,17 @@ function recalcularTemposDasCenas(painel) {
   let acumulado = 0;
   painel.querySelectorAll(".cena-card").forEach((card) => {
     const campo = card.querySelector(".cena-duracao");
-    const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.natural)) : parseFloat(card.dataset.duracao || 0);
+    const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo)) : parseFloat(card.dataset.duracao || 0);
+    if (campo) {
+      const natural = parseFloat(campo.dataset.natural);
+      const info = card.querySelector(".cena-tempo-info");
+      const excesso = Math.round((dur - natural) * 10) / 10;
+      info.textContent = excesso > 0.05
+        ? `Fala de ${natural} s + pausa de ${excesso} s no fim da cena.`
+        : excesso < -0.05
+          ? `Fala acelerada em ${(natural / dur).toFixed(2).replace(".", ",")}× para caber em ${dur} s.`
+          : `A fala dessa cena dura ${natural} s (tempo original). Mais vira pausa; menos acelera a fala (mínimo ${campo.dataset.minimo} s).`;
+    }
     const rotulo = card.querySelector(".cena-card-tempo");
     if (rotulo) rotulo.textContent = `${formatarTempo(acumulado)}–${formatarTempo(acumulado + dur)} · ${Math.round(dur * 10) / 10}s`;
     acumulado += dur;
@@ -189,8 +199,8 @@ document.addEventListener("input", (ev) => {
 document.addEventListener("change", (ev) => {
   const campo = ev.target.closest(".cena-duracao");
   if (!campo) return;
-  const minimo = parseFloat(campo.dataset.natural);
-  if (!(parseFloat(campo.value) >= minimo)) campo.value = minimo; // nunca abaixo do tempo da fala
+  const minimo = parseFloat(campo.dataset.minimo);
+  if (!(parseFloat(campo.value) >= minimo)) campo.value = minimo; // abaixo disso a fala ficaria rápida demais
   recalcularTemposDasCenas(campo.closest(".cenas-painel"));
 });
 
@@ -200,9 +210,9 @@ async function aplicarTemposDasCenas(painel, slug) {
   const duracoes = {};
   painel.querySelectorAll(".cena-card").forEach((card) => {
     const campo = card.querySelector(".cena-duracao");
-    if (campo) duracoes[card.dataset.indice] = Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.natural));
+    if (campo) duracoes[card.dataset.indice] = Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo));
   });
-  if (!confirm("Aplicar os novos tempos? O áudio ganha pausas depois da fala das cenas que aumentaram, a legenda acompanha e o vídeo é remontado. A publicação precisará ser confirmada de novo.")) return;
+  if (!confirm("Aplicar os novos tempos? Cenas que aumentaram ganham uma pausa depois da fala; as que diminuíram têm a fala acelerada. As outras cenas só andam no tempo (não mudam de duração), a legenda acompanha e o vídeo é remontado. A publicação precisará ser confirmada de novo.")) return;
   botao.disabled = true;
   const corpo = new FormData();
   corpo.set("duracoes", JSON.stringify(duracoes));

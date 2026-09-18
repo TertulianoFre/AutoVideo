@@ -1179,6 +1179,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "texto": cena.get("texto", ""),
                 "duracao_segundos": duracao,
                 "duracao_natural_segundos": cena.get("duracao_natural", duracao),
+                "duracao_minima_segundos": max(1.0, round(cena.get("duracao_natural", duracao) / pipeline_mod.VELOCIDADE_MAXIMA_FALA + 0.05, 1)),
                 "inicio_segundos": round(acumulado, 1),
                 "imagem": _url(i, "16x9"),
                 "imagem_vertical": _url(i, "9x16"),

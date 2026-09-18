@@ -393,37 +393,42 @@ def _trava_do_video(slug: str) -> "threading.Lock":
         return _travas_de_video.setdefault(slug, threading.Lock())
 
 
+VELOCIDADE_MAXIMA_FALA = 1.5  # encurtar uma cena acelera a fala dela, até 1,5x (acima disso fica corrido demais)
+
+
 def _cues_ajustados(pasta: Path, metadados: dict) -> list:
-    """Tempos das palavras da narração já deslocados pelas pausas que você adicionou nas cenas
-    (cada pausa vem DEPOIS da narração da cena e empurra tudo que vem depois)."""
+    """Tempos das palavras da narração já ajustados aos tempos de cada cena: cena alongada = pausa
+    depois da fala; cena encurtada = fala mais rápida. Cada cena começa onde a anterior termina."""
     from datetime import timedelta
     from types import SimpleNamespace
 
     cenas = metadados.get("cenas") or []
     naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
-    extras = [max(0.0, c["duracao_segundos"] - n) for c, n in zip(cenas, naturais)]
-    fronteiras = [0.0]
-    for n in naturais:
-        fronteiras.append(fronteiras[-1] + n)
+    novos = [c["duracao_segundos"] for c in cenas]
+    ini_natural, ini_novo = [0.0], [0.0]
+    for n, d in zip(naturais, novos):
+        ini_natural.append(ini_natural[-1] + n)
+        ini_novo.append(ini_novo[-1] + d)
 
-    def deslocamento(t: float) -> float:
+    def converter(t: float) -> float:
         idx = 0
         for i in range(len(naturais)):
-            if fronteiras[i] <= t + 1e-6:
+            if ini_natural[i] <= t + 1e-6:
                 idx = i
-        return sum(extras[:idx])
+        fator = novos[idx] / naturais[idx] if novos[idx] < naturais[idx] - 0.05 else 1.0  # só encurtar muda o ritmo
+        return ini_novo[idx] + (t - ini_natural[idx]) * fator
 
     dados = json.loads((pasta / "cues.json").read_text(encoding="utf-8"))
     return [
-        SimpleNamespace(start=timedelta(seconds=c["start"] + deslocamento(c["start"])), end=timedelta(seconds=c["end"] + deslocamento(c["start"])), content=c["content"])
+        SimpleNamespace(start=timedelta(seconds=converter(c["start"])), end=timedelta(seconds=converter(c["end"])), content=c["content"])
         for c in dados
     ]
 
 
 def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
-    """Muda o tempo de cada cena. Só dá pra AUMENTAR (nunca abaixo do tempo da narração da cena): o tempo
-    extra vira uma pausa depois da fala daquela cena, e as cenas seguintes são empurradas pra frente.
-    Refaz o áudio (com o som de fundo, se houver), a legenda e os vídeos."""
+    """Muda o tempo de cada cena. As outras cenas NUNCA mudam de duração por causa disso: só andam pra
+    frente (cena alongada) ou pra trás (cena encurtada). Alongar vira uma pausa depois da fala daquela
+    cena; encurtar acelera a fala dela (até 1,5x). Refaz o áudio (com o som de fundo), a legenda e os vídeos."""
     import subprocess
 
     from engine.ferramentas import caminho_ffmpeg
@@ -450,21 +455,27 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
         natural = c.get("duracao_natural", c["duracao_segundos"])
         c["duracao_natural"] = natural
         desejado = float(duracoes.get(str(i), duracoes.get(i, c["duracao_segundos"])))
-        c["duracao_segundos"] = round(max(natural, min(desejado, natural + 120)), 2)
+        c["duracao_segundos"] = round(max(natural / VELOCIDADE_MAXIMA_FALA, 1.0, min(desejado, natural + 300)), 2)
     naturais = [c["duracao_natural"] for c in cenas]
-    extras = [round(c["duracao_segundos"] - c["duracao_natural"], 3) for c in cenas]
+    novos = [c["duracao_segundos"] for c in cenas]
+    extras = [round(d - n, 3) for d, n in zip(novos, naturais)]
 
     # --- áudio: narração original com uma pausa depois de cada cena que ganhou tempo ---
     avisar("Refazendo o áudio com as pausas", 10)
     natural_audio = metadados.get("audio_natural") or metadados.get("audio_arquivo")
-    if any(e > 0.01 for e in extras):
+    if any(abs(e) > 0.01 for e in extras):
         filtros, t, n = [], 0.0, len(cenas)
         for i, (nat, ext) in enumerate(zip(naturais, extras)):
             inicio = t
             t += nat
             trecho = f"atrim=start={inicio:.3f}" + (f":end={t:.3f}" if i < n - 1 else "")
-            pausa = f",apad=pad_dur={ext:.3f}" if ext > 0.01 else ""
-            filtros.append(f"[0:a]{trecho},asetpts=PTS-STARTPTS{pausa}[a{i}]")
+            if ext > 0.01:
+                ajuste = f",apad=pad_dur={ext:.3f}"  # cena mais longa: pausa depois da fala
+            elif ext < -0.01:
+                ajuste = f",atempo={nat / novos[i]:.4f}"  # cena mais curta: fala mais rápida (mesmo tom)
+            else:
+                ajuste = ""
+            filtros.append(f"[0:a]{trecho},asetpts=PTS-STARTPTS{ajuste}[a{i}]")
         filtros.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[saida]")
         com_pausas = pasta / "narracao_com_pausas.wav"
         r = subprocess.run(
