@@ -1047,6 +1047,8 @@ def api_status_job(job_id: str) -> JSONResponse:
     job = jobs.obter_job(job_id)
     if job is None:
         return JSONResponse({"erro": "job não encontrado"}, status_code=404)
+    if job.status == "aguardando":
+        job.etapa = f"Na fila — {jobs.posicao_na_fila(job)}º a ser gerado"
     return JSONResponse(
         {
             "status": job.status,
@@ -1142,7 +1144,7 @@ def api_listar_videos() -> list[dict]:
                 "hora_postagem": None,
                 "duracao_segundos": None,
                 "status": "processando",
-                "job_etapa": job.etapa,
+                "job_etapa": f"Na fila — {jobs.posicao_na_fila(job)}º" if job.status == "aguardando" else job.etapa,
                 "job_progresso": job.progresso,
                 "video_16_9": None,
                 "video_9_16": None,

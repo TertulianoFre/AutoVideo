@@ -155,3 +155,8 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 - **Base**: seções, descrição e canal por item, "usado em quais vídeos", aviso ao reutilizar áudio.
 - **Anotações**: bloco de notas simples (salva sozinho em `dados/anotacoes.txt`).
 - **Agente**: além de reagendar/cancelar, edita título, descrição, tags, privacidade e texto da thumbnail; em vídeo já publicado atualiza também no YouTube (exige reconectar a conta para autorizar a permissão `youtube`).
+
+## Vários vídeos e Pexels
+
+- Depois de clicar em "Gerar vídeo" o formulário fica livre: dá para pedir outro na hora. Os vídeos são gerados **um de cada vez**, na ordem, e aparecem na Fila como "processando" ou "na fila".
+- Fotos reais: fontes sem direitos autorais (Openverse CC0/domínio público, Wikimedia Commons, NASA). Para mais variedade, crie uma chave grátis em pexels.com/api e coloque no arquivo `.env` (raiz do projeto): `PEXELS_API_KEY=sua_chave`. Reinicie o servidor.

@@ -1,5 +1,6 @@
 """Gerencia os jobs de geração de vídeo em background, com progresso real."""
 
+import queue
 import threading
 import time
 import uuid
@@ -16,7 +17,7 @@ _lock = threading.Lock()
 class Job:
     id: str
     titulo: str
-    status: str = "rodando"  # rodando | pronto | erro
+    status: str = "rodando"  # aguardando | rodando | pronto | erro
     etapa: str = "Iniciando"
     progresso: float = 0.0
     criado_em: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -25,7 +26,40 @@ class Job:
     canal_id: str | None = None  # só pra job de vídeo novo — usado pra mostrar "processando" na Fila
 
 
+_fila: "queue.Queue" = queue.Queue()
+_trabalhador_iniciado = False
+
+
+def _trabalhador() -> None:
+    """Gera um vídeo por vez, na ordem em que foram pedidos. Rodar vários ao
+    mesmo tempo estoura o limite do serviço gratuito de IA e deixa tudo lento."""
+    while True:
+        job, params = _fila.get()
+        try:
+            _rodar(job, params)
+        finally:
+            _fila.task_done()
+
+
+def _garantir_trabalhador() -> None:
+    global _trabalhador_iniciado
+    with _lock:
+        if not _trabalhador_iniciado:
+            threading.Thread(target=_trabalhador, daemon=True).start()
+            _trabalhador_iniciado = True
+
+
+def posicao_na_fila(job: "Job") -> int:
+    """1 = próximo a rodar. 0 se não está esperando."""
+    with _lock:
+        esperando = sorted((j for j in _jobs.values() if j.status == "aguardando"), key=lambda j: j.criado_em)
+    return esperando.index(job) + 1 if job in esperando else 0
+
+
 def _rodar(job: Job, params: dict) -> None:
+    job.status = "rodando"
+    job.etapa = "Iniciando"
+
     def progresso_cb(etapa: str, percentual: float) -> None:
         job.etapa = etapa
         job.progresso = round(percentual, 1)
@@ -50,11 +84,12 @@ def _rodar(job: Job, params: dict) -> None:
 
 
 def criar_job(titulo: str, params: dict) -> Job:
-    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"))
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"), status="aguardando", etapa="Na fila")
     with _lock:
         _jobs[job.id] = job
 
-    threading.Thread(target=_rodar, args=(job, params), daemon=True).start()
+    _garantir_trabalhador()
+    _fila.put((job, params))
     return job
 
 
@@ -62,7 +97,7 @@ def listar_rodando() -> list[Job]:
     """Jobs de vídeo novo ainda em andamento — usado pra mostrar "processando"
     na Fila antes do vídeo existir de verdade em disco."""
     with _lock:
-        return [j for j in _jobs.values() if j.status == "rodando"]
+        return [j for j in _jobs.values() if j.status in ("rodando", "aguardando")]
 
 
 def _rodar_cena(job: Job, slug: str, indice: int, imagem_propria=None) -> None:

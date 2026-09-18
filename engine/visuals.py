@@ -300,25 +300,47 @@ def _buscar_nasa(termo_busca: str, assunto: str = "", excluir: set | None = None
     return None
 
 
-def _buscar_pexels(termo_busca: str, orientacao: str) -> bytes | None:
-    chave = os.environ.get("PEXELS_API_KEY")
+def _chave_pexels() -> str:
+    """PEXELS_API_KEY vem da variável de ambiente ou de uma linha PEXELS_API_KEY=... no arquivo .env
+    (na raiz do projeto, já ignorado pelo git)."""
+    chave = os.environ.get("PEXELS_API_KEY", "").strip()
+    if chave:
+        return chave
+    arquivo = Path(__file__).resolve().parent.parent / ".env"
+    if arquivo.exists():
+        for linha in arquivo.read_text(encoding="utf-8").splitlines():
+            nome, _, valor = linha.partition("=")
+            if nome.strip() == "PEXELS_API_KEY":
+                return valor.strip().strip('"').strip("'")
+    return ""
+
+
+def _buscar_pexels(termo_busca: str, orientacao: str, excluir: set | None = None) -> tuple | None:
+    """Pexels: licença livre (uso comercial, sem crédito obrigatório). Devolve (bytes, url)."""
+    import random
+
+    chave = _chave_pexels()
     if not chave:
         return None
-    resposta = requests.get(
-        PEXELS_URL,
-        headers={"Authorization": chave},
-        params={"query": termo_busca, "per_page": 1, "orientation": orientacao},
-        timeout=15,
-    )
-    if not resposta.ok:
+    excluir = excluir or set()
+    try:
+        resposta = requests.get(
+            PEXELS_URL,
+            headers={"Authorization": chave},
+            params={"query": termo_busca, "per_page": 15, "orientation": orientacao},
+            timeout=15,
+        )
+        if not resposta.ok:
+            return None
+        fotos = [f for f in (resposta.json().get("photos") or []) if f["src"]["large2x"] not in excluir]
+        random.shuffle(fotos)
+        for foto in fotos[:3]:
+            imagem_resp = requests.get(foto["src"]["large2x"], timeout=20)
+            if imagem_resp.ok:
+                return imagem_resp.content, foto["src"]["large2x"]
+    except requests.RequestException:
         return None
-    fotos = resposta.json().get("photos") or []
-    if not fotos:
-        return None
-    imagem_resp = requests.get(fotos[0]["src"]["large2x"], timeout=20)
-    if not imagem_resp.ok:
-        return None
-    return imagem_resp.content
+    return None
 
 
 _PALAVRAS_GENERICAS = {
@@ -410,9 +432,9 @@ def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str,
                 achou = None
             if achou:
                 candidatos.append(achou)
-        pexels = _buscar_pexels(termo, orientacao)
+        pexels = _buscar_pexels(termo, orientacao, usadas)
         if pexels:
-            candidatos.append((pexels, None))
+            candidatos.append(pexels)
         if candidatos:
             break
     import random

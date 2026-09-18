@@ -1197,6 +1197,11 @@ form.addEventListener("submit", async (ev) => {
 
   if (poller) clearInterval(poller);
   poller = setInterval(() => acompanharJob(resultado.job_id), 1200);
+
+  // o pedido já está com o servidor: libera o formulário pra montar o próximo vídeo enquanto este é gerado
+  form.querySelector(".btn-primary").disabled = false;
+  if (narracaoGravadaBlob) btnRemoverNarracaoGravada.click();  // a gravação já foi enviada com este pedido
+  document.getElementById("aviso-fila-novo").hidden = false;
 });
 
 let falhasJob = 0;
@@ -1247,7 +1252,6 @@ async function acompanharJob(jobId) {
 function mostrarResultado(resultado) {
   progressoCard.hidden = true;
   resultadoCard.hidden = false;
-  btnRemoverNarracaoGravada.click(); // limpa a narração gravada — cada vídeo novo parte sem herdar a anterior
 
   const tags = (resultado.tags || [])
     .map((t) => `<span class="tag-pill">#${t}</span>`)
