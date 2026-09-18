@@ -112,4 +112,5 @@ App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pr
 ## Próximos passos
 
 1. Suporte a mais de um canal/conta ao mesmo tempo (hoje é hardcoded pra uma conta "principal")
-2. Sintetizar sons de fundo verdadeiramente customizados a partir de qualquer descrição (hoje são 5 tipos fixos)
+2. Mais camadas de som combináveis (hoje só pássaros/trovão/multidão) e, mais pra frente, sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição
+3. Editor visual de thumbnail (posição/tamanho do texto, não só texto/cor)
