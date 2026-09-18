@@ -507,3 +507,6 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .base-item-video { width: 240px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border); background: #000; }
 
 .leg-preview-bloco { flex: 1 1 260px; max-width: 360px; }
+
+.cena-descricao { width: 100%; margin-top: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12.5px; }
+.cena-descricao:focus { border-color: var(--accent); outline: none; }

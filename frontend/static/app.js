@@ -620,6 +620,7 @@ function cardDeCena(slug, cena) {
           </label>
           <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem ou vídeo que você importou na aba Base">Usar da Base</button>
         </div>
+        <input type="text" class="cena-descricao" maxlength="300" value="${escaparAttr(cena.descricao_imagem || "")}" placeholder="Descreva a imagem que você quer (opcional). Ex.: polvo abrindo um caramujo, close-up. Vale para &quot;Gerar outra imagem&quot;">
         ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
@@ -727,7 +728,9 @@ async function regenerarCena(botao) {
   card.querySelectorAll("button").forEach((b) => (b.disabled = true));
   botao.textContent = "Gerando…";
 
-  const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/regenerar`, { method: "POST" });
+  const corpoCena = new FormData();
+  corpoCena.set("descricao", card.querySelector(".cena-descricao")?.value || "");
+  const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/regenerar`, { method: "POST", body: corpoCena });
   const { job_id, erro } = await resposta.json();
   if (erro) {
     card.querySelectorAll("button").forEach((b) => (b.disabled = false));

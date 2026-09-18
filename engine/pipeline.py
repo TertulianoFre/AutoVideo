@@ -467,7 +467,8 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
     estilo_imagem = metadados.get("estilo_imagem", "procedural")
     descricao_video = metadados.get("descricao_video", "")
     sem_narracao = metadados.get("sem_narracao", False)
-    texto_cena = cenas[indice]["texto"]
+    # se você descreveu a imagem que quer pra essa cena, a descrição vale no lugar do texto da narração
+    texto_cena = (metadados.get("descricoes_cenas") or {}).get(str(indice)) or cenas[indice]["texto"]
 
     formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
     total_passos = len(formatos_ativos) * 2  # gerar imagem + remontar, por formato
