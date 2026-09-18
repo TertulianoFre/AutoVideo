@@ -45,13 +45,13 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     roteiro_path = pasta / "roteiro.txt"
     descricao = roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo
 
-    if not metadados.get("youtube_video_id"):
+    if v16.exists() and not metadados.get("youtube_video_id"):
         id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, privacidade, is_short=False)
         metadados["youtube_video_id"] = id_normal
         _salvar_metadados(caminho_meta, metadados)
         print(f"[agendador] 16:9 publicado: {titulo} -> https://youtu.be/{id_normal}")
 
-    if not metadados.get("youtube_short_id"):
+    if v9.exists() and not metadados.get("youtube_short_id"):
         id_short = youtube.publicar_video(v9, titulo, descricao, tags, nome_conta, privacidade, is_short=True)
         metadados["youtube_short_id"] = id_short
         _salvar_metadados(caminho_meta, metadados)
@@ -87,7 +87,7 @@ def publicar_pendentes() -> None:
             continue  # chegou o dia, mas ainda não a hora marcada
 
         v16, v9 = pasta / "video_16x9.mp4", pasta / "video_9x16.mp4"
-        if not (v16.exists() and v9.exists()):
+        if not (v16.exists() or v9.exists()):
             continue  # geração ainda não terminou
 
         nome_conta = _conta_youtube_do_video(metadados)

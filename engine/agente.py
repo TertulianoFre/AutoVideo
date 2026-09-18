@@ -44,6 +44,8 @@ PROMPT_SISTEMA_LIVRE = (
     '{"acao": "reagendar", "slug": "...", "data_postagem": "AAAA-MM-DD", "hora_postagem": "HH:MM ou null", '
     '"texto": "confirmação curta pro usuário"} — só quando o pedido for claramente pra mudar a data/hora '
     "de postagem de um vídeo específico que está na lista (ache o slug pelo título mais parecido).\n"
+    '{"acao": "cancelar", "slug": "...", "texto": "confirmação curta"} — quando o usuário pedir pra cancelar, '
+    "excluir ou remover a postagem/vídeo da fila (ache o slug pelo título mais parecido; isso apaga o vídeo).\n"
     "Se o pedido mencionar um vídeo que não existe na lista, ou não deixar claro qual data/vídeo, "
     'use "acao": "responder" explicando o que faltou — nunca invente um slug que não estava na lista.'
 )
@@ -80,7 +82,7 @@ def responder_livre(mensagem: str, contexto_canal: str = "", videos: list | None
 
     try:
         dados = json.loads(bruto)
-        if isinstance(dados, dict) and dados.get("acao") in ("responder", "reagendar"):
+        if isinstance(dados, dict) and dados.get("acao") in ("responder", "reagendar", "cancelar"):
             return dados
     except (json.JSONDecodeError, AttributeError):
         pass

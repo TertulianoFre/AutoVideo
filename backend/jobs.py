@@ -34,8 +34,8 @@ def _rodar(job: Job, params: dict) -> None:
         resultado = gerar_video(progresso=progresso_cb, **params)
         job.resultado = {
             "slug": resultado.pasta.name,
-            "video_16_9": f"/videos/{resultado.pasta.name}/{resultado.video_16_9.name}",
-            "video_9_16": f"/videos/{resultado.pasta.name}/{resultado.video_9_16.name}",
+            "video_16_9": f"/videos/{resultado.pasta.name}/{resultado.video_16_9.name}" if resultado.video_16_9 else None,
+            "video_9_16": f"/videos/{resultado.pasta.name}/{resultado.video_9_16.name}" if resultado.video_9_16 else None,
             "thumbnail": f"/videos/{resultado.pasta.name}/thumbnail.png" if resultado.thumbnail else None,
             "duracao_segundos": resultado.duracao_segundos,
             "roteiro": resultado.roteiro,
@@ -75,8 +75,8 @@ def _rodar_cena(job: Job, slug: str, indice: int) -> None:
         marca = int(time.time())
         job.resultado = {
             "slug": slug,
-            "video_16_9": f"/videos/{slug}/{resultado['video_16_9']}?v={marca}",
-            "video_9_16": f"/videos/{slug}/{resultado['video_9_16']}?v={marca}",
+            "video_16_9": f"/videos/{slug}/{resultado['video_16_9']}?v={marca}" if resultado["video_16_9"] else None,
+            "video_9_16": f"/videos/{slug}/{resultado['video_9_16']}?v={marca}" if resultado["video_9_16"] else None,
             "cena_imagem": f"/videos/{slug}/cena{indice:02d}_16x9.png?v={marca}",
             "thumbnail": f"/videos/{slug}/thumbnail.png?v={marca}" if resultado["thumbnail_atualizada"] else None,
         }

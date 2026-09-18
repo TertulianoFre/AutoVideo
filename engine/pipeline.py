@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from PIL import Image
+
 from engine import ambiente, biblioteca, canal, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
 from engine.roteiro import PALAVRAS_POR_MINUTO
 
@@ -34,6 +36,18 @@ def _slug(texto: str) -> str:
     texto = texto.strip().lower()
     texto = re.sub(r"[^a-z0-9]+", "-", texto)
     return texto.strip("-")[:60] or "video"
+
+
+FORMATOS_ESCOLHA = {
+    "ambos": ["16:9", "9:16"],
+    "normal": ["16:9"],
+    "shorts": ["9:16"],
+}
+
+
+def _formatos_de(formatos: str) -> dict:
+    escolhidos = FORMATOS_ESCOLHA.get(formatos, FORMATOS_ESCOLHA["ambos"])
+    return {f: e for f, e in ESTILO_LEGENDA_POR_FORMATO.items() if f in escolhidos}
 
 
 slug_titulo = _slug  # nome público — usado pelo backend pra saber a pasta antes de disparar o job
@@ -74,6 +88,7 @@ def gerar_video(
     som_fundo_biblioteca: str = "",
     narracao_customizada: bool = False,
     privacidade: str = "public",
+    formatos: str = "ambos",
     canal_id: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
@@ -104,6 +119,7 @@ def gerar_video(
         som_fundo_biblioteca=som_fundo_biblioteca,
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
+        formatos=formatos,
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -225,11 +241,12 @@ def gerar_video(
         duracao_segundos=round(duracao_real, 1),
     )
 
-    total_imagens = len(lista_cenas) * len(ESTILO_LEGENDA_POR_FORMATO)
+    formatos_ativos = _formatos_de(formatos)
+    total_imagens = len(lista_cenas) * len(formatos_ativos)
     imagens_feitas = 0
 
     videos = {}
-    for formato, estilo in ESTILO_LEGENDA_POR_FORMATO.items():
+    for formato, estilo in formatos_ativos.items():
         sufixo = formato.replace(":", "x")
         legenda_path = None
         if not sem_narracao:
@@ -262,11 +279,18 @@ def gerar_video(
             imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4"
         )
 
+    if "16:9" not in videos:
+        # só Shorts: as telas de thumbnail/cenas trabalham com as imagens
+        # 16:9, então deriva elas das verticais (sem gastar mais chamadas de IA)
+        for i in range(len(lista_cenas)):
+            vertical = Image.open(pasta / f"cena{i:02d}_9x16.png")
+            visuals._cobrir(vertical, 1920, 1080).save(pasta / f"cena{i:02d}_16x9.png", "PNG")
+
     avisar("Gerando a thumbnail", 97)
     caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
 
     avisar("Pronto", 100)
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro_final, tags, caminho_thumb)
+    return ResultadoGeracao(pasta, audio_path, videos.get("16:9"), videos.get("9:16"), duracao_real, roteiro_final, tags, caminho_thumb)
 
 
 def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None) -> dict:
@@ -304,12 +328,13 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
     sem_narracao = metadados.get("sem_narracao", False)
     texto_cena = cenas[indice]["texto"]
 
-    total_passos = len(ESTILO_LEGENDA_POR_FORMATO) * 2  # gerar imagem + remontar, por formato
+    formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
+    total_passos = len(formatos_ativos) * 2  # gerar imagem + remontar, por formato
     passo = 0
     thumbnail_atualizada = False
     nomes_video = {}
 
-    for formato, estilo in ESTILO_LEGENDA_POR_FORMATO.items():
+    for formato, estilo in formatos_ativos.items():
         sufixo = formato.replace(":", "x")
         caminho_imagem = pasta / f"cena{indice:02d}_{sufixo}.png"
 
@@ -361,7 +386,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
 
     avisar("Pronto", 100)
     return {
-        "video_16_9": nomes_video["16:9"],
-        "video_9_16": nomes_video["9:16"],
+        "video_16_9": nomes_video.get("16:9"),
+        "video_9_16": nomes_video.get("9:16"),
         "thumbnail_atualizada": thumbnail_atualizada,
     }

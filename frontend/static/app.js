@@ -105,9 +105,10 @@ function linhaDeVideo(v, comRegenerar) {
           ${badgeStatus ? `<div class="video-meta">${badgeStatus}</div>` : ""}
         </div>
         <div class="video-links">
-          <a href="${v.video_16_9}" target="_blank">16:9</a>
-          <a href="${v.video_9_16}" target="_blank">Shorts</a>
+          ${v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
+          ${v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
           ${botaoRegenerar}
+          <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
       </div>
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}"></div>` : ""}
@@ -228,6 +229,19 @@ async function carregarFila() {
     }, 2500);
   }
 }
+
+document.addEventListener("click", async (evento) => {
+  const botao = evento.target.closest(".btn-excluir-video");
+  if (!botao) return;
+  if (!confirm(`Cancelar e apagar "${botao.dataset.titulo}"? O vídeo não será publicado e os arquivos serão excluídos.`)) return;
+  const resposta = await fetch(`/api/videos/${encodeURIComponent(botao.dataset.slug)}`, { method: "DELETE" });
+  if (!resposta.ok) {
+    alert("Não consegui excluir esse vídeo.");
+    return;
+  }
+  carregarFila();
+  carregarPainel();
+});
 
 ["filtro-canal", "filtro-status", "filtro-duracao-min", "filtro-duracao-max"].forEach((id) => {
   document.getElementById(id).addEventListener("input", aplicarFiltrosFila);
@@ -1070,20 +1084,20 @@ function mostrarResultado(resultado) {
 
   document.getElementById("resultado-conteudo").innerHTML = `
     ${thumbHtml}
-    <div class="resultado-formato">
+    ${resultado.video_16_9 ? `<div class="resultado-formato">
       <h3>16:9 — vídeo normal (${formatarDuracao(resultado.duracao_segundos)})</h3>
       <video controls src="${resultado.video_16_9}"></video>
       <div class="resultado-actions">
         <a href="${resultado.video_16_9}" download>Baixar .mp4</a>
       </div>
-    </div>
-    <div class="resultado-formato">
-      <h3>9:16 — Shorts</h3>
+    </div>` : ""}
+    ${resultado.video_9_16 ? `<div class="resultado-formato">
+      <h3>9:16 — Shorts (${formatarDuracao(resultado.duracao_segundos)})</h3>
       <video controls src="${resultado.video_9_16}"></video>
       <div class="resultado-actions">
         <a href="${resultado.video_9_16}" download>Baixar .mp4</a>
       </div>
-    </div>
+    </div>` : ""}
     ${tags ? `<div class="resultado-formato"><h3>Hashtags sugeridas</h3><div class="tags-list">${tags}</div></div>` : ""}`;
 }
 
@@ -1273,7 +1287,7 @@ formAgenteLivre.addEventListener("submit", async (evento) => {
     }
 
     agenteLivreResposta.textContent = resultado.resposta || "";
-    if (resultado.acao === "reagendar") {
+    if (resultado.acao === "reagendar" || resultado.acao === "cancelar") {
       campoMensagem.value = "";
       carregarFila();
       carregarPainel();

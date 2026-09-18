@@ -35,9 +35,12 @@ POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}"
 # desenho/cartoon 2D, mais fácil da IA acertar o assunto sem gerar anatomia
 # esquisita. Dá pra pedir outra coisa (mais detalhado, infantil...) via a
 # "descrição do vídeo" na tela de Novo Vídeo — vira o {extra} abaixo.
+# O estilo pedido pelo usuário (descrição do vídeo) vem PRIMEIRO e o estilo
+# padrão vem antes da cena: modelos pequenos dão mais peso ao começo do prompt,
+# e palavras negativas ("no 3d") tendem a evocar justamente o que se quer evitar.
 ESTILO_PROMPT_IA = (
-    "{cena}, flat 2d illustration, cartoon style, flat colors, no gradients, no 3d, "
-    "simple shapes, wide shot, full scene, no text, no watermark, no logo{extra}"
+    "{extra}flat 2d vector sticker illustration, simple cartoon shapes, thick outlines, "
+    "solid flat colors, plain background, {cena}, wide shot, no text, no watermark"
 )
 
 # Verbos de expressão facial intensa (bocejar, gritar...) fazem esse modelo
@@ -278,7 +281,7 @@ def gerar_fundo_ia(
     # gratuito (comunitário, às vezes instável) devolver erro.
     resumo_cena = _traduzir_para_ingles(cena.strip()[:200])[:200]
     resumo_cena = _evitar_gatilhos_de_rosto(resumo_cena)
-    extra = f", {_traduzir_para_ingles(estilo_extra.strip()[:150])}" if estilo_extra.strip() else ""
+    extra = f"{_traduzir_para_ingles(estilo_extra.strip()[:150])}, " if estilo_extra.strip() else ""
     prompt = ESTILO_PROMPT_IA.format(cena=resumo_cena, extra=extra)
     url = POLLINATIONS_URL.format(prompt=urllib.parse.quote(prompt))
     params = {"width": largura, "height": altura, "nologo": "true"}
@@ -291,6 +294,9 @@ def gerar_fundo_ia(
             resposta = requests.get(url, params=params, timeout=60)
             if resposta.ok:
                 imagem = Image.open(io.BytesIO(resposta.content)).convert("RGB")
+                # o serviço gratuito devolve ~1024px com marca d'água no canto inferior:
+                # corta a faixa de baixo antes de esticar pro tamanho final
+                imagem = imagem.crop((0, 0, imagem.width, int(imagem.height * 0.95)))
                 imagem = _cobrir(imagem, largura, altura)
                 imagem = _aplicar_overlay_legibilidade(imagem)
                 imagem.save(caminho, "PNG")

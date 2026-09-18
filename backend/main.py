@@ -219,6 +219,13 @@ def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
     except RuntimeError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=502)
 
+    if resultado.get("acao") == "cancelar":
+        slug = str(resultado.get("slug") or "")
+        titulo_video = next((v["titulo"] for v in videos if v["slug"] == slug), slug)
+        if not _excluir_video(slug):
+            return JSONResponse({"acao": "erro", "resposta": f'Não achei nenhum vídeo "{slug}" pra cancelar — confira o título e tente de novo.'})
+        return JSONResponse({"acao": "cancelar", "resposta": f'Cancelei e apaguei "{titulo_video}" da fila — não será publicado.', "slug": slug})
+
     if resultado.get("acao") != "reagendar":
         return JSONResponse({"acao": "responder", "resposta": resultado.get("texto", "")})
 
@@ -381,6 +388,7 @@ def api_criar_video(
     som_fundo_descricao: str = Form(""),
     som_fundo_biblioteca: str = Form(""),
     privacidade: str = Form("public"),
+    formatos: str = Form("ambos"),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
@@ -422,6 +430,7 @@ def api_criar_video(
         som_fundo_biblioteca=som_fundo_biblioteca.strip(),
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
+        formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -464,11 +473,29 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         som_fundo_biblioteca=metadados.get("som_fundo_biblioteca", ""),
         narracao_customizada=metadados.get("narracao_customizada", False),
         privacidade=metadados.get("privacidade", "public"),
+        formatos=metadados.get("formatos", "ambos"),
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
     job = jobs.criar_job(titulo, params)
     return {"job_id": job.id}
+
+
+def _excluir_video(slug: str) -> bool:
+    """Apaga a pasta do vídeo (nunca publica). Só aceita um nome de pasta que
+    existe de verdade em output/ e tem metadata.json — nada de caminho livre."""
+    pasta = RAIZ_SAIDA / Path(slug).name
+    if not slug or Path(slug).name != slug or not (pasta / "metadata.json").exists():
+        return False
+    shutil.rmtree(pasta)
+    return True
+
+
+@app.delete("/api/videos/{slug}")
+def api_excluir_video(slug: str) -> JSONResponse:
+    if not _excluir_video(slug):
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/videos/{slug}/agendamento")
@@ -812,7 +839,7 @@ def api_listar_videos() -> list[dict]:
     videos = []
     for pasta in pastas:
         v16, v9 = pasta / "video_16x9.mp4", pasta / "video_9x16.mp4"
-        if not (v16.exists() and v9.exists()):
+        if not (v16.exists() or v9.exists()):
             continue
 
         metadados = {}
@@ -839,8 +866,8 @@ def api_listar_videos() -> list[dict]:
                 "hora_postagem": metadados.get("hora_postagem"),
                 "duracao_segundos": metadados.get("duracao_segundos"),
                 "status": _status_de(metadados),
-                "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4",
-                "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4",
+                "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4" if v16.exists() else None,
+                "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4" if v9.exists() else None,
                 "thumbnail": f"/videos/{pasta.name}/thumbnail.png?v={int(thumb_path.stat().st_mtime)}" if thumb_path.exists() else None,
                 "modificado_em": pasta.stat().st_mtime,
                 "tags": tags,
