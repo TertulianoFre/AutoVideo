@@ -1,4 +1,4 @@
-const TITULOS = { painel: "Painel", novo: "Novo vídeo", fila: "Fila" };
+const TITULOS = { painel: "Painel", agente: "Agente", novo: "Novo vídeo", fila: "Fila" };
 
 function trocarAba(nome) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === nome));
@@ -410,6 +410,55 @@ brandLink.addEventListener("click", async (ev) => {
     if (dados && !dados.conectando) clearInterval(poller);
   }, 1500);
   await fetch("/api/youtube/conectar", { method: "POST" });
+});
+
+// ---------------- Agente: sugestões de ideias ----------------
+
+const btnAgenteSugerir = document.getElementById("btn-agente-sugerir");
+const agenteResultadoCard = document.getElementById("agente-resultado-card");
+const agenteLista = document.getElementById("agente-lista");
+const agenteAviso = document.getElementById("agente-aviso");
+
+btnAgenteSugerir.addEventListener("click", async () => {
+  btnAgenteSugerir.disabled = true;
+  agenteAviso.textContent = "Pensando em ideias…";
+  agenteResultadoCard.hidden = true;
+
+  try {
+    const resposta = await fetch("/api/agente/sugestoes", { method: "POST" });
+    const dados = await resposta.json();
+
+    if (dados.erro) {
+      agenteAviso.textContent = `Deu erro: ${dados.erro}`;
+      return;
+    }
+
+    agenteAviso.textContent = dados.aviso || "";
+    agenteLista.innerHTML = dados.ideias
+      .map(
+        (ideia) => `
+        <div class="video-row">
+          <div class="video-info"><div class="video-title" style="text-transform:none">${ideia}</div></div>
+          <div class="video-links">
+            <button type="button" class="btn-secondary btn-usar-ideia" data-titulo="${ideia.replace(/"/g, "&quot;")}">Usar esse título</button>
+          </div>
+        </div>`
+      )
+      .join("");
+    agenteResultadoCard.hidden = false;
+
+    agenteLista.querySelectorAll(".btn-usar-ideia").forEach((botao) => {
+      botao.addEventListener("click", () => {
+        campoTitulo.value = botao.dataset.titulo;
+        trocarAba("novo");
+        campoTitulo.focus();
+      });
+    });
+  } catch {
+    agenteAviso.textContent = "Deu erro de conexão, tenta de novo.";
+  } finally {
+    btnAgenteSugerir.disabled = false;
+  }
 });
 
 atualizarStatusYoutube();

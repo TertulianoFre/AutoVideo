@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import jobs
-from engine import agendador, canal, roteiro as roteiro_mod
+from engine import agendador, agente, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import youtube as youtube_mod
 from engine.pipeline import RAIZ_SAIDA
@@ -109,6 +109,30 @@ def api_youtube_estatisticas() -> JSONResponse:
         # inclui HttpError da API do Google (ex: token sem o escopo readonly
         # ainda, porque foi conectado antes desse escopo existir).
         return JSONResponse({"erro": str(erro)}, status_code=409)
+
+
+# ---------------------------------------------------------------------------
+# agente: sugere ideias de vídeo (opcionalmente inspirado em tendências)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/agente/sugestoes")
+def api_agente_sugestoes() -> JSONResponse:
+    tendencias = []
+    aviso_tendencias = None
+    if youtube_mod.esta_conectado(CONTA_YOUTUBE_PADRAO):
+        try:
+            tendencias = youtube_mod.obter_tendencias(CONTA_YOUTUBE_PADRAO)
+        except Exception as erro:
+            aviso_tendencias = f"Não consegui buscar tendências ({erro}) — sugestões vão sair sem esse contexto."
+    else:
+        aviso_tendencias = "Conecte o YouTube (no perfil) pra sugestões levarem em conta o que está em alta."
+
+    try:
+        ideias = agente.sugerir_ideias(canal.obter_contexto(), tendencias)
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=502)
+
+    return JSONResponse({"ideias": ideias, "aviso": aviso_tendencias})
 
 
 # ---------------------------------------------------------------------------

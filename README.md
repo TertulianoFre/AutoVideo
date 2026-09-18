@@ -4,8 +4,8 @@ Canal de YouTube com vídeos gerados por automação (texto → narração → i
 
 ## Como funciona (visão geral do produto)
 
-1. **Agente** pesquisa tendências na web (agendado ou sob pedido) e sugere ideias de vídeo.
-2. **Você** aprova uma sugestão ou digita seu próprio título/descrição.
+1. **Agente** combina o contexto do canal com o que está em alta no YouTube agora e sugere títulos — implementado (aba "Agente"); pesquisar tendências na web em geral (fora do YouTube) ainda não.
+2. **Você** aprova uma sugestão (clica em "Usar esse título") ou digita seu próprio título/descrição.
 3. **Geração**: um único fluxo pra tudo — roteiro (levando em conta o contexto do canal), narração (voz de IA — mulher, homem ou criança, em vários idiomas — ou sua própria gravação), legenda sincronizada, e opcionalmente um som de fundo (chuva, música suave...) baixinho por baixo da narração. Também dá pra marcar "sem narração" e usar só o som de fundo como áudio do vídeo (ex: 30 min de chuva pra relaxar) — tudo no mesmo formulário, sem telas separadas.
 4. **Montagem** via FFmpeg: exporta em 16:9 (vídeo normal) e 9:16 (Shorts), com thumbnail automática.
 5. **Publicação**: você agenda a data e o app publica sozinho no YouTube (16:9 como vídeo normal, 9:16 como Short) — desde que o app fique rodando e sua conta esteja conectada.
@@ -21,7 +21,7 @@ Rodar: dê dois cliques em `iniciar.bat` (ativa o venv, sobe o servidor na porta
 ```
 .venv\Scripts\uvicorn backend.main:app --reload --port 8080
 ```
-Abre em `http://localhost:8080`, com 3 telas: **Painel** (vídeos recentes, conexão com o YouTube, contexto do canal), **Novo vídeo** (formulário único com progresso real) e **Fila** (todos os vídeos gerados, com **Regenerar**, **roteiro novo** e **nova thumbnail**).
+Abre em `http://localhost:8080`, com 4 telas: **Painel** (vídeos recentes, contexto do canal, estatísticas), **Agente** (sugestões de título), **Novo vídeo** (formulário único com progresso real) e **Fila** (todos os vídeos gerados, com **Regenerar**, **roteiro novo** e **nova thumbnail**). A conexão com o YouTube fica no perfil, no topo do menu lateral — clique nele pra conectar.
 
 Na tela "Novo vídeo", só **título** e **data de postagem** são obrigatórios. É um formulário só — nada de tela separada pra "vídeo ambiente". Tudo mais é opcional:
 - **Descrição do vídeo**: texto livre que ajusta o estilo — ex: "2D simples", "mais detalhado/realista", "infantil e colorido". Influencia tanto o roteiro quanto a imagem gerada por IA.
@@ -58,7 +58,11 @@ Com isso feito, um agendador roda em segundo plano junto com o backend (`agendad
 
 **Limitação do Google, não do código**: como o app fica em modo "teste" (evita o processo de verificação do Google), a autorização expira a cada 7 dias — o Painel mostra "Não conectado" quando isso acontece, é só clicar em "Conectar" de novo.
 
-**Estatísticas do canal** (inscritos, visualizações totais) aparecem no Painel quando conectado. Como isso usa um escopo (`youtube.readonly`) que não existia nas primeiras versões, quem já tinha conectado antes precisa clicar em **"Reconectar"** uma vez pra liberar — o Painel avisa isso claramente, não precisa adivinhar.
+**Estatísticas do canal** (inscritos, visualizações totais) aparecem no perfil/Painel quando conectado, e as mesmas informações alimentam o **Agente** (tendências do YouTube). Ambas usam o escopo `youtube.readonly`, que não existia nas primeiras versões — quem já tinha conectado antes precisa clicar em **"Reconectar"** (no perfil, no topo do menu) uma vez pra liberar as duas coisas de uma vez. O app avisa isso claramente, não precisa adivinhar.
+
+### Agente (`engine/agente.py`)
+
+Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dados/canal.json`) com os títulos em alta no YouTube agora (`youtube.obter_tendencias`, região BR — só como inspiração, nunca copia) pra gerar títulos novos via Pollinations.ai. Cada sugestão tem um botão "Usar esse título" que já leva pra "Novo vídeo" com o título preenchido. Sem conexão com o YouTube, ainda sugere ideias — só fica sem o contexto de tendências.
 
 ### Limitações conhecidas
 
@@ -70,10 +74,11 @@ Com isso feito, um agendador roda em segundo plano junto com o backend (`agendad
 
 ## Requisitos já levantados, ainda não implementados
 
-- Prévia **editável** da thumbnail.
-- Poder **pedir alterações pontuais** num vídeo já gerado (o botão "Regenerar" da Fila refaz tudo do zero).
+- Prévia **editável** da thumbnail de verdade (hoje só troca a imagem-base por outra cena — "nova thumbnail" na Fila — não dá pra desenhar/ajustar).
+- Poder **pedir alterações pontuais** num vídeo já gerado — parcialmente resolvido: "Regenerar" mantém o roteiro por padrão (só refaz narração/imagens), e dá pra pedir "nova thumbnail" separado; ainda não dá pra editar só uma cena específica.
 - Sintetizar sons de fundo customizados de verdade (hoje só chuva e música suave são reais).
-- Painel de estatísticas de verdade (inscritos, visualizações, receita) — precisa da YouTube Analytics API, com escopos e consentimento à parte do upload.
+- **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
+- Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
 
 ## Stack
 
@@ -90,7 +95,7 @@ Com isso feito, um agendador roda em segundo plano junto com o backend (`agendad
 
 ## Status
 
-App funcionando de ponta a ponta com um fluxo único (sem telas separadas pra "narrado" vs "ambiente"): contexto do canal, pré-visualização de roteiro, narração opcional, som de fundo opcional (mixado ou sozinho), 3 estilos de imagem, thumbnail automática, legenda com destaque, progresso real, download, regenerar, **e publicação automática no YouTube** (upload + agendador local). Próximo: painel de estatísticas de verdade.
+App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pré-visualização de roteiro, narração opcional, som de fundo opcional (mixado ou sozinho), 3 estilos de imagem, thumbnail automática (regenerável à parte), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro), publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal no perfil. Próximo: editar uma cena específica sem regenerar tudo.
 
 ## Checklist do Google Cloud Console (feito uma vez, por você)
 
@@ -99,9 +104,10 @@ App funcionando de ponta a ponta com um fluxo único (sem telas separadas pra "n
 3. "Tela de permissão OAuth" → tipo Externo → preencher nome/e-mails → em "Usuários de teste", adicionar seu e-mail → deixar em "Teste" (sem verificação)
 4. "Credenciais" → "Criar credenciais" → "ID do cliente OAuth" → tipo **App para computador** → baixar o JSON
 5. Salvar o arquivo como `client_secret.json` na raiz do projeto
-6. No Painel do app, clicar em "Conectar YouTube" e autorizar
+6. No app, clicar no perfil (canto superior esquerdo) e autorizar
 
 ## Próximos passos
 
-1. Painel de estatísticas de verdade (YouTube Analytics API)
-2. Tela do "Agente" (chat pra pedir vídeos, pesquisar tendências)
+1. Editar cena específica de um vídeo já gerado (sem regenerar tudo)
+2. Sons de fundo customizados de verdade (hoje só chuva/música suave)
+3. Suporte a mais de um canal/conta ao mesmo tempo (hoje é hardcoded pra uma conta "principal")

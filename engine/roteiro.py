@@ -24,7 +24,7 @@ PROMPT_SISTEMA = (
 )
 
 
-def _chamar_pollinations(mensagens: list, tentativas: int = 4) -> str:
+def chamar_pollinations(mensagens: list, tentativas: int = 4) -> str:
     # reasoning_effort baixo: esse modelo às vezes gasta todo o orçamento de
     # tokens "pensando" e não sobra espaço pra escrever a resposta final.
     payload = {"model": "openai", "messages": mensagens, "reasoning_effort": "low"}
@@ -66,7 +66,7 @@ def gerar_roteiro(
         {"role": "system", "content": PROMPT_SISTEMA},
         {"role": "user", "content": "\n".join(partes)},
     ]
-    return _chamar_pollinations(mensagens, tentativas)
+    return chamar_pollinations(mensagens, tentativas)
 
 
 PROMPT_SISTEMA_TAGS = (
@@ -88,6 +88,6 @@ def gerar_hashtags(titulo: str, roteiro: str = "", quantidade: int = 10, tentati
             "content": f"Título do vídeo: {titulo}\nTrecho do roteiro: {roteiro[:400]}\nSugira {quantidade} hashtags/tags.",
         },
     ]
-    texto = _chamar_pollinations(mensagens, tentativas)
+    texto = chamar_pollinations(mensagens, tentativas)
     brutas = [t.strip().lstrip("#") for t in texto.replace("\n", ",").split(",")]
     return [t for t in brutas if t][:quantidade]
