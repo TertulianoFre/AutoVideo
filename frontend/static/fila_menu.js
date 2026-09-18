@@ -243,3 +243,60 @@ async function aplicarTemposDasCenas(painel, slug) {
     }
   }, 1200);
 }
+
+
+// ---------------- minimizar a edição (barra sob a linha do vídeo) ----------------
+
+const TITULOS_PAINEIS = { "cenas-painel": "Editando cenas e roteiro", "legenda-painel": "Editando legenda e transição", "thumb-painel": "Editando thumbnails" };
+
+function atualizarBarrasDePaineis() {
+  document.querySelectorAll(".painel-barra").forEach((barra) => {
+    const aberto = document.querySelector(`.cenas-painel.aberto[data-slug="${barra.dataset.slug}"], .legenda-painel.aberto[data-slug="${barra.dataset.slug}"], .thumb-painel.aberto[data-slug="${barra.dataset.slug}"]`);
+    if (barra.hidden !== !aberto) barra.hidden = !aberto;
+    const alvoTitulo = barra.querySelector(".painel-barra-titulo");
+    const titulo = aberto ? TITULOS_PAINEIS[[...aberto.classList].find((c) => TITULOS_PAINEIS[c])] || "Editando" : "";
+    if (alvoTitulo.textContent !== titulo) alvoTitulo.textContent = titulo; // só escreve se mudou (senão o observador se dispara sem parar)
+  });
+}
+
+// a barra reage sozinha a qualquer painel que abra ou feche (menu, "Concluir e fechar", minimizar...)
+new MutationObserver(atualizarBarrasDePaineis).observe(document.getElementById("fila-lista"), { subtree: true, attributes: true, attributeFilter: ["class"] });
+
+document.addEventListener("click", (ev) => {
+  const botao = ev.target.closest(".btn-minimizar-painel");
+  if (!botao) return;
+  const slug = botao.closest(".painel-barra").dataset.slug;
+  for (const painel of document.querySelectorAll(`.cenas-painel.aberto[data-slug="${slug}"], .legenda-painel.aberto[data-slug="${slug}"], .thumb-painel.aberto[data-slug="${slug}"]`)) {
+    if (painel.classList.contains("cenas-painel")) {
+      if ((contarEdicoesDeTexto(painel) || temposAlterados(painel)) && !confirm("Tem alterações nas cenas que ainda não foram salvas. Minimizar mesmo assim (elas serão descartadas)?")) return;
+      painel.dataset.carregado = "";
+    }
+    painel.classList.remove("aberto");
+  }
+  document.querySelector(`.video-row[data-slug="${slug}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+});
+
+// ---------------- muitos vídeos: confirmar vários de uma vez ----------------
+
+document.addEventListener("click", async (ev) => {
+  const botao = ev.target.closest("#btn-confirmar-todos");
+  if (!botao) return;
+  const alvo = window.pendentesVisiveis || [];
+  if (!alvo.length) return;
+  if (!confirm(`Confirmar a publicação de ${alvo.length} vídeo(s) de uma vez (${alvo.slice(0, 5).map((v) => `"${v.titulo}"`).join(", ")}${alvo.length > 5 ? "…" : ""})? Só faça isso se já revisou todos: eles serão postados nas datas marcadas.`)) return;
+  botao.disabled = true;
+  for (const v of alvo) {
+    const corpo = new FormData();
+    corpo.set("aprovado", "true");
+    await fetch(`/api/videos/${v.slug}/aprovacao`, { method: "POST", body: corpo });
+  }
+  botao.disabled = false;
+  carregarFila(true);
+});
+
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("#btn-mostrar-mais")) {
+    limiteFila += 20;
+    aplicarFiltrosFila();
+  }
+});

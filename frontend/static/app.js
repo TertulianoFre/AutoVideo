@@ -135,6 +135,7 @@ function linhaDeVideo(v, comRegenerar) {
           <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${tituloAttr}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
       </div>
+      ${comRegenerar && !publicado ? `<div class="painel-barra" data-slug="${v.slug}" hidden><span class="painel-barra-titulo"></span><button type="button" class="btn-minimizar-painel" title="Fecha a edição e volta o vídeo ao tamanho normal">▲ Minimizar edição</button></div>` : ""}
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
       ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="legenda-painel" data-slug="${v.slug}" data-tem-cues="${v.tem_cues}" data-legenda="${encodeURIComponent(JSON.stringify(v.legenda || {}))}" data-transicao="${v.transicao || "fade"}"></div>` : ""}
@@ -199,19 +200,30 @@ async function carregarPainel() {
 
 let videosFilaCache = [];
 
+let limiteFila = 20; // com dezenas de vídeos por dia, mostra 20 por vez
+
 function aplicarFiltrosFila() {
   const canal = document.getElementById("filtro-canal").value;
   const status = document.getElementById("filtro-status").value;
+  const busca = document.getElementById("filtro-busca").value.trim().toLowerCase();
 
   const filtrados = videosFilaCache.filter((v) => {
     if (canal && v.canal_id !== canal) return false;
     if (status && v.status !== status) return false;
+    if (busca && !(v.titulo || "").toLowerCase().includes(busca)) return false;
     return true;
   });
 
+  window.pendentesVisiveis = filtrados.filter((v) => v.status === "revisar");
+  const botaoTodos = document.getElementById("btn-confirmar-todos");
+  botaoTodos.hidden = window.pendentesVisiveis.length < 2;
+  botaoTodos.textContent = `Confirmar publicação dos ${window.pendentesVisiveis.length} pendentes`;
+
   const lista = document.getElementById("fila-lista");
+  const visiveis = filtrados.slice(0, limiteFila);
   lista.innerHTML = filtrados.length
-    ? filtrados.map((v) => linhaDeVideo(v, true)).join("")
+    ? visiveis.map((v) => linhaDeVideo(v, true)).join("") +
+      (filtrados.length > visiveis.length ? `<button type="button" class="btn-secondary" id="btn-mostrar-mais" style="margin:12px auto;display:block">Mostrar mais (${filtrados.length - visiveis.length} restantes)</button>` : "")
     : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
 
 
@@ -273,8 +285,11 @@ document.addEventListener("click", async (evento) => {
   carregarPainel();
 });
 
-["filtro-canal", "filtro-status"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", aplicarFiltrosFila);
+["filtro-canal", "filtro-status", "filtro-busca"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", () => {
+    limiteFila = 20;
+    aplicarFiltrosFila();
+  });
 });
 
 // ---------------- Fila: editar texto/cor da thumbnail ----------------

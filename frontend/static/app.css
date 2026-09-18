@@ -549,3 +549,9 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .video-base-geral { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 10px; }
 .video-base-geral label { width: 100%; }
 .video-base-geral select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font: inherit; max-width: 100%; }
+
+.painel-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 4px; padding: 8px 12px; border: 1px solid #F2C230; border-radius: 10px; background: rgba(242, 194, 48, .08); }
+.painel-barra[hidden] { display: none; }
+.painel-barra-titulo { font-size: 13px; font-weight: 600; color: #F2C230; }
+.btn-minimizar-painel { background: #F2C230; color: #14130F; border: none; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.fila-filtros input[type="search"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font: inherit; min-width: 220px; }

@@ -483,6 +483,10 @@
               <select id="filtro-canal"><option value="">Todos</option></select>
             </label>
             <label>
+              <span>Buscar pelo título</span>
+              <input type="search" id="filtro-busca" placeholder="Digite parte do título…">
+            </label>
+            <label>
               <span>Status</span>
               <select id="filtro-status">
                 <option value="">Todos</option>
@@ -494,6 +498,7 @@
                 <option value="erro">Erro ao publicar</option>
               </select>
             </label>
+            <button type="button" class="btn-primary" id="btn-confirmar-todos" hidden style="align-self:flex-end">Confirmar publicação dos pendentes</button>
           </div>
           <div id="fila-lista" class="video-list">
             <div class="empty">Nenhum vídeo gerado ainda.</div>
