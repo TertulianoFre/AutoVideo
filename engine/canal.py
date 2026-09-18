@@ -107,7 +107,12 @@ def criar_canal(nome: str, contexto: str = "") -> dict:
     return novo
 
 
-def atualizar_canal(canal_id: str, nome: str | None = None, contexto: str | None = None) -> dict:
+def atualizar_canal(canal_id: str, nome: str | None = None, contexto: str | None = None, conta_youtube: str | None = None) -> dict:
+    """conta_youtube: normalmente é o mesmo id do canal (1 conta por canal) —
+    só precisa mexer aqui pra apontar esse canal pra uma conta do YouTube já
+    conectada com outro nome (ex: reaproveitar uma conta entre dois canais)
+    sem precisar recriar o canal inteiro. String vazia é ignorada (não dá pra
+    deixar um canal sem nenhuma conta associada)."""
     dados = _carregar()
     for c in dados["canais"]:
         if c["id"] == canal_id:
@@ -115,6 +120,8 @@ def atualizar_canal(canal_id: str, nome: str | None = None, contexto: str | None
                 c["nome"] = nome.strip()
             if contexto is not None:
                 c["contexto"] = contexto.strip()
+            if conta_youtube is not None and conta_youtube.strip():
+                c["conta_youtube"] = conta_youtube.strip()
             _salvar(dados)
             return c
     raise ValueError(f"Canal '{canal_id}' não existe.")

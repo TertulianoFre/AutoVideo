@@ -62,7 +62,7 @@ Um canal fica marcado como **ativo** por vez (seletor no topo do menu lateral) �
 
 Cada vídeo grava o `canal_id` de quem o criou no `metadata.json`, e **continua sendo desse canal pra sempre** — regenerar, editar cena ou trocar o canal ativo depois não muda isso. O agendador (`engine/agendador.py`) usa exatamente esse `canal_id` salvo pra escolher a conta do YouTube certa na hora de publicar — nunca publica um vídeo na conta errada mesmo com vários canais ativos ao mesmo tempo. Vídeos gerados antes desse recurso existir (sem `canal_id` salvo) caem no canal `principal`, mesmo comportamento de sempre.
 
-Adicionar um canal novo é só preencher nome (+ contexto opcional) na aba "Canais". Pra conectar a conta do YouTube dele: defina ele como ativo e clique no perfil, no topo do menu — o fluxo de conexão é sempre o mesmo, só muda pra qual token ele salva.
+Adicionar um canal novo é só preencher nome (+ contexto opcional) na aba "Canais". Pra conectar a conta do YouTube dele: defina ele como ativo e clique no perfil, no topo do menu — o fluxo de conexão é sempre o mesmo, só muda pra qual token ele salva. Cada card em "Canais" também tem um campo avançado **"Conta do YouTube"** (normalmente não precisa mexer, já que é o mesmo id do canal) — só é útil se quiser apontar um canal pra uma conta já conectada com outro nome, sem recriar o canal.
 
 ### Publicação automática (`engine/youtube.py`, `engine/agendador.py`)
 
@@ -125,4 +125,3 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 
 1. Mais camadas de som combináveis (hoje só pássaros/trovão/multidão) e, mais pra frente, sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição
 2. Posição livre (arrastar) da thumbnail, em vez da grade fixa de 9 pontos de hoje
-3. Editar/renomear a conta do YouTube de um canal já criado sem precisar recriar o canal

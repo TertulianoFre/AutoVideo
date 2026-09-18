@@ -87,9 +87,9 @@ def api_ativar_canal(canal_id: str) -> dict:
 
 
 @app.post("/api/canais/{canal_id}/editar")
-def api_editar_canal(canal_id: str, nome: str = Form(""), contexto: str = Form("")) -> dict:
+def api_editar_canal(canal_id: str, nome: str = Form(""), contexto: str = Form(""), conta_youtube: str = Form("")) -> dict:
     try:
-        atualizado = canal.atualizar_canal(canal_id, nome=nome or None, contexto=contexto)
+        atualizado = canal.atualizar_canal(canal_id, nome=nome or None, contexto=contexto, conta_youtube=conta_youtube or None)
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=404)
     return {"canal": atualizado}

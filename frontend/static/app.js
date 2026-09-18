@@ -417,6 +417,10 @@ function linhaDeCanal(c, ativo) {
         <span>Contexto (nicho, tom, público)</span>
         <textarea class="canal-contexto-input" rows="3">${c.contexto || ""}</textarea>
       </label>
+      <label class="canal-conta-label">
+        <span>Conta do YouTube (avançado — normalmente não precisa mexer; só se quiser apontar esse canal pra uma conta já conectada com outro nome)</span>
+        <input type="text" class="canal-conta-input" value="${(c.conta_youtube || "").replace(/"/g, "&quot;")}" maxlength="60">
+      </label>
       <div class="canal-card-actions">
         <button type="button" class="btn-secondary btn-salvar-canal" data-id="${c.id}">Salvar</button>
         <span class="video-meta canal-yt-status" data-id="${c.id}">Verificando YouTube…</span>
@@ -443,9 +447,11 @@ async function carregarCanais() {
       const card = botao.closest(".canal-card");
       const nome = card.querySelector(".canal-nome-input").value.trim();
       const contexto = card.querySelector(".canal-contexto-input").value;
+      const contaYoutube = card.querySelector(".canal-conta-input").value.trim();
       const dados = new FormData();
       dados.set("nome", nome);
       dados.set("contexto", contexto);
+      dados.set("conta_youtube", contaYoutube);
       botao.disabled = true;
       botao.textContent = "Salvando…";
       await fetch(`/api/canais/${botao.dataset.id}/editar`, { method: "POST", body: dados });
@@ -453,6 +459,8 @@ async function carregarCanais() {
       botao.textContent = "Salvo!";
       setTimeout(() => (botao.textContent = "Salvar"), 2000);
       popularSeletorCanal();
+      atualizarStatusYoutube(); // se era o canal ativo, o perfil pode ter mudado de conta
+      carregarCanais(); // status "YouTube: conectado/não conectado" do card pode ter mudado
     });
   });
 
