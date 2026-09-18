@@ -6,7 +6,7 @@ do projeto e de uma conta conectada (engine.youtube.conectar)."""
 import json
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from engine import canal as canal_mod
@@ -62,7 +62,8 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
 def publicar_pendentes() -> None:
     if not RAIZ_SAIDA.exists():
         return
-    hoje = date.today().isoformat()
+    agora = datetime.now()
+    hoje = agora.date().isoformat()
 
     for pasta in RAIZ_SAIDA.iterdir():
         if not pasta.is_dir():
@@ -78,6 +79,9 @@ def publicar_pendentes() -> None:
         data_postagem = metadados.get("data_postagem")
         if not data_postagem or data_postagem > hoje:
             continue  # ainda não chegou o dia
+        hora_postagem = metadados.get("hora_postagem")
+        if data_postagem == hoje and hora_postagem and agora.strftime("%H:%M") < hora_postagem:
+            continue  # chegou o dia, mas ainda não a hora marcada
 
         v16, v9 = pasta / "video_16x9.mp4", pasta / "video_9x16.mp4"
         if not (v16.exists() and v9.exists()):

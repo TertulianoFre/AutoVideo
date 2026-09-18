@@ -176,6 +176,28 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
   text-transform: none; font-weight: 500; vertical-align: middle;
 }
 
+.status-badge {
+  font-size: 10.5px; border-radius: 999px; padding: 2px 9px; font-weight: 600;
+  display: inline-block;
+}
+.status-badge.status-pronto { color: var(--positive); background: rgba(111, 185, 143, 0.14); }
+.status-badge.status-aguardando { color: var(--text-dim); background: var(--surface-2); border: 1px solid var(--border); }
+.status-badge.status-publicado { color: var(--positive); background: rgba(111, 185, 143, 0.14); }
+.status-badge.status-erro { color: var(--negative); background: rgba(216, 105, 90, 0.14); }
+
+.fila-filtros {
+  display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border);
+}
+.fila-filtros label { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; color: var(--text-dim); min-width: 140px; }
+.fila-filtros select, .fila-filtros input {
+  padding: 7px 9px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font-size: 13px; font-family: inherit;
+}
+
+#card-grafico-videos { margin-top: 16px; }
+#grafico-videos { width: 100%; display: block; }
+
 /* ---------- canais (aba de gerenciar) ---------- */
 
 .canais-lista { display: flex; flex-direction: column; gap: 14px; }

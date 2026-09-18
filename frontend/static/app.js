@@ -21,10 +21,23 @@ function formatarDuracao(segundos) {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(seg).padStart(2, "0")}` : `${m}:${String(seg).padStart(2, "0")}`;
 }
 
-function formatarDataPostagem(iso) {
+function formatarDataPostagem(iso, hora) {
   if (!iso) return "sem data definida";
   const [ano, mes, dia] = iso.split("-");
-  return `postar em ${dia}/${mes}/${ano}`;
+  return hora ? `postar em ${dia}/${mes}/${ano} às ${hora}` : `postar em ${dia}/${mes}/${ano}`;
+}
+
+const STATUS_FILA = {
+  publicado: { rotulo: "publicado", classe: "status-publicado" },
+  pronto: { rotulo: "pronto para enviar", classe: "status-pronto" },
+  aguardando: { rotulo: "aguardando data de publicação", classe: "status-aguardando" },
+  erro: { rotulo: "erro ao publicar", classe: "status-erro" },
+};
+
+function statusBadge(v) {
+  const info = STATUS_FILA[v.status];
+  if (!info) return "";
+  return `<span class="status-badge ${info.classe}">${info.rotulo}</span>`;
 }
 
 const ICONE_VIDEO = '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="10" height="9" rx="1.5"></rect><path d="M12.5 9l5-3v8l-5-3z"></path></svg>';
@@ -46,6 +59,7 @@ function linhaDeVideo(v, comRegenerar) {
   const rotulos = [];
   if (v.sem_narracao) rotulos.push("sem narração");
   if (v.som_fundo_tipo) rotulos.push(`som: ${v.som_fundo_tipo}`);
+  if (v.duracao_segundos) rotulos.push(formatarDuracao(v.duracao_segundos));
   const modoLabel = rotulos.length ? `· ${rotulos.join(", ")}` : "";
   const badgeCanal = mostrarBadgeCanal && v.canal_nome ? `<span class="canal-badge">${v.canal_nome}</span>` : "";
   const thumb = v.thumbnail
@@ -59,14 +73,16 @@ function linhaDeVideo(v, comRegenerar) {
        ${v.tem_cenas ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
+  const badgeStatus = v.status === "pronto" || v.status === "aguardando" ? statusBadge(v) : "";
   return `
     <div class="video-item">
       <div class="video-row" data-slug="${v.slug}">
         <div class="video-thumb">${thumb}</div>
         <div class="video-info">
           <div class="video-title">${v.titulo} ${badgeCanal}</div>
-          <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
+          <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem, v.hora_postagem)} ${modoLabel}</div>
           ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
+          ${badgeStatus ? `<div class="video-meta">${badgeStatus}</div>` : ""}
         </div>
         <div class="video-links">
           <a href="${v.video_16_9}" target="_blank">16:9</a>
@@ -84,21 +100,76 @@ async function buscarVideos() {
   return resposta.ok ? resposta.json() : [];
 }
 
+function desenharGraficoVideos(videos) {
+  const canvas = document.getElementById("grafico-videos");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const largura = canvas.clientWidth || 600;
+  canvas.width = largura;
+  canvas.height = 120;
+  ctx.clearRect(0, 0, largura, 120);
+
+  const SEMANAS = 8;
+  const umaSemanaMs = 7 * 24 * 60 * 60 * 1000;
+  const agora = Date.now();
+  const contagens = new Array(SEMANAS).fill(0);
+  videos.forEach((v) => {
+    if (!v.modificado_em) return;
+    const semanasAtras = Math.floor((agora - v.modificado_em * 1000) / umaSemanaMs);
+    const indice = SEMANAS - 1 - semanasAtras;
+    if (indice >= 0 && indice < SEMANAS) contagens[indice]++;
+  });
+
+  const max = Math.max(1, ...contagens);
+  const larguraBarra = largura / SEMANAS;
+  const corBarra = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#7c9eff";
+  ctx.fillStyle = corBarra || "#7c9eff";
+  contagens.forEach((valor, i) => {
+    const altura = valor ? Math.max(4, (valor / max) * 90) : 0;
+    ctx.fillRect(i * larguraBarra + 4, 110 - altura, larguraBarra - 8, altura);
+    if (valor) {
+      ctx.fillStyle = "#8892a6";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(String(valor), i * larguraBarra + larguraBarra / 2, 108 - altura - 4);
+      ctx.fillStyle = corBarra || "#7c9eff";
+    }
+  });
+}
+
 async function carregarPainel() {
   const videos = await buscarVideos();
   document.getElementById("stat-total").textContent = videos.length;
+  const totalSegundos = videos.reduce((soma, v) => soma + (v.duracao_segundos || 0), 0);
+  document.getElementById("stat-duracao").textContent = `${Math.round(totalSegundos / 60)} min`;
   const lista = document.getElementById("painel-lista");
   lista.innerHTML = videos.length
-    ? videos.slice(0, 6).map(linhaDeVideo).join("")
+    ? videos.slice(0, 6).map((v) => linhaDeVideo(v)).join("")
     : '<div class="empty">Nenhum vídeo ainda — vá em "Novo vídeo" pra gerar o primeiro.</div>';
+  desenharGraficoVideos(videos);
 }
 
-async function carregarFila() {
-  const videos = await buscarVideos();
+let videosFilaCache = [];
+
+function aplicarFiltrosFila() {
+  const canal = document.getElementById("filtro-canal").value;
+  const status = document.getElementById("filtro-status").value;
+  const minMin = parseFloat(document.getElementById("filtro-duracao-min").value);
+  const maxMin = parseFloat(document.getElementById("filtro-duracao-max").value);
+
+  const filtrados = videosFilaCache.filter((v) => {
+    if (canal && v.canal_id !== canal) return false;
+    if (status && v.status !== status) return false;
+    const minutos = (v.duracao_segundos || 0) / 60;
+    if (!isNaN(minMin) && minutos < minMin) return false;
+    if (!isNaN(maxMin) && minutos > maxMin) return false;
+    return true;
+  });
+
   const lista = document.getElementById("fila-lista");
-  lista.innerHTML = videos.length
-    ? videos.map((v) => linhaDeVideo(v, true)).join("")
-    : '<div class="empty">Nenhum vídeo gerado ainda.</div>';
+  lista.innerHTML = filtrados.length
+    ? filtrados.map((v) => linhaDeVideo(v, true)).join("")
+    : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
 
   lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb):not(.btn-ver-cenas):not(.btn-editar-thumb)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
@@ -113,6 +184,23 @@ async function carregarFila() {
     botao.addEventListener("click", () => alternarPainelThumb(botao));
   });
 }
+
+async function carregarFila() {
+  videosFilaCache = await buscarVideos();
+
+  const seletorCanalFiltro = document.getElementById("filtro-canal");
+  const canaisUnicos = [...new Map(videosFilaCache.map((v) => [v.canal_id, v.canal_nome])).entries()];
+  const valorAtual = seletorCanalFiltro.value;
+  seletorCanalFiltro.innerHTML =
+    '<option value="">Todos</option>' + canaisUnicos.map(([id, nome]) => `<option value="${id}">${nome}</option>`).join("");
+  seletorCanalFiltro.value = valorAtual;
+
+  aplicarFiltrosFila();
+}
+
+["filtro-canal", "filtro-status", "filtro-duracao-min", "filtro-duracao-max"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", aplicarFiltrosFila);
+});
 
 // ---------------- Fila: editar texto/cor da thumbnail ----------------
 

@@ -71,6 +71,11 @@
           </div>
         </div>
 
+        <div class="card" id="card-grafico-videos">
+          <div class="card-head">Vídeos gerados por semana</div>
+          <canvas id="grafico-videos" height="120"></canvas>
+        </div>
+
         <div class="stats-row" id="stats-row-youtube" hidden>
           <div class="stat-card">
             <div class="stat-label" id="stat-canal-nome">Inscritos</div>
@@ -161,6 +166,13 @@
                 <input type="date" name="data_postagem" required>
               </label>
             </div>
+            <div class="row-2">
+              <label>
+                <span>Hora de postagem (opcional — em branco publica assim que o dia chegar)</span>
+                <input type="time" name="hora_postagem">
+              </label>
+              <span></span>
+            </div>
 
             <label>
               <span>Descrição do vídeo (opcional — estilo visual, tom, público: "2D simples", "mais detalhado/realista", "infantil e colorido"...)</span>
@@ -175,7 +187,7 @@
             <div id="campos-narrado">
               <label>
                 <span>Roteiro (opcional — deixe em branco pra gerar automaticamente a partir do título + contexto do canal)</span>
-                <textarea name="roteiro" id="campo-roteiro" rows="6" placeholder="Cole aqui o roteiro pronto, ou clique em &quot;Pré-visualizar roteiro&quot; pra deixar o motor escrever e você revisar antes"></textarea>
+                <textarea name="roteiro" id="campo-roteiro" rows="4" placeholder="Cole aqui o roteiro pronto, ou clique em &quot;Pré-visualizar roteiro&quot; pra deixar o motor escrever e você revisar antes"></textarea>
               </label>
               <div class="preview-row">
                 <button type="button" class="btn-secondary" id="btn-preview-roteiro">Pré-visualizar roteiro</button>
@@ -273,6 +285,30 @@
       <section id="tab-fila" class="tab">
         <div class="card">
           <div class="card-head">Todos os vídeos</div>
+          <div class="fila-filtros" id="fila-filtros">
+            <label>
+              <span>Canal</span>
+              <select id="filtro-canal"><option value="">Todos</option></select>
+            </label>
+            <label>
+              <span>Status</span>
+              <select id="filtro-status">
+                <option value="">Todos</option>
+                <option value="publicado">Publicado</option>
+                <option value="pronto">Pronto para enviar</option>
+                <option value="aguardando">Aguardando data</option>
+                <option value="erro">Erro ao publicar</option>
+              </select>
+            </label>
+            <label>
+              <span>Duração mín. (min)</span>
+              <input type="number" id="filtro-duracao-min" min="0" step="0.5" placeholder="0">
+            </label>
+            <label>
+              <span>Duração máx. (min)</span>
+              <input type="number" id="filtro-duracao-max" min="0" step="0.5" placeholder="sem limite">
+            </label>
+          </div>
           <div id="fila-lista" class="video-list">
             <div class="empty">Nenhum vídeo gerado ainda.</div>
           </div>

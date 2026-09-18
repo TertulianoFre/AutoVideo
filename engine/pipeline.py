@@ -64,6 +64,7 @@ def gerar_video(
     duracao_alvo_minutos: float | None = None,
     descricao_video: str = "",
     data_postagem: str | None = None,
+    hora_postagem: str | None = None,
     sem_narracao: bool = False,
     som_fundo_tipo: str = "",
     som_fundo_descricao: str = "",
@@ -89,6 +90,7 @@ def gerar_video(
         pasta,
         titulo=titulo,
         data_postagem=data_postagem,
+        hora_postagem=hora_postagem or None,
         descricao_video=descricao_video,
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
@@ -185,6 +187,7 @@ def gerar_video(
         pasta,
         cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
         audio_arquivo=audio_path.name,
+        duracao_segundos=round(duracao_real, 1),
     )
 
     total_imagens = len(lista_cenas) * len(ESTILO_LEGENDA_POR_FORMATO)

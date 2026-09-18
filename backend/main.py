@@ -9,6 +9,7 @@ import random
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 # O texto gerado por IA às vezes traz pontuação Unicode especial (hífen
@@ -209,6 +210,7 @@ def api_preview_roteiro(
 def api_criar_video(
     titulo: str = Form(...),
     data_postagem: str = Form(...),
+    hora_postagem: str = Form(""),
     roteiro: str = Form(""),
     descricao_video: str = Form(""),
     idioma: str = Form("pt-BR"),
@@ -229,6 +231,7 @@ def api_criar_video(
         duracao_alvo_minutos=duracao_alvo,
         descricao_video=descricao_video.strip(),
         data_postagem=data_postagem,
+        hora_postagem=hora_postagem.strip() or None,
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao.strip(),
@@ -267,6 +270,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or (15.0 if sem_narracao else 1.0),
         descricao_video=metadados.get("descricao_video", ""),
         data_postagem=metadados.get("data_postagem"),
+        hora_postagem=metadados.get("hora_postagem"),
         sem_narracao=sem_narracao,
         som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
@@ -275,6 +279,25 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
 
     job = jobs.criar_job(titulo, params)
     return {"job_id": job.id}
+
+
+@app.post("/api/videos/{slug}/agendamento")
+def api_editar_agendamento(slug: str, data_postagem: str = Form(...), hora_postagem: str = Form("")) -> dict:
+    """Só reagenda (data/hora de postagem) sem regenerar nada — pra corrigir
+    rapidinho quando o plano de publicação muda."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["data_postagem"] = data_postagem
+    if hora_postagem.strip():
+        metadados["hora_postagem"] = hora_postagem.strip()
+    else:
+        metadados.pop("hora_postagem", None)
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "data_postagem": data_postagem, "hora_postagem": metadados.get("hora_postagem")}
 
 
 def _thumbnail_base_url(pasta: Path) -> str | None:
@@ -307,6 +330,27 @@ def _tamanho_fonte_de(metadados: dict) -> int:
     if isinstance(px, (int, float)) and px:
         return int(px)
     return thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
+
+
+def _status_de(metadados: dict) -> str:
+    """Status resumido pra fila: publicado / erro / pronto (dia já chegou,
+    esperando o agendador ou o próximo publicar manual) / aguardando (ainda
+    não chegou a data)."""
+    if metadados.get("publicado"):
+        return "publicado"
+    if metadados.get("publicacao_erro"):
+        return "erro"
+    data_postagem = metadados.get("data_postagem")
+    if not data_postagem:
+        return "aguardando"
+    agora = datetime.now()
+    hoje = agora.date().isoformat()
+    if data_postagem > hoje:
+        return "aguardando"
+    hora_postagem = metadados.get("hora_postagem")
+    if data_postagem == hoje and hora_postagem and agora.strftime("%H:%M") < hora_postagem:
+        return "aguardando"
+    return "pronto"
 
 
 def _base_valida_ou_erro(pasta: Path) -> Path | JSONResponse:
@@ -587,6 +631,9 @@ def api_listar_videos() -> list[dict]:
                 "sem_narracao": metadados.get("sem_narracao", False),
                 "som_fundo_tipo": metadados.get("som_fundo_tipo", ""),
                 "data_postagem": metadados.get("data_postagem"),
+                "hora_postagem": metadados.get("hora_postagem"),
+                "duracao_segundos": metadados.get("duracao_segundos"),
+                "status": _status_de(metadados),
                 "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4",
                 "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4",
                 "thumbnail": f"/videos/{pasta.name}/thumbnail.png?v={int(thumb_path.stat().st_mtime)}" if thumb_path.exists() else None,
