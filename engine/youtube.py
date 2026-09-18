@@ -85,9 +85,17 @@ def obter_estatisticas_canal(nome_conta: str) -> dict:
         raise RuntimeError("Nenhum canal encontrado pra essa conta.")
 
     canal = itens[0]
+    snippet = canal.get("snippet", {})
     estatisticas = canal.get("statistics", {})
+    channel_id = canal.get("id", "")
+    custom_url = snippet.get("customUrl")  # ex: "@meucanal", já vem com @ quando existe
+    miniaturas = snippet.get("thumbnails", {})
+    avatar = (miniaturas.get("default") or miniaturas.get("medium") or {}).get("url")
+
     return {
-        "nome_canal": canal.get("snippet", {}).get("title", ""),
+        "nome_canal": snippet.get("title", ""),
+        "avatar_url": avatar,
+        "canal_url": f"https://www.youtube.com/{custom_url}" if custom_url else f"https://www.youtube.com/channel/{channel_id}",
         "inscritos": int(estatisticas.get("subscriberCount", 0)),
         "visualizacoes": int(estatisticas.get("viewCount", 0)),
         "total_videos": int(estatisticas.get("videoCount", 0)),

@@ -13,13 +13,13 @@
 <div class="app">
 
   <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-avatar">MC</div>
+    <a class="brand" id="brand-link" href="#" title="Conectar YouTube">
+      <div class="brand-avatar" id="brand-avatar">MC</div>
       <div>
-        <div class="brand-name">Meu Canal</div>
-        <div class="brand-sub">Rodando localmente</div>
+        <div class="brand-name" id="brand-name">Meu Canal</div>
+        <div class="brand-sub" id="brand-sub">Clique pra conectar o YouTube</div>
       </div>
-    </div>
+    </a>
 
     <nav class="nav">
       <button class="nav-item active" data-tab="painel">
@@ -82,12 +82,11 @@
         <div class="card">
           <div class="card-head">Publicação automática no YouTube</div>
           <p class="hint" id="youtube-descricao" style="margin:0 0 12px">
-            Conecte sua conta pra vídeos com data de postagem já vencida serem publicados sozinhos (o app precisa ficar rodando).
+            Vídeos com data de postagem já vencida são publicados sozinhos (o app precisa ficar rodando). Clique no seu perfil, ali em cima, pra conectar ou reconectar a conta.
           </p>
           <div id="youtube-status-linha" style="display:flex;align-items:center;gap:10px">
             <span class="dot" id="youtube-dot"></span>
             <span id="youtube-status-texto">Verificando…</span>
-            <button type="button" class="btn-secondary" id="btn-youtube-conectar" style="margin-left:auto">Conectar YouTube</button>
           </div>
         </div>
 

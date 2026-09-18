@@ -328,11 +328,16 @@ function mostrarResultado(resultado) {
     ${tags ? `<div class="resultado-formato"><h3>Hashtags sugeridas</h3><div class="tags-list">${tags}</div></div>` : ""}`;
 }
 
-// ---------------- Conexão com o YouTube ----------------
+// ---------------- Conexão com o YouTube (perfil no menu lateral) ----------------
 
 const youtubeDot = document.getElementById("youtube-dot");
 const youtubeStatusTexto = document.getElementById("youtube-status-texto");
-const btnYoutubeConectar = document.getElementById("btn-youtube-conectar");
+const brandLink = document.getElementById("brand-link");
+const brandAvatar = document.getElementById("brand-avatar");
+const brandName = document.getElementById("brand-name");
+const brandSub = document.getElementById("brand-sub");
+
+let youtubeConectando = false;
 
 async function atualizarStatusYoutube() {
   const resposta = await fetch("/api/youtube/status");
@@ -341,27 +346,27 @@ async function atualizarStatusYoutube() {
   if (!dados.client_secret_presente) {
     youtubeDot.className = "dot dot-dim";
     youtubeStatusTexto.textContent = "client_secret.json não encontrado na raiz do projeto.";
-    btnYoutubeConectar.hidden = true;
+    brandSub.textContent = "YouTube não configurado";
     return null;
   }
 
-  btnYoutubeConectar.hidden = false;
-
   if (dados.conectando) {
+    youtubeConectando = true;
     youtubeDot.className = "dot dot-pending";
     youtubeStatusTexto.textContent = "Esperando você autorizar no navegador…";
-    btnYoutubeConectar.disabled = true;
+    brandSub.textContent = "Conectando…";
   } else if (dados.conectado) {
+    youtubeConectando = false;
     youtubeDot.className = "dot dot-positive";
     youtubeStatusTexto.textContent = "Conectado";
-    btnYoutubeConectar.disabled = false;
-    btnYoutubeConectar.textContent = "Reconectar";
     carregarEstatisticasCanal();
   } else {
+    youtubeConectando = false;
     youtubeDot.className = "dot dot-negative";
     youtubeStatusTexto.textContent = dados.erro ? `Não conectado (${dados.erro})` : "Não conectado";
-    btnYoutubeConectar.disabled = false;
-    btnYoutubeConectar.textContent = "Conectar YouTube";
+    brandName.textContent = "Meu Canal";
+    brandSub.textContent = "Clique pra conectar o YouTube";
+    brandAvatar.innerHTML = "MC";
   }
   return dados;
 }
@@ -375,6 +380,7 @@ async function carregarEstatisticasCanal() {
     // provavelmente conectou antes do escopo de leitura existir.
     linha.hidden = true;
     youtubeStatusTexto.textContent = "Conectado (reconecte pra liberar inscritos/visualizações)";
+    brandSub.textContent = "Reconecte pra ver o perfil";
     return;
   }
 
@@ -382,14 +388,28 @@ async function carregarEstatisticasCanal() {
   document.getElementById("stat-inscritos").textContent = dados.inscritos.toLocaleString("pt-BR");
   document.getElementById("stat-visualizacoes").textContent = dados.visualizacoes.toLocaleString("pt-BR");
   linha.hidden = false;
+
+  brandName.textContent = dados.nome_canal || "Meu Canal";
+  brandSub.textContent = `${dados.inscritos.toLocaleString("pt-BR")} inscritos — ver canal ↗`;
+  if (dados.avatar_url) brandAvatar.innerHTML = `<img src="${dados.avatar_url}" alt="">`;
+  brandLink.href = dados.canal_url || "#";
+  brandLink.target = "_blank";
+  brandLink.rel = "noopener";
+  brandLink.title = "Abrir seu canal no YouTube";
 }
 
-btnYoutubeConectar.addEventListener("click", async () => {
-  await fetch("/api/youtube/conectar", { method: "POST" });
+brandLink.addEventListener("click", async (ev) => {
+  // conectado: deixa o link abrir o canal normalmente. Não conectado: em vez
+  // de navegar pro "#", dispara o login.
+  if (brandLink.getAttribute("target") === "_blank") return;
+  ev.preventDefault();
+  if (youtubeConectando) return;
+
   const poller = setInterval(async () => {
     const dados = await atualizarStatusYoutube();
     if (dados && !dados.conectando) clearInterval(poller);
   }, 1500);
+  await fetch("/api/youtube/conectar", { method: "POST" });
 });
 
 atualizarStatusYoutube();
