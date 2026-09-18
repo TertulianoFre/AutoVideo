@@ -74,7 +74,7 @@ function linhaDeVideo(v, comRegenerar) {
           ${botaoRegenerar}
         </div>
       </div>
-      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho="${v.thumbnail_tamanho || "medio"}"></div>` : ""}
+      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
@@ -130,11 +130,22 @@ const POSICOES_THUMB = [
   "baixo-esquerda", "baixo-centro", "baixo-direita",
 ];
 
-const TAMANHOS_THUMB = [
-  { valor: "pequeno", nome: "Pequena" },
-  { valor: "medio", nome: "Média" },
-  { valor: "grande", nome: "Grande" },
-];
+// aproximação visual das mesmas frações usadas em engine/thumbnail.py, só
+// pra posicionar o rótulo arrastável quando você clica numa célula da grade
+const FRACAO_GRADE = {
+  "topo-esquerda": [0.12, 0.18], "topo-centro": [0.5, 0.18], "topo-direita": [0.88, 0.18],
+  "centro-esquerda": [0.12, 0.5], "centro": [0.5, 0.5], "centro-direita": [0.88, 0.5],
+  "baixo-esquerda": [0.12, 0.82], "baixo-centro": [0.5, 0.82], "baixo-direita": [0.88, 0.82],
+};
+
+const TAMANHO_FONTE_MIN = 24;
+const TAMANHO_FONTE_MAX = 190;
+const LARGURA_CANVAS_THUMB = 1280; // mesmo LARGURA de engine/thumbnail.py — pra escalar o preview
+
+function escalaPreview(areaPreview) {
+  const largura = areaPreview.getBoundingClientRect().width;
+  return largura ? largura / LARGURA_CANVAS_THUMB : 460 / LARGURA_CANVAS_THUMB;
+}
 
 function alternarPainelThumb(botao) {
   const slug = botao.dataset.slug;
@@ -150,31 +161,95 @@ function alternarPainelThumb(botao) {
   const textoAtual = painel.dataset.texto || "";
   const corAtual = painel.dataset.cor || "";
   const posicaoAtual = painel.dataset.posicao || "baixo-centro";
-  const tamanhoAtual = painel.dataset.tamanho || "medio";
+  const tamanhoPxAtual = parseInt(painel.dataset.tamanhoPx, 10) || 80;
+  const posXSalvo = parseFloat(painel.dataset.posX);
+  const posYSalvo = parseFloat(painel.dataset.posY);
+  const temPosLivre = !Number.isNaN(posXSalvo) && !Number.isNaN(posYSalvo);
+  const baseUrl = painel.dataset.base || "";
+
   const swatches = CORES_THUMB.map(
     (c) => `<button type="button" class="cor-swatch${c.hex === corAtual ? " selecionada" : ""}" data-hex="${c.hex}" title="${c.nome}" style="background:${c.hex ? "#" + c.hex : "#F6F2E9"}"></button>`
   ).join("");
   const grade = POSICOES_THUMB.map(
-    (p) => `<button type="button" class="pos-cel${p === posicaoAtual ? " selecionada" : ""}" data-posicao="${p}" title="${p.replace("-", " ")}"></button>`
-  ).join("");
-  const tamanhos = TAMANHOS_THUMB.map(
-    (t) => `<option value="${t.valor}"${t.valor === tamanhoAtual ? " selected" : ""}>${t.nome}</option>`
+    (p) => `<button type="button" class="pos-cel${!temPosLivre && p === posicaoAtual ? " selecionada" : ""}" data-posicao="${p}" title="${p.replace("-", " ")}"></button>`
   ).join("");
 
+  const [fx0, fy0] = temPosLivre ? [posXSalvo, posYSalvo] : FRACAO_GRADE[posicaoAtual] || FRACAO_GRADE["baixo-centro"];
+
   painel.innerHTML = `
+    <p class="hint" style="margin:0 0 10px">Arraste o texto pra qualquer lugar da imagem, ou clique num ponto da grade pra um posicionamento rápido.</p>
+    ${baseUrl ? `
+      <div class="thumb-preview">
+        <img class="thumb-preview-img" src="${baseUrl}" alt="">
+        <div class="thumb-preview-texto" style="left:${fx0 * 100}%; top:${fy0 * 100}%; color:${corAtual ? "#" + corAtual : "#F6F2E9"}">${textoAtual}</div>
+      </div>` : ""}
     <div class="thumb-form">
       <input type="text" class="thumb-texto" value="${textoAtual}" maxlength="80" placeholder="Texto que aparece na thumbnail">
       <div class="cor-swatches">${swatches}</div>
-      <select class="thumb-tamanho">${tamanhos}</select>
       <button type="button" class="btn-secondary btn-salvar-thumb">Salvar</button>
       <span class="video-meta thumb-status"></span>
     </div>
-    <div class="pos-grade" title="Posição do texto na thumbnail">${grade}</div>`;
+    <div class="thumb-tamanho-linha">
+      <span class="video-meta">Tamanho da fonte</span>
+      <input type="range" class="thumb-tamanho" min="${TAMANHO_FONTE_MIN}" max="${TAMANHO_FONTE_MAX}" step="2" value="${tamanhoPxAtual}">
+      <span class="video-meta thumb-tamanho-valor">${tamanhoPxAtual}px</span>
+    </div>
+    <div class="pos-grade" title="Posição do texto na thumbnail">${grade}</div>
+    <div class="thumb-imagens">
+      <div class="thumb-imagens-head">
+        <span class="video-meta">Imagem de fundo</span>
+        <label class="btn-secondary btn-upload-thumb">
+          Enviar imagem própria
+          <input type="file" class="thumb-upload-input" accept="image/*" hidden>
+        </label>
+      </div>
+      <div class="thumb-imagens-grade"><span class="video-meta">Carregando imagens…</span></div>
+    </div>`;
+
+  painel.dataset.modo = temPosLivre ? "livre" : "grade";
+  painel.dataset.posX = temPosLivre ? String(posXSalvo) : "";
+  painel.dataset.posY = temPosLivre ? String(posYSalvo) : "";
+
+  const rotuloArrastavel = painel.querySelector(".thumb-preview-texto");
+  const areaPreview = painel.querySelector(".thumb-preview");
+
+  const aplicarTamanhoPreview = (px) => {
+    if (rotuloArrastavel && areaPreview) rotuloArrastavel.style.fontSize = `${px * escalaPreview(areaPreview)}px`;
+  };
+  aplicarTamanhoPreview(tamanhoPxAtual);
+
+  if (rotuloArrastavel && areaPreview) {
+    const moverPara = (clientX, clientY) => {
+      const rect = areaPreview.getBoundingClientRect();
+      const fx = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
+      const fy = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1);
+      rotuloArrastavel.style.left = `${fx * 100}%`;
+      rotuloArrastavel.style.top = `${fy * 100}%`;
+      painel.dataset.modo = "livre";
+      painel.dataset.posX = fx.toFixed(4);
+      painel.dataset.posY = fy.toFixed(4);
+      painel.querySelectorAll(".pos-cel").forEach((c) => c.classList.remove("selecionada"));
+    };
+
+    rotuloArrastavel.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      rotuloArrastavel.setPointerCapture(ev.pointerId);
+      moverPara(ev.clientX, ev.clientY);
+      const onMove = (e) => moverPara(e.clientX, e.clientY);
+      const onUp = () => {
+        rotuloArrastavel.removeEventListener("pointermove", onMove);
+        rotuloArrastavel.removeEventListener("pointerup", onUp);
+      };
+      rotuloArrastavel.addEventListener("pointermove", onMove);
+      rotuloArrastavel.addEventListener("pointerup", onUp);
+    });
+  }
 
   painel.querySelectorAll(".cor-swatch").forEach((sw) => {
     sw.addEventListener("click", () => {
       painel.querySelectorAll(".cor-swatch").forEach((s) => s.classList.remove("selecionada"));
       sw.classList.add("selecionada");
+      if (rotuloArrastavel) rotuloArrastavel.style.color = sw.dataset.hex ? `#${sw.dataset.hex}` : "#F6F2E9";
     });
   });
 
@@ -182,17 +257,113 @@ function alternarPainelThumb(botao) {
     cel.addEventListener("click", () => {
       painel.querySelectorAll(".pos-cel").forEach((c) => c.classList.remove("selecionada"));
       cel.classList.add("selecionada");
+      painel.dataset.modo = "grade";
+      painel.dataset.posX = "";
+      painel.dataset.posY = "";
+      if (rotuloArrastavel) {
+        const [fx, fy] = FRACAO_GRADE[cel.dataset.posicao];
+        rotuloArrastavel.style.left = `${fx * 100}%`;
+        rotuloArrastavel.style.top = `${fy * 100}%`;
+      }
     });
   });
 
+  const campoTexto = painel.querySelector(".thumb-texto");
+  campoTexto.addEventListener("input", () => {
+    if (rotuloArrastavel) rotuloArrastavel.textContent = campoTexto.value;
+  });
+
+  const campoTamanho = painel.querySelector(".thumb-tamanho");
+  const valorTamanho = painel.querySelector(".thumb-tamanho-valor");
+  campoTamanho.addEventListener("input", () => {
+    valorTamanho.textContent = `${campoTamanho.value}px`;
+    aplicarTamanhoPreview(parseInt(campoTamanho.value, 10));
+  });
+
+  carregarImagensThumb(slug, painel);
+
+  painel.querySelector(".thumb-upload-input").addEventListener("change", (ev) => {
+    const arquivo = ev.target.files[0];
+    if (arquivo) uploadImagemThumb(slug, painel, arquivo);
+  });
+
   painel.querySelector(".btn-salvar-thumb").addEventListener("click", () => salvarThumb(slug, painel));
+}
+
+async function carregarImagensThumb(slug, painel) {
+  const grade = painel.querySelector(".thumb-imagens-grade");
+  if (!grade) return;
+  try {
+    const resposta = await fetch(`/api/videos/${slug}/thumbnail/imagens`);
+    const dados = await resposta.json();
+    if (dados.erro || !dados.imagens?.length) {
+      grade.innerHTML = '<span class="video-meta">Nenhuma imagem de cena disponível ainda.</span>';
+      return;
+    }
+    grade.innerHTML = dados.imagens
+      .map((img) => `<button type="button" class="thumb-img-opcao${img.atual ? " selecionada" : ""}" data-nome="${img.nome}" title="${img.nome}"><img src="${img.url}" alt=""></button>`)
+      .join("");
+    grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
+      op.addEventListener("click", () => escolherImagemThumb(slug, painel, op));
+    });
+  } catch {
+    grade.innerHTML = '<span class="video-meta">Deu erro carregando as imagens.</span>';
+  }
+}
+
+async function _atualizarBaseThumb(slug, painel, resultado) {
+  const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+  if (thumbImg && resultado.thumbnail) thumbImg.src = resultado.thumbnail;
+  if (resultado.thumbnail_base) {
+    painel.dataset.base = resultado.thumbnail_base;
+    const img = painel.querySelector(".thumb-preview-img");
+    if (img) img.src = resultado.thumbnail_base;
+  }
+}
+
+async function escolherImagemThumb(slug, painel, botaoOpcao) {
+  painel.querySelectorAll(".thumb-img-opcao").forEach((op) => op.classList.remove("selecionada"));
+  botaoOpcao.classList.add("selecionada");
+
+  const dados = new FormData();
+  dados.set("imagem", botaoOpcao.dataset.nome);
+  const resposta = await fetch(`/api/videos/${slug}/thumbnail/escolher-imagem`, { method: "POST", body: dados });
+  const resultado = await resposta.json();
+  if (resultado.erro) {
+    alert(resultado.erro);
+    return;
+  }
+  await _atualizarBaseThumb(slug, painel, resultado);
+}
+
+async function uploadImagemThumb(slug, painel, arquivo) {
+  const head = painel.querySelector(".thumb-imagens-head .video-meta");
+  const rotuloOriginal = head.textContent;
+  head.textContent = "Enviando…";
+
+  const dados = new FormData();
+  dados.set("arquivo", arquivo);
+  try {
+    const resposta = await fetch(`/api/videos/${slug}/thumbnail/upload`, { method: "POST", body: dados });
+    const resultado = await resposta.json();
+    head.textContent = rotuloOriginal;
+    if (resultado.erro) {
+      alert(resultado.erro);
+      return;
+    }
+    await _atualizarBaseThumb(slug, painel, resultado);
+    carregarImagensThumb(slug, painel);
+  } catch {
+    head.textContent = rotuloOriginal;
+    alert("Deu erro de conexão, tenta de novo.");
+  }
 }
 
 async function salvarThumb(slug, painel) {
   const texto = painel.querySelector(".thumb-texto").value.trim();
   const corSelecionada = painel.querySelector(".cor-swatch.selecionada");
   const posSelecionada = painel.querySelector(".pos-cel.selecionada");
-  const tamanho = painel.querySelector(".thumb-tamanho").value;
+  const tamanhoPx = painel.querySelector(".thumb-tamanho").value;
   const status = painel.querySelector(".thumb-status");
   const botaoSalvar = painel.querySelector(".btn-salvar-thumb");
 
@@ -206,11 +377,16 @@ async function salvarThumb(slug, painel) {
 
   const cor = corSelecionada ? corSelecionada.dataset.hex : "";
   const posicao = posSelecionada ? posSelecionada.dataset.posicao : "baixo-centro";
+  const modoLivre = painel.dataset.modo === "livre" && painel.dataset.posX && painel.dataset.posY;
   const dados = new FormData();
   dados.set("texto", texto);
   dados.set("cor", cor);
   dados.set("posicao", posicao);
-  dados.set("tamanho", tamanho);
+  dados.set("tamanho_px", tamanhoPx);
+  if (modoLivre) {
+    dados.set("pos_x", painel.dataset.posX);
+    dados.set("pos_y", painel.dataset.posY);
+  }
 
   try {
     const resposta = await fetch(`/api/videos/${slug}/thumbnail/editar`, { method: "POST", body: dados });
@@ -225,7 +401,11 @@ async function salvarThumb(slug, painel) {
     painel.dataset.texto = texto;
     painel.dataset.cor = cor;
     painel.dataset.posicao = posicao;
-    painel.dataset.tamanho = tamanho;
+    painel.dataset.tamanhoPx = tamanhoPx;
+    if (!modoLivre) {
+      painel.dataset.posX = "";
+      painel.dataset.posY = "";
+    }
     const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
     if (thumbImg) thumbImg.src = resultado.thumbnail;
   } catch {

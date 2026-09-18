@@ -307,8 +307,18 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
         texto_thumb = metadados.get("thumbnail_texto") or metadados.get("titulo", slug)
         cor_thumb = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
         posicao_thumb = metadados.get("thumbnail_posicao", "baixo-centro")
-        tamanho_thumb = thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
-        thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", texto_thumb, pasta / "thumbnail.png", cor_thumb, posicao_thumb, tamanho_thumb)
+        px_thumb = metadados.get("thumbnail_tamanho_px")
+        tamanho_thumb = int(px_thumb) if isinstance(px_thumb, (int, float)) and px_thumb else thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
+        pos_x_thumb, pos_y_thumb = metadados.get("thumbnail_pos_x"), metadados.get("thumbnail_pos_y")
+        pos_livre_thumb = (pos_x_thumb, pos_y_thumb) if isinstance(pos_x_thumb, (int, float)) and isinstance(pos_y_thumb, (int, float)) else None
+        # se a base da thumbnail foi trocada manualmente (imagem custom ou
+        # outra cena), usa ela; senão continua sendo a cena 0 que acabou de
+        # ser regenerada
+        fonte_txt = pasta / "thumbnail_fonte.txt"
+        base_thumb = pasta / fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else pasta / "cena00_16x9.png"
+        if not base_thumb.exists():
+            base_thumb = pasta / "cena00_16x9.png"
+        thumbnail_mod.gerar_thumbnail(base_thumb, texto_thumb, pasta / "thumbnail.png", cor_thumb, posicao_thumb, tamanho_thumb, pos_livre_thumb)
         thumbnail_atualizada = True
 
     avisar("Pronto", 100)

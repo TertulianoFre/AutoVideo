@@ -228,6 +228,39 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .pos-cel:hover { border-color: var(--accent); }
 .pos-cel.selecionada { background: var(--accent); border-color: var(--accent); }
 
+.thumb-preview {
+  position: relative; width: 100%; max-width: 460px; aspect-ratio: 16 / 9;
+  border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
+  margin-bottom: 12px; background: var(--bg);
+  user-select: none; -webkit-user-select: none;
+}
+.thumb-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; user-select: none; }
+.thumb-preview-texto {
+  position: absolute; transform: translate(-50%, -50%);
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; text-transform: uppercase;
+  text-align: center; max-width: 90%; white-space: pre-wrap; line-height: 1.15;
+  text-shadow: -2px 0 #14130F, 2px 0 #14130F, 0 -2px #14130F, 0 2px #14130F,
+    -1.5px -1.5px #14130F, 1.5px 1.5px #14130F, -1.5px 1.5px #14130F, 1.5px -1.5px #14130F;
+  cursor: grab; touch-action: none; padding: 3px 6px;
+  user-select: none; -webkit-user-select: none;
+}
+.thumb-preview-texto:active { cursor: grabbing; }
+
+.thumb-tamanho-linha { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.thumb-tamanho-linha input[type="range"] { flex: 1; max-width: 260px; accent-color: var(--accent); }
+.thumb-tamanho-valor { min-width: 42px; }
+
+.thumb-imagens { margin-top: 14px; }
+.thumb-imagens-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.btn-upload-thumb { font-size: 12.5px; padding: 7px 12px; cursor: pointer; }
+.thumb-imagens-grade { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumb-img-opcao {
+  width: 84px; height: 47px; border-radius: 6px; overflow: hidden; padding: 0;
+  border: 2px solid var(--border); cursor: pointer; background: var(--bg); flex-shrink: 0;
+}
+.thumb-img-opcao img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-img-opcao.selecionada { border-color: var(--accent); }
+
 /* ---------- form ---------- */
 
 .novo-grid { display: flex; flex-direction: column; gap: 20px; max-width: 720px; }

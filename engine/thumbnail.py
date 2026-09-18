@@ -41,7 +41,8 @@ POSICOES = [
     "baixo-esquerda", "baixo-centro", "baixo-direita",
 ]
 _FRACAO_VERTICAL = {"topo": 0.18, "centro": 0.5, "baixo": 0.82}
-TAMANHOS = {"pequeno": 60, "medio": 80, "grande": 104}
+TAMANHOS = {"pequeno": 60, "medio": 80, "grande": 104}  # mantido só de fallback pra thumbnails antigas
+TAMANHO_FONTE_MIN, TAMANHO_FONTE_MAX = 24, 190
 MARGEM_HORIZONTAL = 60
 
 
@@ -56,11 +57,15 @@ def gerar_thumbnail(
     cor_texto: tuple[int, int, int] | None = None,
     posicao: str = "baixo-centro",
     tamanho_fonte: int = 80,
+    pos_livre: tuple[float, float] | None = None,
 ) -> Path:
+    """pos_livre: (fracao_x, fracao_y) do CENTRO do bloco de texto, cada um de
+    0.0 a 1.0 — posição arrastável de verdade, em vez da grade de 9 pontos.
+    Quando dado, sobrepõe `posicao` (que continua sendo o padrão/fallback pra
+    thumbnails antigas). Com pos_livre, o texto sempre fica centralizado no
+    ponto X escolhido (arrastar não tem conceito de "alinhar à esquerda")."""
     cor = cor_texto or COR_TEXTO
-    partes = _posicao_valida(posicao).split("-")
-    vertical, horizontal = (partes[0], "centro") if len(partes) == 1 else partes
-    tamanho_fonte = max(30, min(140, tamanho_fonte))
+    tamanho_fonte = max(TAMANHO_FONTE_MIN, min(TAMANHO_FONTE_MAX, tamanho_fonte))
     base = Image.open(imagem_base).convert("RGB").resize((LARGURA, ALTURA), Image.LANCZOS)
 
     fonte = _fonte(tamanho_fonte)
@@ -69,7 +74,18 @@ def gerar_thumbnail(
 
     altura_linha = round(tamanho_fonte * 1.12)
     altura_bloco = len(linhas) * altura_linha
-    ancora_y = ALTURA * _FRACAO_VERTICAL[vertical]
+
+    if pos_livre is not None:
+        fracao_x, fracao_y = pos_livre
+        centro_x = LARGURA * min(max(fracao_x, 0.0), 1.0)
+        ancora_y = ALTURA * min(max(fracao_y, 0.0), 1.0)
+        horizontal = "livre"
+    else:
+        partes = _posicao_valida(posicao).split("-")
+        vertical, horizontal = (partes[0], "centro") if len(partes) == 1 else partes
+        centro_x = None
+        ancora_y = ALTURA * _FRACAO_VERTICAL[vertical]
+
     y_inicial = min(max(ancora_y - altura_bloco / 2, 20), ALTURA - altura_bloco - 20)
 
     # escurece uma faixa horizontal em volta do texto (onde quer que ele esteja)
@@ -93,6 +109,8 @@ def gerar_thumbnail(
             x = MARGEM_HORIZONTAL
         elif horizontal == "direita":
             x = LARGURA - MARGEM_HORIZONTAL - largura_linha
+        elif horizontal == "livre":
+            x = min(max(centro_x - largura_linha / 2, MARGEM_HORIZONTAL), LARGURA - MARGEM_HORIZONTAL - largura_linha)
         else:
             x = (LARGURA - largura_linha) / 2
         # contorno grosso (stroke manual) pra legibilidade em qualquer fundo

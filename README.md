@@ -52,7 +52,14 @@ Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, test
 
 **Editar uma cena específica** (`engine.pipeline.regenerar_cena`, botão "cenas" na Fila): mostra cada cena do vídeo (texto + imagem) com um botão "Regenerar essa cena" — refaz só a imagem daquela cena (a IA sorteia de novo) e remonta o vídeo com ffmpeg, sem tocar no roteiro, na narração, na legenda nem nas outras cenas. Só funciona em vídeos gerados depois desse recurso existir (precisa do `metadata.json` ter a lista de cenas salva — clique em "Regenerar" uma vez em vídeos antigos pra habilitar).
 
-**Editar a thumbnail** (botão "editar thumbnail" na Fila): troca o texto exibido (independente do título do vídeo), a cor (5 opções), a posição (grade 3x3: topo/centro/baixo × esquerda/centro/direita) e o tamanho da fonte (pequena/média/grande) — sem mexer na imagem de base. Fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`, `thumbnail_posicao`, `thumbnail_tamanho`) — sobrevive a "nova thumbnail" (só troca a imagem) e a regenerar a cena 0. É posicionamento por grade fixa, não arrastar/redimensionar livre.
+**Editar a thumbnail** (botão "editar thumbnail" na Fila) — preview ao vivo com o texto arrastável em cima da imagem de fundo:
+- **Texto**: independente do título do vídeo.
+- **Cor**: 5 opções.
+- **Posição**: arraste o texto pra qualquer lugar da imagem (posição livre de verdade, salva como fração x/y), ou clique num ponto da grade 3x3 (topo/centro/baixo × esquerda/centro/direita) pra um atalho rápido — os dois modos se alternam automaticamente conforme você usa um ou outro.
+- **Tamanho da fonte**: controle deslizante de 24 a 190px (não é mais só pequeno/médio/grande).
+- **Imagem de fundo**: clique numa das imagens de cena já geradas pra trocar (sem sortear), ou envie sua própria imagem (upload) — útil porque a thumbnail é o que mais chama atenção pra alguém clicar no vídeo, então às vezes vale a pena usar uma imagem sua em vez de uma cena gerada.
+
+Tudo fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`, `thumbnail_posicao`, `thumbnail_pos_x`/`thumbnail_pos_y`, `thumbnail_tamanho_px`) e sobrevive a regenerar a cena 0 do vídeo.
 
 ### Canais (`engine/canal.py`, aba "Canais")
 
@@ -90,7 +97,6 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal **ati
 
 ## Requisitos já levantados, ainda não implementados
 
-- Editor visual de thumbnail com posição livre (arrastar o texto pra qualquer lugar, trocar fonte) — hoje a posição é uma grade fixa de 9 pontos + 3 tamanhos, não drag-and-drop.
 - Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 3 camadas combináveis (pássaros, trovão, multidão) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo.
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
@@ -110,7 +116,7 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal **ati
 
 ## Status
 
-App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do YouTube próprios de cada um, publicação sempre na conta certa), Agente sugerindo ideias, pré-visualização de roteiro (com revisão automática), narração opcional, som de fundo opcional (5 tipos, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e editável (texto/cor/posição/tamanho), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro e o canal original), editar uma cena específica sem regenerar tudo, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal ativo no perfil.
+App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do YouTube próprios de cada um, publicação sempre na conta certa), Agente sugerindo ideias, pré-visualização de roteiro (com revisão automática), narração opcional, som de fundo opcional (5 tipos, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e totalmente editável (texto/cor/posição arrastável/tamanho deslizante/imagem de fundo, com upload próprio), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro e o canal original), editar uma cena específica sem regenerar tudo, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal ativo no perfil.
 
 ## Checklist do Google Cloud Console (feito uma vez, por você — vale pra todos os canais)
 
@@ -124,4 +130,3 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 ## Próximos passos
 
 1. Mais camadas de som combináveis (hoje só pássaros/trovão/multidão) e, mais pra frente, sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição
-2. Posição livre (arrastar) da thumbnail, em vez da grade fixa de 9 pontos de hoje

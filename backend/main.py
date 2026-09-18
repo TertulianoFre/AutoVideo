@@ -3,6 +3,7 @@
 Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 """
 
+import io
 import json
 import random
 import sys
@@ -17,9 +18,10 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 
 from backend import jobs
 from engine import agendador, agente, canal, roteiro as roteiro_mod
@@ -275,6 +277,59 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
     return {"job_id": job.id}
 
 
+def _thumbnail_base_url(pasta: Path) -> str | None:
+    """URL da imagem de cena usada como fundo da thumbnail atual (sem o
+    texto/overlay desenhado) — usada pra arrastar o texto em cima dela."""
+    fonte_txt = pasta / "thumbnail_fonte.txt"
+    nome = fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else "cena00_16x9.png"
+    caminho = pasta / nome
+    if not caminho.exists():
+        candidatas = sorted(pasta.glob("cena*_16x9.png"))
+        if not candidatas:
+            return None
+        caminho = candidatas[0]
+    return f"/videos/{pasta.name}/{caminho.name}?v={int(caminho.stat().st_mtime)}"
+
+
+def _pos_livre_de(metadados: dict) -> tuple | None:
+    """(fracao_x, fracao_y) salvos de um arraste, ou None se a thumbnail usa a
+    grade de 9 pontos (thumbnail_posicao) — arrastar sempre tem prioridade
+    sobre a grade quando os dois estão salvos."""
+    x, y = metadados.get("thumbnail_pos_x"), metadados.get("thumbnail_pos_y")
+    return (x, y) if isinstance(x, (int, float)) and isinstance(y, (int, float)) else None
+
+
+def _tamanho_fonte_de(metadados: dict) -> int:
+    """Tamanho em pixels: usa o valor livre salvo (thumbnail_tamanho_px, do
+    controle deslizante) se existir; senão cai pro preset antigo
+    (pequeno/médio/grande) de thumbnails salvas antes desse controle existir."""
+    px = metadados.get("thumbnail_tamanho_px")
+    if isinstance(px, (int, float)) and px:
+        return int(px)
+    return thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
+
+
+def _base_valida_ou_erro(pasta: Path) -> Path | JSONResponse:
+    """Imagem de cena/custom atualmente usada como base, ou um erro se a
+    pasta não tiver nenhuma."""
+    fonte_txt = pasta / "thumbnail_fonte.txt"
+    fonte_nome = fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else "cena00_16x9.png"
+    base = pasta / fonte_nome
+    if base.exists():
+        return base
+    candidatas = sorted(pasta.glob("cena*_16x9.png"))
+    if not candidatas:
+        return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
+    return candidatas[0]
+
+
+def _rerenderizar_thumbnail(pasta: Path, base: Path, metadados: dict) -> None:
+    texto = metadados.get("thumbnail_texto") or metadados.get("titulo", pasta.name)
+    cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
+    posicao = metadados.get("thumbnail_posicao", "baixo-centro")
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados))
+
+
 @app.post("/api/videos/{slug}/thumbnail/regenerar")
 def api_regenerar_thumbnail(slug: str) -> dict:
     """Refaz só a thumbnail (rápido, não mexe no vídeo) — sorteia uma imagem
@@ -290,20 +345,100 @@ def api_regenerar_thumbnail(slug: str) -> dict:
         return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    texto = metadados.get("thumbnail_texto") or metadados.get("titulo", slug)
-    cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
-    posicao = metadados.get("thumbnail_posicao", "baixo-centro")
-    tamanho_fonte = thumbnail_mod.TAMANHOS.get(metadados.get("thumbnail_tamanho", "medio"), 80)
 
     atual = pasta / "thumbnail_fonte.txt"
     fonte_anterior = atual.read_text(encoding="utf-8").strip() if atual.exists() else None
     opcoes = [c for c in candidatas if c.name != fonte_anterior] or candidatas
     escolhida = random.choice(opcoes)
 
-    thumbnail_mod.gerar_thumbnail(escolhida, texto, pasta / "thumbnail.png", cor, posicao, tamanho_fonte)
+    _rerenderizar_thumbnail(pasta, escolhida, metadados)
     atual.write_text(escolhida.name, encoding="utf-8")
 
-    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
+    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}", "thumbnail_base": _thumbnail_base_url(pasta)}
+
+
+@app.get("/api/videos/{slug}/thumbnail/imagens")
+def api_listar_imagens_thumbnail(slug: str) -> dict:
+    """Todas as imagens de cena (+ a customizada enviada, se houver) que dá
+    pra escolher como base da thumbnail, pra mostrar uma galeria pra clicar
+    em vez de só sortear aleatoriamente."""
+    pasta = RAIZ_SAIDA / slug
+    if not pasta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    fonte_txt = pasta / "thumbnail_fonte.txt"
+    atual = fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else "cena00_16x9.png"
+
+    candidatas = sorted(pasta.glob("cena*_16x9.png"))
+    custom = pasta / "thumbnail_custom.png"
+    if custom.exists():
+        candidatas.append(custom)
+
+    return {
+        "imagens": [
+            {"nome": c.name, "url": f"/videos/{slug}/{c.name}?v={int(c.stat().st_mtime)}", "atual": c.name == atual}
+            for c in candidatas
+        ]
+    }
+
+
+@app.post("/api/videos/{slug}/thumbnail/escolher-imagem")
+def api_escolher_imagem_thumbnail(slug: str, imagem: str = Form(...)) -> dict:
+    """Troca a imagem de base da thumbnail pra uma cena específica (em vez de
+    sortear) ou pra imagem customizada já enviada."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    # só aceita nomes que já existem de verdade na pasta do vídeo (cena*_16x9.png
+    # ou a customizada) — nunca um caminho arbitrário vindo do cliente
+    nome = Path(imagem).name
+    validos = {c.name for c in pasta.glob("cena*_16x9.png")}
+    custom = pasta / "thumbnail_custom.png"
+    if custom.exists():
+        validos.add(custom.name)
+    if nome not in validos:
+        return JSONResponse({"erro": "imagem inválida"}, status_code=400)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    _rerenderizar_thumbnail(pasta, pasta / nome, metadados)
+    (pasta / "thumbnail_fonte.txt").write_text(nome, encoding="utf-8")
+
+    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}", "thumbnail_base": _thumbnail_base_url(pasta)}
+
+
+TAMANHO_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB, só sanidade
+
+
+@app.post("/api/videos/{slug}/thumbnail/upload")
+async def api_upload_imagem_thumbnail(slug: str, arquivo: UploadFile = File(...)) -> dict:
+    """Sobe uma imagem sua (ex: uma foto real, um design pronto) pra usar
+    como base da thumbnail, no lugar de uma cena gerada."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAX_UPLOAD_BYTES:
+        return JSONResponse({"erro": "arquivo maior que 20MB"}, status_code=400)
+
+    try:
+        imagem = Image.open(io.BytesIO(conteudo))
+        imagem.load()  # decodifica agora — detecta arquivo corrompido ou que não é imagem de verdade
+        imagem = imagem.convert("RGB")
+    except Exception:
+        return JSONResponse({"erro": "não consegui abrir esse arquivo como imagem"}, status_code=400)
+
+    caminho_base = pasta / "thumbnail_custom.png"
+    imagem.save(caminho_base, "PNG")
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    _rerenderizar_thumbnail(pasta, caminho_base, metadados)
+    (pasta / "thumbnail_fonte.txt").write_text(caminho_base.name, encoding="utf-8")
+
+    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}", "thumbnail_base": _thumbnail_base_url(pasta)}
 
 
 @app.post("/api/videos/{slug}/thumbnail/editar")
@@ -312,11 +447,15 @@ def api_editar_thumbnail(
     texto: str = Form(...),
     cor: str = Form(""),
     posicao: str = Form("baixo-centro"),
-    tamanho: str = Form("medio"),
+    tamanho_px: int = Form(80),
+    pos_x: float | None = Form(None),
+    pos_y: float | None = Form(None),
 ) -> dict:
-    """Troca o texto, a cor, a posição e o tamanho da thumbnail, mantendo a
-    mesma imagem de base atual. Fica salvo pro vídeo (sobrevive a "nova
-    thumbnail" e a regenerar a cena 0) até você editar de novo."""
+    """Troca o texto, a cor, o tamanho (em pixels, controle deslizante) e a
+    posição da thumbnail (grade de 9 pontos OU arrastar livre — se pos_x/pos_y
+    vierem preenchidos, arrastar manda e some com a grade), mantendo a mesma
+    imagem de base atual. Fica salvo pro vídeo (sobrevive a "nova thumbnail" e
+    a regenerar a cena 0) até você editar de novo."""
     pasta = RAIZ_SAIDA / slug
     caminho_meta = pasta / "metadata.json"
     if not caminho_meta.exists():
@@ -326,25 +465,27 @@ def api_editar_thumbnail(
     if not texto:
         return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
 
-    fonte_txt = pasta / "thumbnail_fonte.txt"
-    fonte_nome = fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else "cena00_16x9.png"
-    base = pasta / fonte_nome
-    if not base.exists():
-        candidatas = sorted(pasta.glob("cena*_16x9.png"))
-        if not candidatas:
-            return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
-        base = candidatas[0]
+    base = _base_valida_ou_erro(pasta)
+    if isinstance(base, JSONResponse):
+        return base
 
     cor_rgb = thumbnail_mod.cor_de_hex(cor)
     posicao = posicao if posicao in thumbnail_mod.POSICOES else "baixo-centro"
-    tamanho = tamanho if tamanho in thumbnail_mod.TAMANHOS else "medio"
-    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb, posicao, thumbnail_mod.TAMANHOS[tamanho])
+    tamanho_px = max(thumbnail_mod.TAMANHO_FONTE_MIN, min(thumbnail_mod.TAMANHO_FONTE_MAX, tamanho_px))
+    pos_livre = (pos_x, pos_y) if pos_x is not None and pos_y is not None else None
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb, posicao, tamanho_px, pos_livre)
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     metadados["thumbnail_texto"] = texto
     metadados["thumbnail_cor"] = cor.strip().lstrip("#") if cor_rgb else ""
     metadados["thumbnail_posicao"] = posicao
-    metadados["thumbnail_tamanho"] = tamanho
+    if pos_livre is not None:
+        metadados["thumbnail_pos_x"], metadados["thumbnail_pos_y"] = pos_livre
+    else:
+        metadados.pop("thumbnail_pos_x", None)
+        metadados.pop("thumbnail_pos_y", None)
+    metadados["thumbnail_tamanho_px"] = tamanho_px
+    metadados.pop("thumbnail_tamanho", None)
     caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
@@ -458,7 +599,10 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_texto": metadados.get("thumbnail_texto") or metadados.get("titulo") or pasta.name.replace("-", " "),
                 "thumbnail_cor": metadados.get("thumbnail_cor", ""),
                 "thumbnail_posicao": metadados.get("thumbnail_posicao", "baixo-centro"),
-                "thumbnail_tamanho": metadados.get("thumbnail_tamanho", "medio"),
+                "thumbnail_tamanho_px": _tamanho_fonte_de(metadados),
+                "thumbnail_pos_x": metadados.get("thumbnail_pos_x"),
+                "thumbnail_pos_y": metadados.get("thumbnail_pos_y"),
+                "thumbnail_base": _thumbnail_base_url(pasta),
             }
         )
     return videos
