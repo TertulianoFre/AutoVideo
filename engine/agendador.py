@@ -49,7 +49,7 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     tags_path = pasta / "tags.txt"
     tags = [t.strip() for t in tags_path.read_text(encoding="utf-8").split(",")] if tags_path.exists() else []
     roteiro_path = pasta / "roteiro.txt"
-    descricao = roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo
+    descricao = metadados.get("descricao_youtube") or (roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo)
 
     if v16.exists() and not metadados.get("youtube_video_id"):
         id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, privacidade, is_short=False)

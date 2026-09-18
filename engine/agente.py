@@ -52,6 +52,12 @@ PROMPT_SISTEMA_LIVRE = (
     "de postagem de um vídeo específico que está na lista (ache o slug pelo título mais parecido).\n"
     '{"acao": "cancelar", "slug": "...", "texto": "confirmação curta"} — quando o usuário pedir pra cancelar, '
     "excluir ou remover a postagem/vídeo da fila (ache o slug pelo título mais parecido; isso apaga o vídeo).\n"
+    '{"acao": "editar", "slug": "...", "titulo": "novo título ou null", "descricao_youtube": "descrição completa pro YouTube ou null", '
+    '"privacidade": "private|unlisted|public ou null", "tags": ["..."] ou null, "thumbnail_texto": "texto da thumbnail ou null", '
+    '"texto": "confirmação curta"} — quando o usuário pedir pra mudar/melhorar o título, a descrição, as tags, a privacidade '
+    "ou o texto da thumbnail de um vídeo da lista. Preencha SÓ o que ele pediu (o resto null). Se pediu pra 'melhorar' ou "
+    "'escrever' a descrição, ESCREVA você mesmo uma descrição envolvente (2-4 parágrafos curtos, com chamada pra se inscrever "
+    "e algumas hashtags no fim) em descricao_youtube; se pediu pra melhorar o título, proponha um título melhor (até 100 caracteres).\n"
     "Se o pedido mencionar um vídeo que não existe na lista, ou não deixar claro qual data/vídeo, "
     'use "acao": "responder" explicando o que faltou — nunca invente um slug que não estava na lista.'
 )
@@ -88,7 +94,7 @@ def responder_livre(mensagem: str, contexto_canal: str = "", videos: list | None
 
     try:
         dados = json.loads(bruto)
-        if isinstance(dados, dict) and dados.get("acao") in ("responder", "reagendar", "cancelar"):
+        if isinstance(dados, dict) and dados.get("acao") in ("responder", "reagendar", "cancelar", "editar"):
             return dados
     except (json.JSONDecodeError, AttributeError):
         pass

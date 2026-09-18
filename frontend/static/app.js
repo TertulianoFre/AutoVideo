@@ -1338,7 +1338,7 @@ formAgenteLivre.addEventListener("submit", async (evento) => {
     }
 
     agenteLivreResposta.textContent = resultado.resposta || "";
-    if (resultado.acao === "reagendar" || resultado.acao === "cancelar") {
+    if (resultado.acao === "reagendar" || resultado.acao === "cancelar" || resultado.acao === "editar") {
       campoMensagem.value = "";
       carregarFila();
       carregarPainel();

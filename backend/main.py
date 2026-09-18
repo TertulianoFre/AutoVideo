@@ -212,6 +212,66 @@ _RE_DATA_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 _RE_HORA = re.compile(r"\d{2}:\d{2}")
 
 
+def _aplicar_edicao_do_agente(pedido: dict) -> dict:
+    """Aplica título/descrição/privacidade/tags/texto da thumbnail num vídeo,
+    validando tudo contra o disco. Vídeo já publicado também é atualizado no
+    YouTube (videos.update)."""
+    slug = str(pedido.get("slug") or "")
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not slug or "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return {"acao": "erro", "resposta": f'Não achei nenhum vídeo "{slug}" pra editar — confira o título e tente de novo.'}
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    mudou = []
+    titulo = str(pedido.get("titulo") or "").strip()[:100]
+    if titulo and titulo != metadados.get("titulo"):
+        metadados["titulo"] = titulo  # a pasta (slug) continua a mesma
+        mudou.append("título")
+    descricao = str(pedido.get("descricao_youtube") or "").strip()[:5000]
+    if descricao:
+        metadados["descricao_youtube"] = descricao
+        mudou.append("descrição")
+    if pedido.get("privacidade") in ("private", "unlisted", "public") and pedido["privacidade"] != metadados.get("privacidade"):
+        metadados["privacidade"] = pedido["privacidade"]
+        mudou.append("privacidade")
+    tags = pedido.get("tags")
+    if isinstance(tags, list) and tags:
+        limpas = youtube_mod._tags_validas([str(t) for t in tags])
+        if limpas:
+            (pasta / "tags.txt").write_text(", ".join(limpas), encoding="utf-8")
+            mudou.append("tags")
+    texto_thumb = str(pedido.get("thumbnail_texto") or "").strip()[:80]
+    if texto_thumb:
+        metadados["thumbnail_texto"] = texto_thumb
+        base = _base_valida_ou_erro(pasta)
+        if not isinstance(base, JSONResponse):
+            _rerenderizar_thumbnail(pasta, base, metadados)
+        mudou.append("texto da thumbnail")
+    if not mudou:
+        return {"acao": "responder", "resposta": pedido.get("texto") or "Não entendi o que mudar nesse vídeo — pode dizer de outro jeito?"}
+
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    resposta = f'Atualizei {", ".join(mudou)} de "{metadados.get("titulo", slug)}".'
+
+    ids = [(metadados.get("youtube_video_id"), False), (metadados.get("youtube_short_id"), True)]
+    if any(i for i, _ in ids) and set(mudou) & {"título", "descrição", "privacidade", "tags"}:
+        from engine import agendador as agendador_mod
+        tags_arq = pasta / "tags.txt"
+        lista_tags = [t.strip() for t in tags_arq.read_text(encoding="utf-8").split(",")] if tags_arq.exists() else []
+        roteiro_arq = pasta / "roteiro.txt"
+        desc_final = metadados.get("descricao_youtube") or (roteiro_arq.read_text(encoding="utf-8") if roteiro_arq.exists() else metadados.get("titulo", ""))
+        conta = agendador_mod._conta_youtube_do_video(metadados)
+        try:
+            for video_id, eh_short in ids:
+                if video_id:
+                    youtube_mod.atualizar_video(conta, video_id, metadados.get("titulo", slug), desc_final, lista_tags, metadados.get("privacidade") or "public", eh_short)
+            resposta += " Também atualizado no YouTube."
+        except Exception as erro:
+            resposta += f" Mas não consegui atualizar no YouTube ({erro}). Se for erro de permissão, reconecte a conta na aba Canais e peça de novo."
+    return {"acao": "editar", "resposta": resposta, "slug": slug}
+
+
 @app.post("/api/agente/perguntar")
 def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
     """Campo livre do agente: responde perguntas/pede ideias, ou executa um
@@ -234,6 +294,9 @@ def api_agente_perguntar(mensagem: str = Form(...)) -> JSONResponse:
         if not _excluir_video(slug):
             return JSONResponse({"acao": "erro", "resposta": f'Não achei nenhum vídeo "{slug}" pra cancelar — confira o título e tente de novo.'})
         return JSONResponse({"acao": "cancelar", "resposta": f'Cancelei e apaguei "{titulo_video}" da fila — não será publicado.', "slug": slug})
+
+    if resultado.get("acao") == "editar":
+        return JSONResponse(_aplicar_edicao_do_agente(resultado))
 
     if resultado.get("acao") != "reagendar":
         return JSONResponse({"acao": "responder", "resposta": resultado.get("texto", "")})

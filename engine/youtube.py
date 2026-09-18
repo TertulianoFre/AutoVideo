@@ -22,6 +22,7 @@ ESCOPOS = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",  # pro painel: inscritos, visualizações
     "https://www.googleapis.com/auth/yt-analytics.readonly",  # pro painel: gráficos por dia (YouTube Analytics API)
+    "https://www.googleapis.com/auth/youtube",  # pro agente editar título/descrição/privacidade de vídeos já publicados (videos.update)
 ]
 CATEGORIA_PADRAO = "22"  # "Pessoas e blogs" — genérica, serve pra a maioria dos vídeos do canal
 
@@ -185,6 +186,24 @@ def definir_thumbnail(nome_conta: str, video_id: str, caminho_imagem: Path) -> N
     youtube = build("youtube", "v3", credentials=creds)
     youtube.thumbnails().set(
         videoId=video_id, media_body=MediaFileUpload(str(caminho_imagem), mimetype="image/png")
+    ).execute()
+
+
+def atualizar_video(nome_conta: str, video_id: str, titulo: str, descricao: str, tags: list, privacidade: str, is_short: bool = False) -> None:
+    """Edita um vídeo JÁ publicado (videos.update). Precisa do escopo
+    'youtube' — contas conectadas antes dele existir precisam reconectar."""
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+    servico = build("youtube", "v3", credentials=creds)
+    titulo_final = f"{titulo} #Shorts" if is_short else titulo
+    servico.videos().update(
+        part="snippet,status",
+        body={
+            "id": video_id,
+            "snippet": {"title": titulo_final[:100], "description": descricao[:5000], "tags": _tags_validas(tags), "categoryId": CATEGORIA_PADRAO},
+            "status": {"privacyStatus": privacidade, "selfDeclaredMadeForKids": False},
+        },
     ).execute()
 
 
