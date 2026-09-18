@@ -1119,6 +1119,22 @@ const progressoPct = document.getElementById("progresso-pct");
 
 let poller = null;
 
+document.getElementById("btn-limpar-novo").addEventListener("click", () => {
+  form.reset();
+  if (narracaoGravadaBlob) btnRemoverNarracaoGravada.click();
+  selecionadasBase = [];
+  document.getElementById("campo-imagens-base").value = "";
+  montarSeletorBaseNovoVideo();
+  // form.reset() volta os valores, mas não desfaz o que o JS esconde/desabilita
+  [campoSemNarracao, campoSomFundoAtivo, campoSomFundoTipo].forEach((campo) => campo.dispatchEvent(new Event("change")));
+  campoDuracao.value = 1;
+  previewRoteiroStatus.textContent = "";
+  btnPreviewRoteiro.textContent = "Pré-visualizar roteiro";
+  resultadoCard.hidden = true;
+  erroCard.hidden = true;
+  window.scrollTo(0, 0);
+});
+
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   resultadoCard.hidden = true;
