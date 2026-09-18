@@ -200,3 +200,104 @@ def duracao_video(nome: str) -> float:
         except ValueError:
             _cache_duracao[chave] = 0.0
     return _cache_duracao[chave]
+
+
+# ---------------------------------------------------------------------------
+# cenas padrão: cenas prontas (narração + imagem/vídeo opcional) pra encaixar em qualquer vídeo
+# (ex: "se inscreva no canal e deixe o seu like"). A narração é sintetizada com a voz do vídeo
+# na hora de usar; a mídia vem da própria Base.
+# ---------------------------------------------------------------------------
+
+import json
+import uuid
+
+ARQUIVO_CENAS_PADRAO = RAIZ / "cenas_padrao.json"
+
+
+def _imagem_inscreva_se() -> str:
+    """Imagem inicial da cena "Inscreva-se": botão vermelho num fundo claro. Você pode trocar por um vídeo seu."""
+    from PIL import ImageDraw, ImageFont
+
+    _garantir_pastas()
+    destino = PASTA_IMAGENS / "inscreva-se-padrao.png"
+    if destino.exists():
+        return destino.name
+    largura, altura = 1920, 1080
+    fundo = Image.new("RGB", (largura, altura), (238, 238, 240))
+    d = ImageDraw.Draw(fundo)
+    for y in range(altura):  # degradê suave, mais escuro nas bordas
+        tom = int(236 - 26 * abs(y - altura / 2) / (altura / 2))
+        d.line([(0, y), (largura, y)], fill=(tom, tom, tom + 2))
+    fonte = None
+    for caminho in ("C:/Windows/Fonts/impact.ttf", "C:/Windows/Fonts/arialbd.ttf"):
+        if Path(caminho).exists():
+            fonte = ImageFont.truetype(caminho, 150)
+            break
+    fonte = fonte or ImageFont.load_default()
+    x0, y0, x1, y1 = 330, 400, 1590, 640
+    d.rounded_rectangle((x0 + 10, y0 + 16, x1 + 10, y1 + 16), radius=40, fill=(150, 150, 150))
+    d.rounded_rectangle((x0, y0, x1, y1), radius=40, fill=(214, 20, 20))
+    d.rounded_rectangle((x0 + 50, y0 + 60, x0 + 200, y0 + 180), radius=26, fill=(255, 255, 255))
+    d.polygon([(x0 + 100, y0 + 85), (x0 + 100, y0 + 155), (x0 + 160, y0 + 120)], fill=(214, 20, 20))
+    d.text((x0 + 250, y0 + 28), "INSCREVA-SE", font=fonte, fill=(255, 255, 255))
+    pequena = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 74) if Path("C:/Windows/Fonts/arialbd.ttf").exists() else fonte
+    d.text((largura // 2, 790), "e deixe o seu LIKE", font=pequena, fill=(60, 60, 60), anchor="mm")
+    fundo.save(destino, "PNG")
+    return destino.name
+
+
+def _ler_cenas_padrao() -> list:
+    try:
+        return json.loads(ARQUIVO_CENAS_PADRAO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def listar_cenas_padrao() -> list:
+    """Lista as cenas padrão. Na primeira vez cria a "Inscreva-se e curta" pronta pra usar."""
+    _garantir_pastas()
+    cenas = _ler_cenas_padrao()
+    if cenas is None:
+        cenas = [{
+            "id": "inscreva-se",
+            "nome": "Inscreva-se e curta",
+            "texto": "Gostou do vídeo? Então se inscreva no canal e deixe o seu like!",
+            "midia_tipo": "imagem",
+            "midia_nome": _imagem_inscreva_se(),
+        }]
+        _gravar_cenas_padrao(cenas)
+    return cenas
+
+
+def _gravar_cenas_padrao(cenas: list) -> None:
+    RAIZ.mkdir(parents=True, exist_ok=True)
+    ARQUIVO_CENAS_PADRAO.write_text(json.dumps(cenas, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, midia_nome: str) -> dict:
+    nome, texto = nome.strip()[:80], texto.strip()[:600]
+    if not nome or len(texto) < 3:
+        raise ValueError("dê um nome e o texto da narração dessa cena")
+    if midia_tipo == "imagem" and caminho_imagem_valida(midia_nome) is None:
+        raise ValueError("imagem não encontrada na Base")
+    if midia_tipo == "video" and caminho_video_valido(midia_nome) is None:
+        raise ValueError("vídeo não encontrado na Base")
+    if midia_tipo not in ("imagem", "video"):
+        midia_tipo, midia_nome = "", ""
+    cenas = listar_cenas_padrao()
+    item = next((c for c in cenas if c["id"] == id_), None) if id_ else None
+    if item is None:
+        item = {"id": uuid.uuid4().hex[:10]}
+        cenas.append(item)
+    item.update(nome=nome, texto=texto, midia_tipo=midia_tipo, midia_nome=midia_nome)
+    _gravar_cenas_padrao(cenas)
+    return item
+
+
+def remover_cena_padrao(id_: str) -> bool:
+    cenas = listar_cenas_padrao()
+    restantes = [c for c in cenas if c["id"] != id_]
+    if len(restantes) == len(cenas):
+        return False
+    _gravar_cenas_padrao(restantes)
+    return True

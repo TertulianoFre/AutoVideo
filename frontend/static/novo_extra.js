@@ -145,19 +145,32 @@ document.getElementById("btn-roteiro-do-video").addEventListener("click", () => 
 
 // ---------------- ouvir amostra da voz ----------------
 
+let audioAmostra = null;
+
 document.getElementById("btn-ouvir-voz").addEventListener("click", async (ev) => {
   const botao = ev.currentTarget;
-  const original = botao.textContent;
-  botao.disabled = true;
+  const ROTULO = "▶ Ouvir";
+  if (audioAmostra) { // já tocando: o clique pausa
+    audioAmostra.pause();
+    audioAmostra = null;
+    botao.textContent = ROTULO;
+    return;
+  }
   botao.textContent = "carregando…";
+  const audio = new Audio(`/api/voz/amostra?voz=${encodeURIComponent(formNovo.voz.value)}&idioma=${encodeURIComponent(formNovo.idioma.value)}`);
+  audioAmostra = audio;
+  const terminou = () => { if (audioAmostra === audio) audioAmostra = null; botao.textContent = ROTULO; };
+  audio.addEventListener("ended", terminou);
+  audio.addEventListener("error", terminou);
   try {
-    const audio = new Audio(`/api/voz/amostra?voz=${encodeURIComponent(formNovo.voz.value)}&idioma=${encodeURIComponent(formNovo.idioma.value)}`);
-    audio.addEventListener("ended", () => { botao.disabled = false; botao.textContent = original; });
-    audio.addEventListener("error", () => { botao.disabled = false; botao.textContent = original; });
     await audio.play();
-    botao.textContent = "tocando…";
+    if (audioAmostra === audio) botao.textContent = "⏸ Pausar";
   } catch {
-    botao.disabled = false;
-    botao.textContent = original;
+    terminou();
   }
 });
+
+// trocar a voz ou o idioma com a amostra tocando: para a amostra antiga
+["voz", "idioma"].forEach((nome) => formNovo[nome].addEventListener("change", () => {
+  if (audioAmostra) { audioAmostra.pause(); audioAmostra = null; document.getElementById("btn-ouvir-voz").textContent = "▶ Ouvir"; }
+}));

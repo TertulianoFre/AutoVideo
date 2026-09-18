@@ -463,7 +463,7 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
     # --- áudio: narração original com uma pausa depois de cada cena que ganhou tempo ---
     avisar("Refazendo o áudio com as pausas", 10)
     natural_audio = metadados.get("audio_natural") or metadados.get("audio_arquivo")
-    if any(abs(e) > 0.01 for e in extras):
+    if True:  # sempre refaz: o áudio final nunca é reaproveitado (pode ter pausas de uma edição anterior)
         filtros, t, n = [], 0.0, len(cenas)
         for i, (nat, ext) in enumerate(zip(naturais, extras)):
             inicio = t
@@ -494,8 +494,6 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
                 raise RuntimeError(f"FFmpeg falhou ao gerar o áudio final:\n{r.stderr[-1500:]}")
         com_pausas.unlink(missing_ok=True)
         audio_path = final
-    else:
-        audio_path = pasta / natural_audio
 
     metadados.update(cenas=cenas, audio_natural=natural_audio, audio_arquivo=audio_path.name, aprovado=False)
     caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -520,6 +518,190 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
         nomes[formato] = saida.name
     avisar("Pronto", 100)
     return {"video_16_9": nomes.get("16:9"), "video_9_16": nomes.get("9:16")}
+
+
+def editar_estrutura(
+    slug: str, operacao: str, indice: int | None = None, posicao: int | None = None, texto: str = "",
+    descricao_imagem: str = "", midia_tipo: str = "", midia_nome: str = "", edicoes: dict | None = None,
+    progresso: Callable[[str, float], None] | None = None,
+) -> dict:
+    """Muda a estrutura do vídeo SEM regenerar tudo: "adicionar" uma cena (narração nova + imagem/vídeo),
+    "remover" uma (com a fala dela) ou "substituir" o texto de várias (só elas são narradas de novo; as outras
+    falas, imagens e vídeos ficam iguais). O áudio natural é remontado na nova ordem, as imagens são
+    renumeradas, o roteiro passa a ter um parágrafo por cena e no fim tempos/legenda/vídeos são refeitos."""
+    import subprocess
+
+    from engine.ferramentas import caminho_ffmpeg
+
+    def avisar(etapa: str, pct: float) -> None:
+        if progresso is not None:
+            progresso(etapa, pct)
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+    m = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if m.get("publicado"):
+        raise RuntimeError("Esse vídeo já foi publicado.")
+    if m.get("sem_narracao") or m.get("narracao_customizada"):
+        raise RuntimeError("Só dá pra editar cenas em vídeo com narração por IA (com áudio seu, o texto precisa continuar igual ao áudio).")
+    cenas = m.get("cenas") or []
+    narracao = pasta / (m.get("narracao_arquivo") or "narracao.mp3")
+    if not cenas or not narracao.exists() or not (pasta / "cues.json").exists():
+        raise RuntimeError('Esse vídeo foi gerado antes dessa edição existir — use "Regenerar" uma vez para habilitar.')
+
+    naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
+    inicios = [0.0]
+    for n in naturais:
+        inicios.append(inicios[-1] + n)
+    ordem = list(range(len(cenas)))  # >= 0: cena antiga; < 0: peça nova (-1 = novos[0], -2 = novos[1]...)
+    novos: list = []                 # peças narradas agora: {"texto","arquivo","dur","cues","substitui"}
+    idioma, voz = m.get("idioma", "pt-BR"), m.get("voz", "mulher")
+
+    def narrar(txt: str, k: int) -> dict:
+        arquivo = pasta / f"_nova_{k}.mp3"
+        sm = tts.sintetizar(txt, idioma, voz, arquivo)
+        return {"texto": txt, "arquivo": arquivo, "dur": tts.duracao_do_audio(arquivo),
+                "cues": [(c.start.total_seconds(), c.end.total_seconds(), c.content) for c in sm.cues], "substitui": None}
+
+    if operacao == "remover":
+        if indice is None or not (0 <= indice < len(cenas)) or len(cenas) < 2:
+            raise RuntimeError("Cena inexistente ou única (o vídeo precisa de pelo menos uma cena).")
+        ordem.remove(indice)
+    elif operacao == "adicionar":
+        if len(texto.strip()) < 3:
+            raise RuntimeError("Escreva o texto que será narrado nessa cena.")
+        avisar("Narrando a cena nova", 8)
+        novos.append(narrar(texto.strip(), 0))
+        ordem.insert(len(cenas) if posicao is None else max(0, min(int(posicao), len(cenas))), -1)
+    elif operacao == "substituir":
+        pedidos = {int(k): str(v).strip() for k, v in (edicoes or {}).items()}
+        if not pedidos or any(not (0 <= i < len(cenas)) or len(t) < 3 for i, t in pedidos.items()):
+            raise RuntimeError("Edição inválida (cena inexistente ou texto vazio).")
+        for n, (i, txt) in enumerate(sorted(pedidos.items())):
+            avisar(f"Narrando o texto novo ({n + 1}/{len(pedidos)})", 8 + 14 * n / len(pedidos))
+            peca = narrar(txt, n)
+            peca["substitui"] = i
+            novos.append(peca)
+            ordem[i] = -(n + 1)
+    else:
+        raise RuntimeError("Operação inválida.")
+
+    # --- narração natural remontada na nova ordem ---
+    avisar("Remontando a narração", 24)
+    entradas = ["-i", str(narracao)]
+    for peca in novos:
+        entradas += ["-i", str(peca["arquivo"])]
+    filtros = []
+    for k, i in enumerate(ordem):
+        if i < 0:
+            fonte, corte = f"[{-i}:a]", ""
+        else:
+            fonte = "[0:a]"
+            corte = f"atrim=start={inicios[i]:.3f}" + (f":end={inicios[i + 1]:.3f}" if i < len(cenas) - 1 else "") + ","
+        filtros.append(f"{fonte}{corte}asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo[p{k}]")
+    filtros.append("".join(f"[p{k}]" for k in range(len(ordem))) + f"concat=n={len(ordem)}:v=0:a=1[saida]")
+    nova_narracao = pasta / "narracao_editada.mp3"
+    r = subprocess.run(
+        [caminho_ffmpeg(), "-y", *entradas, "-filter_complex", ";".join(filtros), "-map", "[saida]", "-c:a", "libmp3lame", "-q:a", "3", str(nova_narracao)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"FFmpeg falhou ao remontar a narração:\n{r.stderr[-1500:]}")
+
+    # --- cues (tempos das palavras) na nova ordem ---
+    antigos = json.loads((pasta / "cues.json").read_text(encoding="utf-8"))
+    novos_cues, deslocamento = [], 0.0
+    for i in ordem:
+        if i < 0:
+            peca = novos[-i - 1]
+            novos_cues += [{"start": s + deslocamento, "end": e + deslocamento, "content": c} for s, e, c in peca["cues"]]
+            deslocamento += peca["dur"]
+        else:
+            ini, fim = inicios[i], inicios[i + 1]
+            novos_cues += [
+                {"start": c["start"] - ini + deslocamento, "end": c["end"] - ini + deslocamento, "content": c["content"]}
+                for c in antigos if ini - 1e-6 <= c["start"] < fim - 1e-6 or (i == len(cenas) - 1 and c["start"] >= ini - 1e-6)
+            ]
+            deslocamento += naturais[i]
+    (pasta / "cues.json").write_text(json.dumps(novos_cues, ensure_ascii=False), encoding="utf-8")
+
+    # --- arquivos de imagem/vídeo das cenas renumerados (a cena substituída leva os dela junto) ---
+    avisar("Reorganizando as imagens", 40)
+    formatos_ativos = _formatos_de(m.get("formatos", "ambos"))
+    temporarios = {}
+    for k_antigo in range(len(cenas)):
+        for suf in ("16x9", "9x16"):
+            for ext in (".png", ".mp4", ".fonte"):
+                origem = pasta / f"cena{k_antigo:02d}_{suf}{ext}"
+                if origem.exists():
+                    tmp = pasta / f"_mover_{k_antigo:02d}_{suf}{ext}"
+                    origem.rename(tmp)
+                    temporarios[(k_antigo, suf, ext)] = tmp
+    mapa_indices = {}
+    for k_novo, i in enumerate(ordem):
+        antigo = i if i >= 0 else novos[-i - 1]["substitui"]
+        if antigo is None:
+            continue
+        mapa_indices[antigo] = k_novo
+        for (k_antigo, suf, ext), tmp in list(temporarios.items()):
+            if k_antigo == antigo:
+                tmp.rename(pasta / f"cena{k_novo:02d}_{suf}{ext}")
+                del temporarios[(k_antigo, suf, ext)]
+    for tmp in temporarios.values():  # o que sobrou é da cena removida
+        tmp.unlink(missing_ok=True)
+
+    def remapear(mapa: dict | None) -> dict:
+        return {str(mapa_indices[int(k)]): v for k, v in (mapa or {}).items() if int(k) in mapa_indices}
+
+    imagens_base = remapear(m.get("imagens_base_cenas"))
+    videos_base = remapear(m.get("videos_base_cenas"))
+    descricoes = remapear(m.get("descricoes_cenas"))
+
+    # --- imagem/vídeo da cena nova (só em "adicionar") ---
+    if operacao == "adicionar":
+        k_nova = ordem.index(-1)
+        dur_nova = novos[0]["dur"]
+        titulo = m.get("titulo", slug)
+        for k, (formato, estilo) in enumerate(formatos_ativos.items()):
+            suf = formato.replace(":", "x")
+            avisar(f"Preparando a imagem da cena nova ({formato})", 46 + 20 * k / len(formatos_ativos))
+            png = pasta / f"cena{k_nova:02d}_{suf}.png"
+            if midia_tipo == "video" and biblioteca.caminho_video_valido(midia_nome):
+                render.preparar_clip(biblioteca.caminho_video_valido(midia_nome), estilo["largura"], estilo["altura"], png.with_suffix(".mp4"), png, max_segundos=int(dur_nova) + 5)
+            elif midia_tipo == "imagem" and biblioteca.caminho_imagem_valida(midia_nome):
+                visuals._cobrir(Image.open(biblioteca.caminho_imagem_valida(midia_nome)).convert("RGB"), estilo["largura"], estilo["altura"]).save(png, "PNG")
+            else:
+                try:
+                    visuals.gerar_fundo(m.get("estilo_imagem", "procedural"), estilo["largura"], estilo["altura"], png, cena=descricao_imagem.strip() or texto, estilo_extra=m.get("descricao_video", ""), contexto=titulo)
+                except RuntimeError:
+                    visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], png, semente=texto)
+        if midia_tipo == "video" and biblioteca.caminho_video_valido(midia_nome):
+            videos_base[str(k_nova)] = midia_nome
+        elif midia_tipo == "imagem" and biblioteca.caminho_imagem_valida(midia_nome):
+            imagens_base[str(k_nova)] = midia_nome
+        elif descricao_imagem.strip():
+            descricoes[str(k_nova)] = descricao_imagem.strip()[:300]
+
+    # --- metadados e roteiro (um parágrafo por cena) ---
+    novas_cenas = []
+    for i in ordem:
+        if i < 0:
+            peca = novos[-i - 1]
+            novas_cenas.append({"texto": peca["texto"], "duracao_segundos": round(peca["dur"], 3), "duracao_natural": round(peca["dur"], 3)})
+        else:
+            novas_cenas.append(cenas[i])
+    (pasta / "roteiro.txt").write_text("\n\n".join(c["texto"] for c in novas_cenas), encoding="utf-8")
+    m.update(
+        cenas=novas_cenas, narracao_arquivo=nova_narracao.name, num_cenas=len(novas_cenas),
+        imagens_base_cenas=imagens_base, videos_base_cenas=videos_base, descricoes_cenas=descricoes, aprovado=False,
+    )
+    caminho_meta.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+    for peca in novos:
+        peca["arquivo"].unlink(missing_ok=True)
+
+    return aplicar_duracoes(slug, {}, progresso=lambda etapa, pct: avisar(etapa, 70 + 0.3 * pct))
 
 
 def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float], None] | None = None) -> dict:

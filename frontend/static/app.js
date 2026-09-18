@@ -125,12 +125,13 @@ function linhaDeVideo(v, comRegenerar) {
           <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem, v.hora_postagem)} ${modoLabel}</div>
           ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
           ${badgeStatus ? `<div class="video-meta">${badgeStatus}</div>` : ""}
+          ${comRegenerar && !publicado ? `<label class="chk-editado" title="Marque quando terminar de editar este vídeo. Só vídeo editado pode ter a publicação confirmada."><input type="checkbox" class="chk-editado-input" data-slug="${v.slug}"${v.editado ? " checked" : ""}> Editado</label>` : ""}
         </div>
         <div class="video-links">
           ${v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
           ${v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
           ${acoesEdicao}
-          ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${tituloAttr}" title="Sem confirmar, o vídeo NÃO é publicado">Confirmar publicação</button>` : ""}
+          ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${tituloAttr}"${v.editado ? "" : " disabled"} title="${v.editado ? "Sem confirmar, o vídeo NÃO é publicado" : "Marque a caixinha Editado primeiro"}">Confirmar publicação</button>` : ""}
           ${menuRegenerar}
           <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${tituloAttr}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
@@ -206,18 +207,21 @@ function aplicarFiltrosFila() {
   const canal = document.getElementById("filtro-canal").value;
   const status = document.getElementById("filtro-status").value;
   const busca = document.getElementById("filtro-busca").value.trim().toLowerCase();
+  const editadoFiltro = document.getElementById("filtro-editado").value;
 
   const filtrados = videosFilaCache.filter((v) => {
     if (canal && v.canal_id !== canal) return false;
     if (status && v.status !== status) return false;
     if (busca && !(v.titulo || "").toLowerCase().includes(busca)) return false;
+    if (editadoFiltro === "sim" && !v.editado) return false;
+    if (editadoFiltro === "nao" && v.editado) return false;
     return true;
   });
 
-  window.pendentesVisiveis = filtrados.filter((v) => v.status === "revisar");
+  window.pendentesVisiveis = filtrados.filter((v) => v.status === "revisar" && v.editado);
   const botaoTodos = document.getElementById("btn-confirmar-todos");
   botaoTodos.hidden = window.pendentesVisiveis.length < 2;
-  botaoTodos.textContent = `Confirmar publicação dos ${window.pendentesVisiveis.length} pendentes`;
+  botaoTodos.textContent = `Confirmar publicação dos ${window.pendentesVisiveis.length} editados`;
 
   const lista = document.getElementById("fila-lista");
   const visiveis = filtrados.slice(0, limiteFila);
@@ -285,7 +289,7 @@ document.addEventListener("click", async (evento) => {
   carregarPainel();
 });
 
-["filtro-canal", "filtro-status", "filtro-busca"].forEach((id) => {
+["filtro-canal", "filtro-status", "filtro-busca", "filtro-editado"].forEach((id) => {
   document.getElementById(id).addEventListener("input", () => {
     limiteFila = 20;
     aplicarFiltrosFila();
@@ -651,7 +655,8 @@ function cardDeCena(slug, cena, tempoEditavel) {
         ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
-      <button type="button" class="btn-lapis" title="Editar o texto desta cena (a narração é refeita ao salvar)">✎</button>
+      <button type="button" class="btn-excluir-cena" title="Excluir esta cena (pede confirmação)">✕</button>
+      <button type="button" class="btn-lapis" title="Editar o texto desta cena (só a fala dela é narrada de novo)">✎</button>
     </div>`;
 }
 
@@ -680,6 +685,11 @@ async function alternarPainelCenas(botao) {
   painel.innerHTML = `
     <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (<b class="cenas-total" data-original="${total}">${formatarTempo(total)}</b> no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
     <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c, dados.tempo_editavel)).join("")}</div>
+    <div class="cenas-adicionar">
+      <button type="button" class="btn-secondary btn-nova-cena" title="Adiciona uma cena nova, com a narração que você escrever">+ Cena</button>
+      <button type="button" class="btn-secondary btn-cena-padrao" title="Adiciona uma cena pronta da Base (ex.: inscreva-se e curta)">+ Cena padrão</button>
+    </div>
+    <div class="form-nova-cena" hidden></div>
     <div class="cenas-rodape">
       <button type="button" class="btn-primary btn-salvar-textos" hidden>Salvar textos e refazer narração</button>
       <button type="button" class="btn-primary btn-aplicar-tempos" hidden>Aplicar tempos</button>

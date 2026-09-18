@@ -62,6 +62,7 @@ async function carregarBase() {
     const passa = (item) => !filtro.value || !item.canal_id || item.canal_id === filtro.value;
     const canais = dadosBase.canais;
 
+    carregarCenasPadrao(dadosBase);
     const audios = (dadosBase.audios_info || []).filter(passa);
     document.getElementById("base-audios-contagem").textContent = `(${audios.length})`;
     document.getElementById("base-audios-lista").innerHTML = audios.length
@@ -162,3 +163,75 @@ document.getElementById("input-upload-video-base").addEventListener("change", as
     evento.target.value = "";
   }
 });
+
+
+// ---------------- cenas padrão (narração + mídia da Base, prontas pra encaixar num vídeo) ----------------
+
+function opcoesMidiaBase(dados, tipoAtual, nomeAtual) {
+  const imagens = (dados.imagens || []).map((i) => `<option value="imagem|${escaparAttr(i.nome)}"${tipoAtual === "imagem" && nomeAtual === i.nome ? " selected" : ""}>Imagem: ${escaparAttr(i.descricao || i.nome)}</option>`);
+  const videos = (dados.videos || []).map((v) => `<option value="video|${escaparAttr(v.nome)}"${tipoAtual === "video" && nomeAtual === v.nome ? " selected" : ""}>Vídeo: ${escaparAttr(v.descricao || v.nome)}</option>`);
+  return `<option value="|">Sem imagem (é feita a partir do texto)</option>${imagens.join("")}${videos.join("")}`;
+}
+
+async function salvarCenaPadrao(campos) {
+  const corpo = new FormData();
+  Object.entries(campos).forEach(([k, v]) => corpo.set(k, v));
+  const r = await fetch("/api/cenas-padrao", { method: "POST", body: corpo }).then((x) => x.json());
+  if (r.erro) alert(r.erro);
+  return !r.erro;
+}
+
+async function carregarCenasPadrao(dados) {
+  const lista = document.getElementById("base-cenas-padrao-lista");
+  const cenas = (await fetch("/api/cenas-padrao").then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || [];
+  document.getElementById("base-cenas-contagem").textContent = `(${cenas.length})`;
+  lista.innerHTML = cenas.length ? cenas.map((c) => {
+    const miniatura = c.midia_tipo === "imagem" ? `<img src="/biblioteca/imagens/${encodeURIComponent(c.midia_nome)}" alt="">` : c.midia_tipo === "video" ? "🎬" : "🎞";
+    return `
+      <details class="base-linha" data-cena-padrao="${c.id}">
+        <summary>
+          <span class="base-linha-mini">${miniatura}</span>
+          <span class="base-linha-textos"><span class="base-linha-titulo">${escaparAttr(c.nome)}</span><span class="base-linha-arquivo">${escaparAttr(c.texto)}</span></span>
+          <span class="base-selo">${c.midia_tipo === "video" ? "com vídeo" : c.midia_tipo === "imagem" ? "com imagem" : "sem mídia"}</span>
+        </summary>
+        <div class="base-linha-corpo">
+          <label style="width:100%"><span class="video-meta">Nome</span><input type="text" class="base-descricao cp-nome" value="${escaparAttr(c.nome)}" maxlength="80"></label>
+          <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao cp-texto" rows="3" maxlength="600">${escaparAttr(c.texto)}</textarea></label>
+          <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base</span><select class="base-canal cp-midia">${opcoesMidiaBase(dados, c.midia_tipo, c.midia_nome)}</select></label>
+          <div class="cena-card-acoes">
+            <button type="button" class="btn-secondary cp-salvar" data-id="${c.id}">Salvar</button>
+            <button type="button" class="btn-regenerar btn-regenerar-sutil cp-remover" data-id="${c.id}" data-nome="${escaparAttr(c.nome)}">remover cena padrão</button>
+          </div>
+        </div>
+      </details>`;
+  }).join("") : '<div class="empty">Nenhuma cena padrão ainda.</div>';
+
+  lista.querySelectorAll(".cp-salvar").forEach((b) => b.addEventListener("click", async () => {
+    const linha = b.closest("[data-cena-padrao]");
+    const [tipo, nome] = linha.querySelector(".cp-midia").value.split("|");
+    if (await salvarCenaPadrao({ id: b.dataset.id, nome: linha.querySelector(".cp-nome").value, texto: linha.querySelector(".cp-texto").value, midia_tipo: tipo, midia_nome: nome })) carregarBase();
+  }));
+  lista.querySelectorAll(".cp-remover").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm(`Remover a cena padrão "${b.dataset.nome}"? (Os vídeos que já usam ela não mudam.)`)) return;
+    await fetch(`/api/cenas-padrao/${b.dataset.id}`, { method: "DELETE" });
+    carregarBase();
+  }));
+
+  const form = document.getElementById("form-cena-padrao");
+  document.getElementById("btn-nova-cena-padrao").onclick = () => {
+    form.hidden = !form.hidden;
+    if (form.hidden) return;
+    form.innerHTML = `
+      <label style="width:100%"><span class="video-meta">Nome (só pra você achar)</span><input type="text" class="base-descricao" id="ncp-nome" maxlength="80" placeholder="Ex.: Inscreva-se e curta"></label>
+      <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao" id="ncp-texto" rows="3" maxlength="600" placeholder="Ex.: Gostou do vídeo? Então se inscreva no canal e deixe o seu like!"></textarea></label>
+      <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base (opcional)</span><select class="base-canal" id="ncp-midia">${opcoesMidiaBase(dados, "", "")}</select></label>
+      <div class="cena-card-acoes"><button type="button" class="btn-primary" id="ncp-salvar">Criar cena padrão</button></div>`;
+    document.getElementById("ncp-salvar").onclick = async () => {
+      const [tipo, nome] = document.getElementById("ncp-midia").value.split("|");
+      if (await salvarCenaPadrao({ nome: document.getElementById("ncp-nome").value, texto: document.getElementById("ncp-texto").value, midia_tipo: tipo, midia_nome: nome })) {
+        form.hidden = true;
+        carregarBase();
+      }
+    };
+  };
+}

@@ -116,8 +116,8 @@ def publicar_pendentes() -> None:
         metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
         if metadados.get("publicado"):
             continue
-        if not metadados.get("aprovado", False):
-            continue  # só sobe depois de você confirmar a publicação na Fila
+        if not metadados.get("aprovado", False) or not metadados.get("editado", False):
+            continue  # só sobe depois de você marcar "Editado" e confirmar a publicação na Fila
 
         data_postagem = metadados.get("data_postagem")
         if not data_postagem or data_postagem > hoje:

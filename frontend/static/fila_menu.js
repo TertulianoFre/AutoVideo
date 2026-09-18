@@ -122,6 +122,49 @@ document.addEventListener("input", (ev) => {
   atualizarBotaoSalvarTextos(campo.closest(".cenas-painel"));
 });
 
+// acompanha um job de edição de estrutura (cena adicionada/removida/texto trocado) no rodapé do painel
+async function acompanharEdicaoDeCenas(painel, slug, job_id) {
+  const status = painel.querySelector(".cenas-rodape-status");
+  const rodape = painel.querySelector(".cenas-rodape");
+  const trava = [...painel.querySelectorAll("button")];
+  trava.forEach((b) => (b.disabled = true));
+  const intervalo = setInterval(async () => {
+    const job = await fetch(`/api/jobs/${job_id}`).then((r) => r.json()).catch(() => null);
+    if (!job || typeof job.progresso !== "number") return;
+    status.textContent = textoDeProgresso(job);
+    atualizarMiniBarra(rodape.parentElement, job.progresso);
+    if (job.status !== "pronto" && job.status !== "erro") return;
+    clearInterval(intervalo);
+    removerMiniBarra(rodape.parentElement);
+    trava.forEach((b) => (b.disabled = false));
+    if (job.status === "erro") {
+      status.textContent = `Deu erro: ${job.erro}`;
+      return;
+    }
+    painel.dataset.carregado = ""; // recarrega as cenas já na nova estrutura
+    painel.classList.remove("aberto");
+    await carregarFila(true);
+    alternarPainelCenas({ dataset: { slug }, textContent: "" });
+  }, 1200);
+}
+
+function haAlteracoesNaoSalvas(painel) {
+  return contarEdicoesDeTexto(painel) || temposAlterados(painel);
+}
+
+async function enviarEstruturaDeCenas(painel, slug, campos) {
+  const corpo = new FormData();
+  Object.entries(campos).forEach(([k, v]) => corpo.set(k, v));
+  const status = painel.querySelector(".cenas-rodape-status");
+  status.textContent = "Enviando…";
+  const { job_id, erro } = await fetch(`/api/videos/${slug}/cenas/estrutura`, { method: "POST", body: corpo }).then((r) => r.json());
+  if (erro) {
+    status.textContent = `Deu erro: ${erro}`;
+    return;
+  }
+  acompanharEdicaoDeCenas(painel, slug, job_id);
+}
+
 async function salvarTextosDasCenas(painel, slug) {
   const edicoes = {};
   painel.querySelectorAll(".cena-card").forEach((card) => {
@@ -132,31 +175,86 @@ async function salvarTextosDasCenas(painel, slug) {
   });
   const n = Object.keys(edicoes).length;
   if (!n) return;
-  if (!confirm(`Salvar ${n} texto(s) e refazer a narração? As imagens das cenas que não mudaram são mantidas. O vídeo é regravado e a publicação precisará ser confirmada de novo.`)) return;
-  const status = painel.querySelector(".cenas-rodape-status");
-  status.textContent = "Salvando o roteiro…";
-  const corpo = new FormData();
-  corpo.set("edicoes", JSON.stringify(edicoes));
-  const resultado = await fetch(`/api/videos/${slug}/cenas/textos`, { method: "PUT", body: corpo }).then((r) => r.json());
-  if (resultado.erro) {
-    status.textContent = `Deu erro: ${resultado.erro}`;
-    return;
-  }
-  painel.dataset.carregado = "";
-  painel.classList.remove("aberto");
-  await regenerarVideo(slug, true, true);
+  if (!confirm(`Salvar ${n} texto(s)? Só a fala dessas cenas é narrada de novo (as outras falas, imagens e vídeos ficam como estão). A publicação precisará ser confirmada de novo.`)) return;
+  enviarEstruturaDeCenas(painel, slug, { operacao: "substituir", edicoes: JSON.stringify(edicoes) });
 }
 
-// lápis pequeno ao lado de "Gerar outra imagem": abre/fecha o campo de descrição da imagem
+// ---------------- excluir cena (sempre com confirmação) ----------------
+
 document.addEventListener("click", (ev) => {
-  const lapis = ev.target.closest(".btn-lapis-desc");
-  if (!lapis) return;
-  const campo = lapis.closest(".cena-card").querySelector(".cena-descricao");
-  campo.hidden = !campo.hidden;
-  lapis.classList.toggle("aberto", !campo.hidden);
-  if (!campo.hidden) campo.focus();
+  const botao = ev.target.closest(".btn-excluir-cena");
+  if (!botao) return;
+  const painel = botao.closest(".cenas-painel");
+  const card = botao.closest(".cena-card");
+  if (painel.querySelectorAll(".cena-card").length < 2) {
+    alert("O vídeo precisa de pelo menos uma cena.");
+    return;
+  }
+  if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
+  const trecho = card.querySelector(".cena-card-texto").textContent.trim().slice(0, 70);
+  if (!confirm(`Excluir a cena ${parseInt(card.dataset.indice, 10) + 1} ("${trecho}…")? A fala dela também sai do vídeo e as cenas seguintes andam pra frente.`)) return;
+  enviarEstruturaDeCenas(painel, painel.dataset.slug, { operacao: "remover", indice: card.dataset.indice });
 });
 
+// ---------------- adicionar cena (nova ou padrão) ----------------
+
+document.addEventListener("click", async (ev) => {
+  const botao = ev.target.closest(".btn-nova-cena, .btn-cena-padrao");
+  if (!botao) return;
+  const painel = botao.closest(".cenas-painel");
+  const slug = painel.dataset.slug;
+  const padrao = botao.classList.contains("btn-cena-padrao");
+  const form = painel.querySelector(".form-nova-cena");
+  const n = painel.querySelectorAll(".cena-card").length;
+  let presets = [];
+  if (padrao) {
+    presets = (await fetch("/api/cenas-padrao").then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || [];
+    if (!presets.length) {
+      form.hidden = false;
+      form.innerHTML = '<div class="cenas-status">Nenhuma cena padrão ainda. Crie na aba Base → Cenas padrão.</div>';
+      return;
+    }
+  }
+  const posicoes = [`<option value="${n}">No fim do vídeo</option>`, '<option value="0">No começo</option>']
+    .concat(Array.from({ length: n - 1 }, (_, k) => `<option value="${k + 1}">Depois da cena ${k + 1}</option>`)).join("");
+  form.hidden = false;
+  form.innerHTML = `
+    <div class="form-nova-cena-corpo">
+      <strong>${padrao ? "Adicionar cena padrão" : "Adicionar cena nova"}</strong>
+      ${padrao ? `<label><span>Qual cena padrão</span><select class="nc-preset">${presets.map((p, i) => `<option value="${i}">${escaparAttr(p.nome)}</option>`).join("")}</select></label>` : ""}
+      <label><span>Texto que a IA vai narrar nessa cena</span><textarea class="nc-texto" rows="3" placeholder="Ex.: Gostou? Então se inscreva no canal e deixe o seu like!"></textarea></label>
+      <div class="video-meta nc-tempo">sem texto</div>
+      ${padrao ? '<div class="video-meta nc-midia"></div>' : '<label><span>Imagem da cena (opcional): descreva o que quer ver</span><input type="text" class="nc-descricao" maxlength="300" placeholder="Se deixar vazio, a imagem é feita a partir do texto"></label>'}
+      <label><span>Onde entra</span><select class="nc-posicao">${posicoes}</select></label>
+      <div class="cena-card-acoes"><button type="button" class="btn-primary nc-adicionar">Adicionar cena</button><button type="button" class="btn-secondary nc-cancelar">Cancelar</button></div>
+    </div>`;
+  const texto = form.querySelector(".nc-texto");
+  const atualizar = () => { form.querySelector(".nc-tempo").textContent = formatarNarracao(texto.value); };
+  const escolherPreset = () => {
+    const p = presets[parseInt(form.querySelector(".nc-preset").value, 10)];
+    texto.value = p.texto;
+    form.querySelector(".nc-midia").textContent = p.midia_nome ? `${p.midia_tipo === "video" ? "Vídeo" : "Imagem"} da Base: ${p.midia_nome}` : "Sem imagem definida: a imagem será feita a partir do texto.";
+    atualizar();
+  };
+  texto.addEventListener("input", atualizar);
+  if (padrao) {
+    form.querySelector(".nc-preset").addEventListener("change", escolherPreset);
+    escolherPreset();
+  }
+  form.querySelector(".nc-cancelar").addEventListener("click", () => { form.hidden = true; form.innerHTML = ""; });
+  form.querySelector(".nc-adicionar").addEventListener("click", () => {
+    if (texto.value.trim().length < 3) { texto.focus(); return; }
+    if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
+    const p = padrao ? presets[parseInt(form.querySelector(".nc-preset").value, 10)] : null;
+    form.hidden = true;
+    enviarEstruturaDeCenas(painel, slug, {
+      operacao: "adicionar", posicao: form.querySelector(".nc-posicao").value, texto: texto.value.trim(),
+      descricao_imagem: padrao ? "" : form.querySelector(".nc-descricao").value,
+      midia_tipo: p?.midia_tipo || "", midia_nome: p?.midia_nome || "",
+    });
+  });
+  texto.focus();
+});
 
 // ---------------- tempo de cada cena (só aumenta; as seguintes andam pra frente) ----------------
 

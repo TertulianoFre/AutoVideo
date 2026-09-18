@@ -96,6 +96,40 @@ async function definirAprovacao(botao, aprovado) {
   carregarFila(true);
 }
 
+document.addEventListener("change", async (ev) => {
+  const caixa = ev.target.closest(".chk-editado-input");
+  if (!caixa) return;
+  const slug = caixa.dataset.slug;
+  const corpo = new FormData();
+  corpo.set("editado", caixa.checked ? "true" : "false");
+  const r = await fetch(`/api/videos/${slug}/editado`, { method: "POST", body: corpo }).then((x) => x.json()).catch(() => ({ erro: "sem conexão" }));
+  if (r.erro) {
+    alert(r.erro);
+    caixa.checked = !caixa.checked;
+    return;
+  }
+  const v = videosFilaCache.find((x) => x.slug === slug);
+  const tinhaAprovacao = v?.aprovado;
+  if (v) {
+    v.editado = caixa.checked;
+    if (!caixa.checked) v.aprovado = false;
+  }
+  if (!caixa.checked && tinhaAprovacao) {
+    carregarFila(true); // a confirmação foi desfeita: redesenha
+    return;
+  }
+  const botao = caixa.closest(".video-item")?.querySelector(".btn-confirmar-publicacao");
+  if (botao) {
+    botao.disabled = !caixa.checked;
+    botao.title = caixa.checked ? "Sem confirmar, o vídeo NÃO é publicado" : "Marque a caixinha Editado primeiro";
+  }
+  window.pendentesVisiveis = (window.pendentesVisiveis || []).filter((x) => x.slug !== slug);
+  if (caixa.checked && v && v.status === "revisar") window.pendentesVisiveis.push(v);
+  const todos = document.getElementById("btn-confirmar-todos");
+  todos.hidden = window.pendentesVisiveis.length < 2;
+  todos.textContent = `Confirmar publicação dos ${window.pendentesVisiveis.length} editados`;
+});
+
 // ---------------- legenda + transição (Fila) ----------------
 
 const OPCOES_LEGENDA = {

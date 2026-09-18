@@ -739,6 +739,22 @@ def api_criar_video(
     return {"job_id": job.id}
 
 
+@app.post("/api/videos/{slug}/editado")
+def api_editado(slug: str, editado: bool = Form(...)) -> dict:
+    """Marca (ou desmarca) que você já editou/revisou esse vídeo. Só vídeo "editado" pode ter a publicação confirmada."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    metadados["editado"] = editado
+    if not editado:
+        metadados["aprovado"] = False  # sem "editado" não fica confirmado
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "editado": editado}
+
+
 @app.post("/api/videos/{slug}/aprovacao")
 def api_aprovacao(slug: str, aprovado: bool = Form(...)) -> dict:
     """Confirma (ou desfaz a confirmação de) publicação. Sem confirmar, o agendador nunca sobe o vídeo."""
@@ -748,6 +764,8 @@ def api_aprovacao(slug: str, aprovado: bool = Form(...)) -> dict:
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     if metadados.get("publicado"):
         return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    if aprovado and not metadados.get("editado"):
+        return JSONResponse({"erro": 'marque a caixinha "Editado" antes de confirmar a publicação'}, status_code=409)
     metadados["aprovado"] = aprovado
     if aprovado:
         metadados.pop("publicacao_erro", None)
@@ -793,46 +811,6 @@ def _resultado_videos(slug: str, r: dict) -> dict:
         "video_16_9": f"/videos/{slug}/{r['video_16_9']}?v={marca}" if r.get("video_16_9") else None,
         "video_9_16": f"/videos/{slug}/{r['video_9_16']}?v={marca}" if r.get("video_9_16") else None,
     }
-
-
-@app.put("/api/videos/{slug}/cenas/textos")
-def api_editar_textos_das_cenas(slug: str, edicoes: str = Form(...)) -> dict:
-    """Aplica de uma vez o texto novo de várias cenas ({"indice": "texto"}) no roteiro.
-    Não refaz nada sozinho: quem chama em seguida pede "regenerar" mantendo o roteiro
-    (e reaproveitando as imagens das cenas que não mudaram)."""
-    pasta = RAIZ_SAIDA / slug
-    caminho_meta = pasta / "metadata.json"
-    if "/" in slug or "\\" in slug or not caminho_meta.exists() or not (pasta / "roteiro.txt").exists():
-        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    if metadados.get("publicado"):
-        return JSONResponse({"erro": "esse vídeo já foi publicado — mudar o roteiro não altera o que está no YouTube"}, status_code=409)
-    if metadados.get("narracao_customizada") or metadados.get("sem_narracao"):
-        return JSONResponse({"erro": "esse vídeo não usa narração por IA — o texto tem que continuar igual ao áudio"}, status_code=409)
-    cenas = metadados.get("cenas") or []
-    try:
-        mudancas = {int(k): str(v).strip() for k, v in json.loads(edicoes).items()}
-    except (ValueError, AttributeError):
-        return JSONResponse({"erro": "edições inválidas"}, status_code=400)
-    if not mudancas or any(not (0 <= i < len(cenas)) or len(t) < 3 for i, t in mudancas.items()):
-        return JSONResponse({"erro": "edição inválida (cena inexistente ou texto vazio)"}, status_code=400)
-
-    roteiro = (pasta / "roteiro.txt").read_text(encoding="utf-8")
-    paragrafos = [p for p in roteiro.replace("\r", "").split("\n") if p.strip()]
-    if len(paragrafos) == len(cenas):
-        for i, texto in mudancas.items():
-            paragrafos[i] = texto
-        novo = "\n\n".join(paragrafos)
-    else:
-        novo = roteiro
-        for i, texto in mudancas.items():
-            palavras = cenas[i].get("texto", "").split()
-            achou = re.search(r"\s+".join(re.escape(p) for p in palavras), novo) if palavras else None
-            if not achou:
-                return JSONResponse({"erro": f"não consegui localizar o texto da cena {i + 1} no roteiro — use \"Regenerar\" e tente de novo"}, status_code=409)
-            novo = novo[:achou.start()] + texto + novo[achou.end():]
-    (pasta / "roteiro.txt").write_text(novo, encoding="utf-8")
-    return {"ok": True, "alteradas": len(mudancas)}
 
 
 @app.post("/api/videos/{slug}/regenerar")
@@ -1242,6 +1220,59 @@ def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | Non
         caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+@app.post("/api/videos/{slug}/cenas/estrutura")
+def api_estrutura_das_cenas(
+    slug: str, operacao: str = Form(...), indice: int | None = Form(None), posicao: int | None = Form(None),
+    texto: str = Form(""), descricao_imagem: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
+    edicoes: str = Form(""),
+) -> dict:
+    """Adiciona uma cena (narração nova + imagem/vídeo), remove uma ou troca o texto de várias — sem regenerar
+    o vídeo inteiro. Roda como job (leva um tempo)."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    if operacao not in ("adicionar", "remover", "substituir"):
+        return JSONResponse({"erro": "operação inválida"}, status_code=400)
+    try:
+        mapa_edicoes = json.loads(edicoes) if edicoes else None
+    except ValueError:
+        return JSONResponse({"erro": "edições inválidas"}, status_code=400)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    if operacao == "remover" and len(metadados.get("cenas") or []) < 2:
+        return JSONResponse({"erro": "o vídeo precisa de pelo menos uma cena"}, status_code=400)
+    job = jobs.criar_job_funcao(
+        metadados.get("titulo", slug),
+        lambda cb: _resultado_videos(slug, pipeline_mod.editar_estrutura(
+            slug, operacao, indice, posicao, texto, descricao_imagem, midia_tipo, midia_nome, mapa_edicoes, progresso=cb)),
+        estimativa=90.0 if operacao == "adicionar" else 60.0,
+    )
+    return {"job_id": job.id}
+
+
+@app.get("/api/cenas-padrao")
+def api_listar_cenas_padrao() -> dict:
+    return {"cenas": biblioteca.listar_cenas_padrao()}
+
+
+@app.post("/api/cenas-padrao")
+def api_salvar_cena_padrao(
+    id: str = Form(""), nome: str = Form(""), texto: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
+) -> JSONResponse:
+    try:
+        return JSONResponse(biblioteca.salvar_cena_padrao(id or None, nome, texto, midia_tipo, midia_nome))
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+
+
+@app.delete("/api/cenas-padrao/{id}")
+def api_remover_cena_padrao(id: str) -> JSONResponse:
+    if not biblioteca.remover_cena_padrao(id):
+        return JSONResponse({"erro": "cena padrão não encontrada"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/videos/{slug}/cenas/duracoes")
 def api_duracoes_das_cenas(slug: str, duracoes: str = Form(...)) -> dict:
     """Novo tempo de cada cena ({"indice": segundos}). Só aumenta: as cenas seguintes são empurradas pra frente."""
@@ -1383,6 +1414,7 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_base": _thumbnail_base_url(pasta),
                 "thumbnail_efeito": metadados.get("thumbnail_efeito", "nenhum"),
                 "aprovado": bool(metadados.get("aprovado", False)),
+                "editado": bool(metadados.get("editado", False)),
                 "transicao": metadados.get("transicao", "fade"),
                 "legenda": subtitles_mod.normalizar_config(metadados.get("legenda")),
                 "tem_cues": (pasta / "cues.json").exists(),

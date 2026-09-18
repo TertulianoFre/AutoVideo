@@ -555,3 +555,18 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .painel-barra-titulo { font-size: 13px; font-weight: 600; color: #F2C230; }
 .btn-minimizar-painel { background: #F2C230; color: #14130F; border: none; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; }
 .fila-filtros input[type="search"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font: inherit; min-width: 220px; }
+
+.btn-excluir-cena { position: absolute; top: 8px; right: 48px; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 14px; cursor: pointer; }
+.btn-excluir-cena:hover { color: #fff; background: #C0392B; border-color: #C0392B; }
+.cena-card-body { padding-right: 90px; }
+.cenas-adicionar { display: flex; gap: 10px; margin-top: 12px; }
+.form-nova-cena { margin-top: 10px; }
+.form-nova-cena[hidden] { display: none; }
+.form-nova-cena-corpo { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #F2C230; border-radius: 10px; background: rgba(242, 194, 48, .06); }
+.form-nova-cena-corpo label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.form-nova-cena-corpo textarea, .form-nova-cena-corpo input, .form-nova-cena-corpo select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: inherit; }
+.form-cena-padrao { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.form-cena-padrao[hidden] { display: none; }
+.chk-editado { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.chk-editado input { accent-color: #F2C230; width: 16px; height: 16px; }
+.btn-confirmar-publicacao:disabled { opacity: .4; cursor: not-allowed; }

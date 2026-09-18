@@ -498,6 +498,14 @@
                 <option value="erro">Erro ao publicar</option>
               </select>
             </label>
+            <label>
+              <span>Edição</span>
+              <select id="filtro-editado">
+                <option value="">Todos</option>
+                <option value="sim">Editado</option>
+                <option value="nao">Não editado</option>
+              </select>
+            </label>
             <button type="button" class="btn-primary" id="btn-confirmar-todos" hidden style="align-self:flex-end">Confirmar publicação dos pendentes</button>
           </div>
           <div id="fila-lista" class="video-list">
@@ -539,6 +547,16 @@
           <span id="base-video-status" class="video-meta" style="margin-left:10px"></span>
           <div class="barra-indeterminada" id="base-video-barra" hidden><div></div></div>
           <div id="base-videos-lista" style="margin-top:14px"></div>
+        </details>
+
+        <details class="card secao-base">
+          <summary class="card-head">Cenas padrão <span class="video-meta" id="base-cenas-contagem"></span></summary>
+          <p class="hint" style="margin:0 0 14px">
+            Cenas prontas para encaixar em qualquer vídeo com um clique (ex.: "se inscreva e deixe o like"). Cada uma tem o texto que a IA narra (com a voz do vídeo) e, se quiser, uma imagem ou um vídeo da Base. Use em Fila → Editar vídeo → Cenas e roteiro → "+ Cena padrão".
+          </p>
+          <button type="button" class="btn-secondary" id="btn-nova-cena-padrao">+ Nova cena padrão</button>
+          <div id="form-cena-padrao" class="form-cena-padrao" hidden></div>
+          <div id="base-cenas-padrao-lista" style="margin-top:14px"></div>
         </details>
 
         <details class="card secao-base">
