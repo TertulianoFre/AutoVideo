@@ -48,7 +48,8 @@ function linhaDeVideo(v, comRegenerar) {
     ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
     : ICONE_VIDEO;
   const botaoRegenerar = comRegenerar
-    ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}">Regenerar</button>`
+    ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
+       ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
   return `
@@ -95,17 +96,20 @@ async function carregarFila() {
 
 async function regenerarVideo(botao) {
   const slug = botao.dataset.slug;
+  const manterRoteiro = botao.dataset.manterRoteiro !== "false";
   const linha = botao.closest(".video-row");
   const status = linha.querySelector(".video-meta-status");
-  const statusOriginal = status.textContent;
-  botao.disabled = true;
-  status.textContent = "Gerando de novo…";
+  const botoesDaLinha = linha.querySelectorAll(".btn-regenerar");
+  botoesDaLinha.forEach((b) => (b.disabled = true));
+  status.textContent = manterRoteiro ? "Gerando de novo (mesmo roteiro)…" : "Gerando de novo (roteiro novo)…";
 
-  const resposta = await fetch(`/api/videos/${slug}/regenerar`, { method: "POST" });
+  const dados = new FormData();
+  dados.set("manter_roteiro", manterRoteiro);
+  const resposta = await fetch(`/api/videos/${slug}/regenerar`, { method: "POST", body: dados });
   const { job_id, erro } = await resposta.json();
   if (erro) {
     status.textContent = erro;
-    botao.disabled = false;
+    botoesDaLinha.forEach((b) => (b.disabled = false));
     return;
   }
 
@@ -120,7 +124,7 @@ async function regenerarVideo(botao) {
     } else if (job.status === "erro") {
       clearInterval(intervalo);
       status.textContent = `Deu erro: ${job.erro}`;
-      botao.disabled = false;
+      botoesDaLinha.forEach((b) => (b.disabled = false));
     }
   }, 1200);
 }

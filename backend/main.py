@@ -158,9 +158,10 @@ def api_criar_video(
 
 
 @app.post("/api/videos/{slug}/regenerar")
-def api_regenerar_video(slug: str) -> dict:
-    """Gera tudo de novo (roteiro incluído) pro mesmo título/config — útil
-    quando o resultado não ficou bom. Sobrescreve os arquivos daquele vídeo."""
+def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
+    """Gera tudo de novo — narração, imagens, montagem. Por padrão mantém o
+    roteiro já existente (o problema geralmente é imagem, não texto); passe
+    manter_roteiro=false pra escrever um roteiro novo também."""
     pasta = RAIZ_SAIDA / slug
     caminho_meta = pasta / "metadata.json"
     if not caminho_meta.exists():
@@ -170,9 +171,14 @@ def api_regenerar_video(slug: str) -> dict:
     titulo = metadados.get("titulo", slug)
     sem_narracao = metadados.get("sem_narracao", False)
 
+    roteiro_existente = None
+    caminho_roteiro = pasta / "roteiro.txt"
+    if manter_roteiro and not sem_narracao and caminho_roteiro.exists():
+        roteiro_existente = caminho_roteiro.read_text(encoding="utf-8")
+
     params = dict(
         titulo=titulo,
-        roteiro=None,  # regenerar sempre escreve um roteiro novo (quando tem narração)
+        roteiro=roteiro_existente,
         idioma=metadados.get("idioma", "pt-BR"),
         voz=metadados.get("voz", "mulher"),
         estilo_imagem=metadados.get("estilo_imagem", "procedural"),

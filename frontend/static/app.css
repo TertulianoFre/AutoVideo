@@ -137,6 +137,8 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 }
 .btn-regenerar:hover { border-color: var(--accent); color: var(--accent); }
 .btn-regenerar:disabled { opacity: 0.6; cursor: default; }
+.btn-regenerar-sutil { border-color: transparent; padding: 6px 4px; font-size: 11.5px; }
+.btn-regenerar-sutil:hover { border-color: transparent; text-decoration: underline; }
 
 /* ---------- form ---------- */
 
