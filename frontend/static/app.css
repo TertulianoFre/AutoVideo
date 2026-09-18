@@ -463,3 +463,45 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .rev-valor { width: 100%; line-height: 1.45; }
 .rev-obs { margin-top: 12px; font-size: 12.5px; color: var(--accent); }
 .rev-obs ul { margin: 6px 0 0 18px; padding: 0; }
+
+/* menus da linha da Fila */
+.menu-wrap { position: relative; display: inline-block; }
+.btn-editar-video { background: #F2C230; color: #14130F; border: none; border-radius: 8px; padding: 7px 12px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.btn-editar-video:hover { filter: brightness(1.06); }
+.menu-suspenso { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 230px; background: var(--surface-2, #262319); border: 1px solid var(--border); border-radius: 10px; padding: 6px; box-shadow: 0 10px 28px rgba(0,0,0,.45); }
+.menu-suspenso.menu-direita { left: auto; right: 0; }
+.menu-suspenso.aberto { display: flex; flex-direction: column; gap: 2px; }
+.menu-suspenso button { background: transparent; border: none; color: var(--text); text-align: left; padding: 9px 10px; border-radius: 7px; font: inherit; font-size: 13px; cursor: pointer; }
+.menu-suspenso button:hover { background: rgba(255,255,255,.07); }
+
+/* lápis e edição do texto da cena */
+.cena-card { position: relative; }
+.btn-lapis { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 16px; cursor: pointer; }
+.btn-lapis:hover, .btn-lapis.ativo { color: #14130F; background: #F2C230; border-color: #F2C230; }
+.cena-edicao { margin: 6px 0; }
+.cena-edicao[hidden] { display: none; }
+.cena-edicao-texto { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #F2C230; border-radius: 8px; padding: 8px 10px; font: inherit; line-height: 1.45; }
+.cena-edicao-info { margin-top: 4px; }
+.cena-card-body { padding-right: 40px; }
+
+/* barras de progresso pequenas */
+.mini-barra { height: 5px; border-radius: 5px; background: var(--border); overflow: hidden; margin-top: 8px; width: 100%; }
+.mini-barra > div { height: 100%; background: var(--accent); border-radius: 5px; transition: width .6s ease; }
+
+/* prévia da legenda */
+.leg-preview-bloco { display: flex; flex-direction: column; gap: 6px; }
+.leg-mock { position: relative; width: 100%; max-width: 360px; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.leg-mock-fundo { position: absolute; inset: 0; background: linear-gradient(135deg, #2b3a55 0%, #6b4a3a 55%, #c98a4b 100%); }
+.leg-mock-linha { position: absolute; left: 0; right: 0; text-align: center; padding: 0 4%; }
+.leg-mock-texto { display: inline-block; font-family: "Segoe UI", sans-serif; font-weight: 700; line-height: 1.25; }
+.leg-mock-nenhuma { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.7); font-size: 13px; }
+.legenda-editor { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin: 10px 0; }
+.legenda-editor .legenda-grade { flex: 1; min-width: 300px; margin: 0; }
+.legenda-grade .leg-check { flex-direction: row; align-items: center; gap: 8px; align-self: end; padding: 6px 0; }
+.legenda-grade .leg-check span { color: var(--text); }
+
+/* novo vídeo */
+.linha-duracao { display: flex; gap: 8px; align-items: center; }
+.linha-duracao input { flex: 1; }
+.estimativa-novo { align-self: flex-start; }
+.base-item-video { width: 240px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border); background: #000; }

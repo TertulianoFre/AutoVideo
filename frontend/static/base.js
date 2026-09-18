@@ -67,12 +67,26 @@ async function carregarBase() {
         </div>`).join("")
       : '<div class="empty">Nenhuma imagem importada ainda.</div>';
 
+    const videos = (dadosBase.videos || []).filter(passa);
+    document.getElementById("base-videos-contagem").textContent = `(${videos.length})`;
+    document.getElementById("base-videos-lista").innerHTML = videos.length
+      ? videos.map((vid) => `
+        <div class="base-item base-item-imagem" data-item-base>
+          <video src="${vid.url}" controls preload="metadata" class="base-item-video"></video>
+          <div class="base-item-corpo">
+            <div class="base-item-topo"><span class="video-meta" style="flex:1">${escaparAttr(vid.nome)}</span>
+              <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-video-base" data-nome="${escaparAttr(vid.nome)}">remover</button></div>
+            ${blocoInfoBase("videos", vid, canais)}
+          </div>
+        </div>`).join("")
+      : '<div class="empty">Nenhum vídeo importado ainda.</div>';
+
     document.querySelectorAll(".base-descricao").forEach((c) => c.addEventListener("change", () => salvarInfoBase(c)));
     document.querySelectorAll(".base-canal").forEach((c) => c.addEventListener("change", () => salvarInfoBase(c)));
-    document.querySelectorAll(".btn-remover-audio-base, .btn-remover-imagem-base").forEach((botao) => {
+    document.querySelectorAll(".btn-remover-audio-base, .btn-remover-imagem-base, .btn-remover-video-base").forEach((botao) => {
       botao.addEventListener("click", async () => {
-        const tipo = botao.classList.contains("btn-remover-audio-base") ? "audios" : "imagens";
-        const lista = tipo === "audios" ? dadosBase.audios_info : dadosBase.imagens;
+        const tipo = botao.classList.contains("btn-remover-audio-base") ? "audios" : botao.classList.contains("btn-remover-video-base") ? "videos" : "imagens";
+        const lista = tipo === "audios" ? dadosBase.audios_info : tipo === "videos" ? dadosBase.videos : dadosBase.imagens;
         const usos = (lista.find((i) => i.nome === botao.dataset.nome) || {}).usado_em || [];
         if (usos.length && !confirm(`Esse item está em uso em: ${usos.join(", ")}. Remover mesmo assim?`)) return;
         await fetch(`/api/biblioteca/${tipo}/${encodeURIComponent(botao.dataset.nome)}`, { method: "DELETE" });
@@ -121,3 +135,29 @@ async function montarSeletorBaseNovoVideo() {
   };
   desenhar();
 }
+
+
+document.getElementById("input-upload-video-base").addEventListener("change", async (evento) => {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const status = document.getElementById("base-video-status");
+  const barra = document.getElementById("base-video-barra");
+  const inicio = Date.now();
+  barra.hidden = false;
+  const relogio = setInterval(() => {
+    status.textContent = `Enviando e convertendo… ${Math.round((Date.now() - inicio) / 1000)}s (vídeos grandes levam alguns minutos)`;
+  }, 500);
+  const dados = new FormData();
+  dados.set("arquivo", arquivo);
+  try {
+    const resultado = await fetch("/api/biblioteca/videos/upload", { method: "POST", body: dados }).then((r) => r.json());
+    status.textContent = resultado.erro ? `Deu erro: ${resultado.erro}` : "Importado!";
+    carregarBase();
+  } catch {
+    status.textContent = "Deu erro de conexão.";
+  } finally {
+    clearInterval(relogio);
+    barra.hidden = true;
+    evento.target.value = "";
+  }
+});

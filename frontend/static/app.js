@@ -64,16 +64,20 @@ let mostrarBadgeCanal = false; // só quando existe mais de 1 canal, evita ruíd
 function linhaDeVideo(v, comRegenerar) {
   if (v.status === "processando") {
     const pct = Math.round(v.job_progresso || 0);
+    const restante = formatarRestante(v.job_restante_segundos);
+    const naFila = (v.job_etapa || "").startsWith("Na fila");
+    const miniatura = v.thumbnail ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">` : ICONE_VIDEO;
     return `
-      <div class="video-item">
+      <div class="video-item" data-processando="${v.slug}">
         <div class="video-row">
-          <div class="video-thumb">${ICONE_VIDEO}</div>
+          <div class="video-thumb">${miniatura}</div>
           <div class="video-info">
             <div class="video-title">${v.titulo}</div>
             <div class="video-meta video-meta-status">
-              <span class="status-badge status-processando">processando</span>
-              ${v.job_etapa || ""} — ${pct}%
+              <span class="status-badge status-processando">${naFila ? "na fila" : "processando"}</span>
+              <span class="proc-texto">${v.job_etapa || ""}${naFila ? "" : ` — ${pct}%`}${restante ? ` · faltam ${restante}` : ""}</span>
             </div>
+            <div class="mini-barra"><div style="width:${Math.max(2, pct)}%"></div></div>
           </div>
         </div>
       </div>`;
@@ -89,15 +93,26 @@ function linhaDeVideo(v, comRegenerar) {
     ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
     : ICONE_VIDEO;
   const publicado = v.status === "publicado";
-  const botaoRegenerar = comRegenerar
-    ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
-       ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
-       ${!publicado && v.aprovado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-desfazer-confirmacao" data-slug="${v.slug}" title="Volta a exigir confirmação antes de publicar">desfazer confirmação</button>` : ""}
-       ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-revisar" data-slug="${v.slug}" title="O agente sugere melhorias de título, descrição, tags e thumbnail (sem regenerar)">revisar com agente</button>` : ""}
-       ${!publicado && !v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-legenda" data-slug="${v.slug}" title="Mudar estilo, tamanho e posição da legenda e a transição entre cenas">legenda</button>` : ""}
-       ${!publicado && !v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-roteiro" data-slug="${v.slug}" title="Corrigir o texto do roteiro e gerar o vídeo de novo com ele">editar roteiro</button>` : ""}
-       ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar texto, cor, efeito e posição das thumbnails (normal e Shorts)">editar thumbnail</button>` : ""}
-       ${v.tem_cenas && !publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
+  const tituloAttr = (v.titulo || "").replace(/"/g, "&quot;");
+  const acoesEdicao = comRegenerar && !publicado
+    ? `<div class="menu-wrap">
+         <button type="button" class="btn-editar-video btn-abrir-menu" title="Cenas, roteiro, legenda, transição e thumbnail">Editar vídeo ▾</button>
+         <div class="menu-suspenso">
+           ${v.tem_cenas ? `<button type="button" data-acao="cenas" data-slug="${v.slug}">Cenas e roteiro</button>` : ""}
+           ${!v.sem_narracao ? `<button type="button" data-acao="legenda" data-slug="${v.slug}">Legenda e transição</button>` : ""}
+           <button type="button" data-acao="thumb" data-slug="${v.slug}">Thumbnail</button>
+           ${v.aprovado ? `<button type="button" class="btn-desfazer-confirmacao" data-slug="${v.slug}" data-titulo="${tituloAttr}">Desfazer confirmação de publicação</button>` : ""}
+         </div>
+       </div>`
+    : "";
+  const menuRegenerar = comRegenerar
+    ? `<div class="menu-wrap">
+         <button type="button" class="btn-regenerar btn-abrir-menu" title="Refaz narração, imagens e vídeo (pede confirmação)">Regenerar ▾</button>
+         <div class="menu-suspenso menu-direita">
+           <button type="button" data-acao="regen-mesmo" data-slug="${v.slug}" data-titulo="${tituloAttr}">Refazer com o mesmo roteiro</button>
+           ${!v.sem_narracao ? `<button type="button" data-acao="regen-novo" data-slug="${v.slug}" data-titulo="${tituloAttr}">Escrever roteiro novo e refazer</button>` : ""}
+         </div>
+       </div>`
     : "";
   const publicacao = statusPublicacao(v);
   const badgeStatus = v.status === "pronto" || v.status === "aguardando" || v.status === "revisar" ? statusBadge(v) : "";
@@ -114,15 +129,14 @@ function linhaDeVideo(v, comRegenerar) {
         <div class="video-links">
           ${v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
           ${v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
-          ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Sem confirmar, o vídeo NÃO é publicado">Confirmar publicação</button>` : ""}
-          ${botaoRegenerar}
-          <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
+          ${acoesEdicao}
+          ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${tituloAttr}" title="Sem confirmar, o vídeo NÃO é publicado">Confirmar publicação</button>` : ""}
+          ${menuRegenerar}
+          <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${tituloAttr}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
       </div>
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
-      ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="roteiro-painel" data-slug="${v.slug}"></div>` : ""}
-      ${comRegenerar && !publicado ? `<div class="revisao-painel" data-slug="${v.slug}"></div>` : ""}
       ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="legenda-painel" data-slug="${v.slug}" data-tem-cues="${v.tem_cues}" data-legenda="${encodeURIComponent(JSON.stringify(v.legenda || {}))}" data-transicao="${v.transicao || "fade"}"></div>` : ""}
     </div>`;
 }
@@ -200,23 +214,25 @@ function aplicarFiltrosFila() {
     ? filtrados.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
 
-  lista.querySelectorAll(".btn-editar-roteiro").forEach((botao) => {
-    botao.addEventListener("click", () => alternarPainelRoteiro(botao));
-  });
-  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb):not(.btn-editar-roteiro):not(.btn-legenda):not(.btn-revisar):not(.btn-desfazer-confirmacao)").forEach((botao) => {
-    botao.addEventListener("click", () => regenerarVideo(botao));
-  });
-  lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {
-    botao.addEventListener("click", () => alternarPainelCenas(botao));
-  });
-  lista.querySelectorAll(".btn-editar-thumb").forEach((botao) => {
-    botao.addEventListener("click", () => alternarPainelThumb(botao));
-  });
+
 }
 
 let filaAutoRefreshTimer = null;
 
-async function carregarFila() {
+function atualizarProcessandoNoLugar(videos) {
+  videos.filter((v) => v.status === "processando").forEach((v) => {
+    const item = document.querySelector(`[data-processando="${v.slug}"]`);
+    if (!item) return;
+    const pct = Math.round(v.job_progresso || 0);
+    const restante = formatarRestante(v.job_restante_segundos);
+    const naFila = (v.job_etapa || "").startsWith("Na fila");
+    item.querySelector(".proc-texto").textContent = `${v.job_etapa || ""}${naFila ? "" : ` — ${pct}%`}${restante ? ` · faltam ${restante}` : ""}`;
+    const barra = item.querySelector(".mini-barra > div");
+    if (barra) barra.style.width = `${Math.max(2, pct)}%`;
+  });
+}
+
+async function carregarFila(forcar = false) {
   videosFilaCache = await buscarVideos();
 
   const seletorCanalFiltro = document.getElementById("filtro-canal");
@@ -226,7 +242,13 @@ async function carregarFila() {
     '<option value="">Todos</option>' + canaisUnicos.map(([id, nome]) => `<option value="${id}">${nome}</option>`).join("");
   seletorCanalFiltro.value = valorAtual;
 
-  aplicarFiltrosFila();
+  // enquanto você edita (painel ou menu aberto) a lista não é redesenhada — só o progresso é atualizado no lugar
+  const editando = document.querySelector(".thumb-painel.aberto, .cenas-painel.aberto, .legenda-painel.aberto, .menu-suspenso.aberto");
+  if (editando && !forcar && document.querySelector("#fila-lista .video-item")) {
+    atualizarProcessandoNoLugar(videosFilaCache);
+  } else {
+    aplicarFiltrosFila();
+  }
 
   // se tem algo em "processando", atualiza sozinho até terminar — sem isso o
   // progresso só mudaria trocando de aba e voltando
@@ -564,46 +586,6 @@ async function salvarThumb(slug, painel) {
 
 // ---------------- Fila: editar uma cena específica ----------------
 
-async function alternarPainelRoteiro(botao) {
-  const slug = botao.dataset.slug;
-  const painel = document.querySelector(`.roteiro-painel[data-slug="${slug}"]`);
-  const abrindo = !painel.classList.contains("aberto");
-  painel.classList.toggle("aberto", abrindo);
-  botao.textContent = abrindo ? "esconder roteiro" : "editar roteiro";
-  if (!abrindo || painel.dataset.carregado === "true") return;
-
-  painel.innerHTML = '<div class="cenas-status">Carregando roteiro…</div>';
-  const dados = await fetch(`/api/videos/${slug}/roteiro`).then((r) => r.json());
-  if (dados.erro || dados.narracao_propria) {
-    painel.innerHTML = `<div class="cenas-status">${dados.erro || "Esse vídeo usa a narração que você gravou/enviou; o texto precisa continuar igual ao áudio."}</div>`;
-    return;
-  }
-  painel.dataset.carregado = "true";
-  painel.innerHTML = `
-    <div class="cenas-status">Corrija o texto (um parágrafo por cena, separados por linha em branco). Ao salvar, o vídeo é gerado de novo com esse roteiro: narração, legenda e cenas são refeitas, e as imagens das cenas são sorteadas outra vez (trocas manuais de imagem se perdem).</div>
-    <textarea class="roteiro-edicao" rows="12"></textarea>
-    <div class="cena-card-acoes">
-      <button type="button" class="btn-secondary btn-salvar-roteiro">Salvar e gerar de novo</button>
-      <span class="video-meta roteiro-edicao-status"></span>
-    </div>`;
-  const campo = painel.querySelector(".roteiro-edicao");
-  campo.value = dados.roteiro;
-  painel.querySelector(".btn-salvar-roteiro").addEventListener("click", async () => {
-    const status = painel.querySelector(".roteiro-edicao-status");
-    const corpo = new FormData();
-    corpo.set("roteiro", campo.value);
-    const resposta = await fetch(`/api/videos/${slug}/roteiro`, { method: "PUT", body: corpo });
-    const resultado = await resposta.json();
-    if (resultado.erro) {
-      status.textContent = `Deu erro: ${resultado.erro}`;
-      return;
-    }
-    status.textContent = "Roteiro salvo — gerando de novo…";
-    // "Regenerar" mantém o roteiro.txt (agora o editado) e refaz o resto
-    document.querySelector(`.video-row[data-slug="${slug}"] .btn-regenerar[data-manter-roteiro="true"]`).click();
-  });
-}
-
 function formatarTempo(segundos) {
   const s = Math.round(segundos || 0);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -614,6 +596,10 @@ function cardDeCena(slug, cena) {
   const img16 = cena.imagem ? `<img class="cena-img cena-img-16" src="${cena.imagem}" alt="">` : semImagem;
   const img9 = cena.imagem_vertical ? `<img class="cena-img cena-img-9" src="${cena.imagem_vertical}" alt="">` : "";
   const fim = (cena.inicio_segundos || 0) + (cena.duracao_segundos || 0);
+  const origem = cena.video_base
+    ? `<div class="video-meta cena-da-base">▶ Vídeo da Base: ${escaparAttr(cena.video_base)}</div>`
+    : cena.imagem_base ? `<div class="video-meta cena-da-base">Imagem da Base: ${escaparAttr(cena.imagem_base)}</div>` : "";
+  const texto = escaparAttr(cena.texto || "");
   return `
     <div class="cena-card" data-indice="${cena.indice}">
       <div class="cena-card-imagens">${img16}${img9}</div>
@@ -621,18 +607,23 @@ function cardDeCena(slug, cena) {
         <div class="cena-card-indice">Cena ${cena.indice + 1}
           <span class="cena-card-tempo">${formatarTempo(cena.inicio_segundos)}–${formatarTempo(fim)} · ${Math.round(cena.duracao_segundos || 0)}s</span>
         </div>
-        <p class="cena-card-texto">${cena.texto || ""}</p>
+        <p class="cena-card-texto">${texto}</p>
+        <div class="cena-edicao" hidden>
+          <textarea class="cena-edicao-texto" rows="4" data-original="${texto}">${texto}</textarea>
+          <div class="video-meta cena-edicao-info"></div>
+        </div>
         <div class="cena-card-acoes">
           <button type="button" class="btn-regenerar btn-regenerar-cena" data-slug="${slug}" data-indice="${cena.indice}">Gerar outra imagem</button>
           <label class="btn-regenerar btn-regenerar-sutil btn-enviar-cena" title="Usar uma imagem do seu computador (vale pros dois formatos)">
             Enviar imagem
             <input type="file" class="cena-upload-input" accept="image/*" hidden data-slug="${slug}" data-indice="${cena.indice}">
           </label>
-          <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem que você importou na aba Base">Usar da Base</button>
+          <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem ou vídeo que você importou na aba Base">Usar da Base</button>
         </div>
-        ${cena.imagem_base ? `<div class="video-meta cena-da-base">Imagem da Base: ${cena.imagem_base}</div>` : ""}
+        ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
+      <button type="button" class="btn-lapis" title="Editar o texto desta cena (a narração é refeita ao salvar)">✎</button>
     </div>`;
 }
 
@@ -644,6 +635,7 @@ async function alternarPainelCenas(botao) {
   const abrindo = !painel.classList.contains("aberto");
   painel.classList.toggle("aberto", abrindo);
   botao.textContent = abrindo ? "esconder cenas" : "cenas";
+  if (abrindo) painel.scrollIntoView({ block: "nearest", behavior: "smooth" });
   if (!abrindo || painel.dataset.carregado === "true") return;
 
   painel.innerHTML = '<div class="cenas-status">Carregando cenas…</div>';
@@ -658,9 +650,10 @@ async function alternarPainelCenas(botao) {
   painel.dataset.carregado = "true";
   const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
-    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. "Gerar outra imagem" sorteia de novo; "Enviar imagem" usa uma sua. Roteiro, narração e as outras cenas continuam intactos. Cada troca vale na hora e várias podem rodar ao mesmo tempo.</div>
+    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
     <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>
     <div class="cenas-rodape">
+      <button type="button" class="btn-primary btn-salvar-textos" hidden>Salvar textos e refazer narração</button>
       <button type="button" class="btn-secondary btn-concluir-cenas">Concluir e fechar</button>
       <span class="video-meta cenas-rodape-status"></span>
     </div>`;
@@ -671,12 +664,14 @@ async function alternarPainelCenas(botao) {
       status.textContent = "Ainda tem cena sendo gerada — espere terminar.";
       return;
     }
-    // nada a "salvar": cada troca já foi aplicada ao vídeo. Aqui só fecha e atualiza a linha.
+    if (contarEdicoesDeTexto(painel) && !confirm("Tem texto editado que ainda não foi salvo. Fechar mesmo assim (as edições serão descartadas)?")) return;
+    // nada a "salvar" nas imagens: cada troca já foi aplicada ao vídeo. Aqui só fecha e atualiza a linha.
     painel.dataset.carregado = "";
     painel.classList.remove("aberto");
     botao.textContent = "cenas";
     carregarFila();
   });
+  painel.querySelector(".btn-salvar-textos").addEventListener("click", () => salvarTextosDasCenas(painel, slug));
 
   painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
     b.addEventListener("click", () => regenerarCena(b));
@@ -694,13 +689,17 @@ async function alternarPainelCenas(botao) {
 function acompanharJobCena(jobId, card, botao, rotuloBotao) {
   const slug = botao.dataset.slug;
   const botoes = card.querySelectorAll("button");
+  const corpo = card.querySelector(".cena-card-body");
   const intervalo = setInterval(async () => {
     const r = await fetch(`/api/jobs/${jobId}`);
     const job = await r.json();
-    botao.textContent = `${Math.round(job.progresso)}% — ${job.etapa}`;
+    if (typeof job.progresso !== "number") return;
+    botao.textContent = textoDeProgresso(job);
+    atualizarMiniBarra(corpo, job.progresso);
     if (job.status === "pronto") {
       clearInterval(intervalo);
       botoes.forEach((b) => (b.disabled = false));
+      removerMiniBarra(corpo);
       botao.textContent = rotuloBotao;
       const i16 = card.querySelector(".cena-img-16");
       const i9 = card.querySelector(".cena-img-9");
@@ -715,6 +714,7 @@ function acompanharJobCena(jobId, card, botao, rotuloBotao) {
     } else if (job.status === "erro") {
       clearInterval(intervalo);
       botoes.forEach((b) => (b.disabled = false));
+      removerMiniBarra(corpo);
       botao.textContent = rotuloBotao;
       alert(`Deu erro: ${job.erro}`);
     }
@@ -745,22 +745,31 @@ async function alternarEscolhaBaseCena(botao) {
   if (grade.hidden || grade.dataset.carregado) return;
   grade.dataset.carregado = "true";
   const dados = await fetch("/api/biblioteca").then((r) => r.json());
-  if (!dados.imagens?.length) {
-    grade.innerHTML = '<span class="video-meta">Nenhuma imagem na Base ainda — importe na aba Base.</span>';
+  const itens = [
+    ...(dados.imagens || []).map((i) => ({ ...i, tipo: "imagem" })),
+    ...(dados.videos || []).map((v) => ({ ...v, tipo: "video" })),
+  ];
+  if (!itens.length) {
+    grade.innerHTML = '<span class="video-meta">Nada na Base ainda — importe imagens ou vídeos na aba Base.</span>';
     return;
   }
-  grade.innerHTML = dados.imagens
-    .map((img) => `<button type="button" class="thumb-img-opcao" data-nome="${img.nome}" title="${img.nome}${img.usado_em.length ? " — já usada em: " + img.usado_em.join(", ") : ""}"><img src="${img.url}" alt=""></button>`)
+  grade.innerHTML = itens
+    .map((it) => {
+      const dica = `${it.nome}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
+      const midia = it.tipo === "video" ? `<video src="${it.url}#t=0.5" muted preload="metadata"></video><span class="base-ordem">vídeo</span>` : `<img src="${it.url}" alt="">`;
+      return `<button type="button" class="thumb-img-opcao" data-nome="${escaparAttr(it.nome)}" data-tipo="${it.tipo}" title="${escaparAttr(dica)}">${midia}</button>`;
+    })
     .join("");
   grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
     op.addEventListener("click", async () => {
-      const usada = dados.imagens.find((i) => i.nome === op.dataset.nome)?.usado_em || [];
-      if (usada.length && !confirm(`Essa imagem já foi usada em: ${usada.join(", ")}. Usar de novo?`)) return;
+      const item = itens.find((i) => i.nome === op.dataset.nome && i.tipo === op.dataset.tipo);
+      if (item.usado_em.length && !confirm(`Isso já foi usado em: ${item.usado_em.join(", ")}. Usar de novo?`)) return;
       const rotulo = card.querySelector(".btn-regenerar-cena").textContent;
       card.querySelectorAll("button").forEach((b) => (b.disabled = true));
       const corpo = new FormData();
-      corpo.set("nome", op.dataset.nome);
-      const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/imagem-base`, { method: "POST", body: corpo });
+      corpo.set("nome", item.nome);
+      const rota = item.tipo === "video" ? "video-base" : "imagem-base";
+      const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/${rota}`, { method: "POST", body: corpo });
       const { job_id, erro } = await resposta.json();
       if (erro) {
         card.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -792,41 +801,6 @@ async function enviarImagemCena(input) {
     return;
   }
   acompanharJobCena(job_id, card, botao, rotulo);
-}
-
-async function regenerarVideo(botao) {
-  const slug = botao.dataset.slug;
-  const manterRoteiro = botao.dataset.manterRoteiro !== "false";
-  const linha = botao.closest(".video-row");
-  const status = linha.querySelector(".video-meta-status");
-  const botoesDaLinha = linha.querySelectorAll(".btn-regenerar");
-  botoesDaLinha.forEach((b) => (b.disabled = true));
-  status.textContent = manterRoteiro ? "Gerando de novo (mesmo roteiro)…" : "Gerando de novo (roteiro novo)…";
-
-  const dados = new FormData();
-  dados.set("manter_roteiro", manterRoteiro);
-  const resposta = await fetch(`/api/videos/${slug}/regenerar`, { method: "POST", body: dados });
-  const { job_id, erro } = await resposta.json();
-  if (erro) {
-    status.textContent = erro;
-    botoesDaLinha.forEach((b) => (b.disabled = false));
-    return;
-  }
-
-  const intervalo = setInterval(async () => {
-    const r = await fetch(`/api/jobs/${job_id}`);
-    const job = await r.json();
-    status.textContent = `Gerando de novo… ${Math.round(job.progresso)}% — ${job.etapa}`;
-    if (job.status === "pronto") {
-      clearInterval(intervalo);
-      carregarFila();
-      carregarPainel();
-    } else if (job.status === "erro") {
-      clearInterval(intervalo);
-      status.textContent = `Deu erro: ${job.erro}`;
-      botoesDaLinha.forEach((b) => (b.disabled = false));
-    }
-  }, 1200);
 }
 
 // ---------------- Canais (seletor no menu + aba de gerenciar) ----------------
@@ -1088,18 +1062,21 @@ function atualizarCenasDoRoteiro() {
   const caixa = document.getElementById("roteiro-cenas");
   const nCenas = parseInt(document.querySelector("[name=num_cenas]").value, 10);
   const paragrafos = campoRoteiro.value.split("\n").map((p) => p.trim()).filter(Boolean);
-  if (!nCenas || nCenas < 2 || !paragrafos.length) {
+  if (!paragrafos.length) {
     caixa.hidden = true;
     return;
   }
   caixa.hidden = false;
-  const aviso = paragrafos.length === nCenas
-    ? `<div class="roteiro-cenas-ok">Cada parágrafo vira uma cena. Edite o texto acima à vontade.</div>`
-    : `<div class="roteiro-cenas-aviso">O roteiro tem ${paragrafos.length} parágrafo(s) e você pediu ${nCenas} cenas — pra cada parágrafo virar uma cena, separe o texto em exatamente ${nCenas} parágrafos (uma linha em branco entre eles). Do jeito que está, as cenas serão divididas por tempo.</div>`;
-  caixa.innerHTML = aviso + paragrafos.map((p, i) => {
-    const palavras = p.split(/\s+/).length;
-    return `<div class="roteiro-cena"><b>Cena ${i + 1}</b> <span class="video-meta">${palavras} palavras · ~${Math.round(palavras / PALAVRAS_POR_MINUTO_FRONT * 60)}s</span><div>${p.replace(/</g, "&lt;")}</div></div>`;
-  }).join("");
+  const meta = parseFloat(campoDuracao.value) || 0;
+  const total = `<div class="roteiro-cenas-ok"><b>Narração total: ${formatarNarracao(paragrafos.join(" "))}</b>${meta && !campoSemNarracao.checked ? ` (meta do campo Duração: ${meta} min)` : ""}</div>`;
+  let aviso = "";
+  if (nCenas >= 2) {
+    aviso = paragrafos.length === nCenas
+      ? `<div class="roteiro-cenas-ok">Cada parágrafo vira uma cena. Edite o texto acima à vontade: os tempos abaixo se atualizam.</div>`
+      : `<div class="roteiro-cenas-aviso">O roteiro tem ${paragrafos.length} parágrafo(s) e você pediu ${nCenas} cenas — pra cada parágrafo virar uma cena, separe o texto em exatamente ${nCenas} parágrafos (uma linha em branco entre eles). Do jeito que está, as cenas serão divididas por tempo.</div>`;
+  }
+  const rotulo = nCenas >= 2 ? "Cena" : "Parágrafo";
+  caixa.innerHTML = total + aviso + paragrafos.map((p, i) => `<div class="roteiro-cena"><b>${rotulo} ${i + 1}</b> <span class="video-meta">${formatarNarracao(p)}</span><div>${p.replace(/</g, "&lt;")}</div></div>`).join("");
 }
 
 campoRoteiro.addEventListener("input", atualizarCenasDoRoteiro);
@@ -1304,6 +1281,8 @@ async function acompanharJob(jobId) {
   progressFill.style.width = `${job.progresso}%`;
   progressoPct.textContent = `${Math.round(job.progresso)}%`;
   progressoEtapa.textContent = job.etapa;
+  const restanteNovo = formatarRestante(job.restante_segundos);
+  document.getElementById("progresso-restante").textContent = restanteNovo ? `Faltam ${restanteNovo} (estimativa)` : "";
 
   if (job.status === "pronto") {
     clearInterval(poller);

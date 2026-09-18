@@ -232,7 +232,11 @@
               </label>
               <label>
                 <span>Duração alvo (minutos)</span>
-                <input type="number" name="duracao_alvo" id="campo-duracao" min="0.3" step="any" value="1">
+                <span class="linha-duracao">
+                  <input type="number" name="duracao_alvo" id="campo-duracao" min="0.3" step="any" value="1">
+                  <button type="button" class="btn-secondary btn-compacto" id="btn-sugerir-duracao" title="O agente recomenda a duração para esse tipo de vídeo, com base no seu canal">Sugerir</button>
+                </span>
+                <span class="video-meta" id="duracao-motivo"></span>
               </label>
             </div>
 
@@ -335,11 +339,9 @@
                   <select name="transicao">
                     <option value="fade" selected>Fade (suave)</option>
                     <option value="dissolver">Dissolver</option>
-                    <option value="deslizar">Deslizar</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="circulo">Círculo</option>
-                    <option value="aleatoria">Aleatória (varia a cada cena)</option>
-                    <option value="nenhuma">Sem transição (corte seco)</option>
+                    <option value="deslizar">Deslizar suave</option>
+                    <option value="aleatoria">Variada (só as suaves)</option>
+                                        <option value="nenhuma">Sem transição (corte seco)</option>
                   </select>
                 </label>
                 <label>
@@ -379,7 +381,11 @@
                   <span>Fundo escuro atrás da legenda</span>
                 </label>
               </div>
-              <p class="hint">Dá pra mudar tudo isso depois na Fila (botão "legenda"), sem gerar o vídeo de novo.</p>
+              <div class="leg-preview-bloco">
+                <span class="video-meta">Exemplo (aproximado): muda conforme você escolhe</span>
+                <div class="leg-mock" id="leg-mock-novo"></div>
+              </div>
+              <p class="hint">Dá pra mudar tudo isso depois na Fila (Editar vídeo → Legenda e transição), sem gerar o vídeo de novo.</p>
             </details>
 
             <details class="secao" id="secao-som">
@@ -424,6 +430,7 @@
               Gerar vídeo
             </button>
             <button type="button" class="btn-secondary" style="align-self:flex-start" id="btn-limpar-novo" title="Apaga tudo o que está preenchido pra começar outro vídeo">Limpar formulário</button>
+            <span class="video-meta estimativa-novo" id="estimativa-novo"></span>
           </form>
 
           <div class="hint" id="aviso-fila-novo" hidden>Vídeo enviado. Você já pode preencher e gerar outro: eles são gerados um de cada vez, na ordem, e todos aparecem na aba Fila (como "processando" ou "na fila").</div>
@@ -432,6 +439,7 @@
             <div class="progresso-etapa" id="progresso-etapa">Iniciando…</div>
             <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
             <div class="progresso-pct" id="progresso-pct">0%</div>
+            <div class="video-meta" id="progresso-restante"></div>
           </div>
 
           <div class="card" id="resultado-card" hidden>
@@ -493,6 +501,20 @@
           </label>
           <span id="base-audio-status" class="video-meta" style="margin-left:10px"></span>
           <div id="base-audios-lista" class="base-audios-lista" style="margin-top:14px"></div>
+        </details>
+
+        <details class="card secao-base">
+          <summary class="card-head">Vídeos importados <span class="video-meta" id="base-videos-contagem"></span></summary>
+          <p class="hint" style="margin:0 0 14px">
+            Importe vídeos (com ou sem áudio). Para usar um numa cena: Fila → Editar vídeo → Cenas e roteiro → "Usar da Base". O vídeo é cortado no formato, repetido em loop se for curto, e o áudio dele não entra (a narração continua sendo o áudio do vídeo).
+          </p>
+          <label class="btn-secondary" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;width:fit-content">
+            <input type="file" id="input-upload-video-base" accept="video/*" hidden>
+            Importar vídeo
+          </label>
+          <span id="base-video-status" class="video-meta" style="margin-left:10px"></span>
+          <div class="barra-indeterminada" id="base-video-barra" hidden><div></div></div>
+          <div id="base-videos-lista" style="margin-top:14px"></div>
         </details>
 
         <details class="card secao-base">
@@ -566,7 +588,9 @@
 <script src="/static/thumb_shorts.js"></script>
 <script src="/static/anotacoes.js"></script>
 <script src="/static/base.js"></script>
-<script src="/static/revisao.js"></script>
+<script src="/static/legenda.js"></script>
+<script src="/static/fila_menu.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/novo_extra.js"></script>
 </body>
 </html>

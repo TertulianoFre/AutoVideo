@@ -73,7 +73,7 @@ async function definirAprovacao(botao, aprovado) {
     botao.disabled = false;
     return;
   }
-  carregarFila();
+  carregarFila(true);
 }
 
 // ---------------- legenda + transição (Fila) ----------------

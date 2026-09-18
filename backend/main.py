@@ -1331,6 +1331,17 @@ def api_listar_videos() -> list[dict]:
     # como "processando" em vez de simplesmente não aparecer até terminar.
     # Regenerar/cena não entra aqui: a pasta e os mp4 antigos já existem, então
     # já aparecem no loop acima com o status de sempre até o novo mp4 sobrescrever.
+    # vídeo já existente que está sendo (re)gerado agora: aparece como "processando", com progresso e tempo restante
+    ativos = {slug_titulo(j.titulo): j for j in jobs.listar_rodando() if j.na_fila}
+    for v in videos:
+        j = ativos.get(v["slug"])
+        if j:
+            v.update(
+                status="processando",
+                job_etapa=f"Na fila — {jobs.posicao_na_fila(j)}º" if j.status == "aguardando" else j.etapa,
+                job_progresso=j.progresso,
+                job_restante_segundos=jobs.tempo_ate_terminar(j),
+            )
     slugs_existentes = {v["slug"] for v in videos}
     for job in jobs.listar_rodando():
         slug_job = slug_titulo(job.titulo)
