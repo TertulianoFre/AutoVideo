@@ -145,3 +145,13 @@ App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do You
 ## Próximos passos
 
 1. Sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição de som de fundo (hoje são 6 camadas combináveis reconhecidas por palavra-chave, mais importar um áudio pronto na Base — ainda não é "descreva qualquer coisa e sintetiza")
+
+## Novidades (thumbnails, cenas, Base, agente)
+
+- **Thumbnail do Short**: em Fila → "editar thumbnail" há um editor vertical 9:16 com prévia ao vivo (arrastar título, tamanho, cor, efeito, fundo gerado ou primeira cena). O que for salvo ali é enviado ao YouTube na publicação. O corte agora é proporcional (não estica mais).
+- **Efeitos de texto** (16:9 e Shorts): sombra, neon, explosão e "estilo YouTuber" (fonte pesada, contorno preto, degradê amarelo, raios de luz).
+- **Cenas**: "Quantidade de cenas" no Novo vídeo; o painel "cenas" da Fila vira um storyboard (ordem, trecho do roteiro, tempo, imagem 16:9 e 9:16), com "Gerar outra imagem" ou "Enviar imagem" do seu computador. Some depois de publicado.
+- **Roteiro**: barra de progresso, "Atualizar roteiro" e ajuste automático ao número de palavras da duração alvo.
+- **Base**: seções, descrição e canal por item, "usado em quais vídeos", aviso ao reutilizar áudio.
+- **Anotações**: bloco de notas simples (salva sozinho em `dados/anotacoes.txt`).
+- **Agente**: além de reagendar/cancelar, edita título, descrição, tags, privacidade e texto da thumbnail; em vídeo já publicado atualiza também no YouTube (exige reconectar a conta para autorizar a permissão `youtube`).
