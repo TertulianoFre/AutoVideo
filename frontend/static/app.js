@@ -575,7 +575,10 @@ function cardDeCena(slug, cena) {
             Enviar imagem
             <input type="file" class="cena-upload-input" accept="image/*" hidden data-slug="${slug}" data-indice="${cena.indice}">
           </label>
+          <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem que você importou na aba Base">Usar da Base</button>
         </div>
+        ${cena.imagem_base ? `<div class="video-meta cena-da-base">Imagem da Base: ${cena.imagem_base}</div>` : ""}
+        <div class="cena-base-grade" hidden></div>
       </div>
     </div>`;
 }
@@ -607,6 +610,9 @@ async function alternarPainelCenas(botao) {
 
   painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
     b.addEventListener("click", () => regenerarCena(b));
+  });
+  painel.querySelectorAll(".btn-base-cena").forEach((b) => {
+    b.addEventListener("click", () => alternarEscolhaBaseCena(b));
   });
   painel.querySelectorAll(".cena-upload-input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -660,6 +666,41 @@ async function regenerarCena(botao) {
     return;
   }
   acompanharJobCena(job_id, card, botao, rotulo);
+}
+
+async function alternarEscolhaBaseCena(botao) {
+  const card = botao.closest(".cena-card");
+  const grade = card.querySelector(".cena-base-grade");
+  grade.hidden = !grade.hidden;
+  if (grade.hidden || grade.dataset.carregado) return;
+  grade.dataset.carregado = "true";
+  const dados = await fetch("/api/biblioteca").then((r) => r.json());
+  if (!dados.imagens?.length) {
+    grade.innerHTML = '<span class="video-meta">Nenhuma imagem na Base ainda — importe na aba Base.</span>';
+    return;
+  }
+  grade.innerHTML = dados.imagens
+    .map((img) => `<button type="button" class="thumb-img-opcao" data-nome="${img.nome}" title="${img.nome}${img.usado_em.length ? " — já usada em: " + img.usado_em.join(", ") : ""}"><img src="${img.url}" alt=""></button>`)
+    .join("");
+  grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
+    op.addEventListener("click", async () => {
+      const usada = dados.imagens.find((i) => i.nome === op.dataset.nome)?.usado_em || [];
+      if (usada.length && !confirm(`Essa imagem já foi usada em: ${usada.join(", ")}. Usar de novo?`)) return;
+      const rotulo = card.querySelector(".btn-regenerar-cena").textContent;
+      card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      const corpo = new FormData();
+      corpo.set("nome", op.dataset.nome);
+      const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/imagem-base`, { method: "POST", body: corpo });
+      const { job_id, erro } = await resposta.json();
+      if (erro) {
+        card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        alert(erro);
+        return;
+      }
+      grade.hidden = true;
+      acompanharJobCena(job_id, card, card.querySelector(".btn-regenerar-cena"), rotulo);
+    });
+  });
 }
 
 async function enviarImagemCena(input) {

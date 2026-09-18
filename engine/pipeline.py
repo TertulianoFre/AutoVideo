@@ -239,6 +239,7 @@ def gerar_video(
     _salvar_metadados(
         pasta,
         cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
+        imagens_base_cenas={},
         audio_arquivo=audio_path.name,
         duracao_segundos=round(duracao_real, 1),
     )

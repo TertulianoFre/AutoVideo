@@ -431,3 +431,6 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .base-canal { align-self: flex-start; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
 .base-usado { font-size: 12px; color: var(--accent); }
 .base-nao-usado { font-size: 12px; color: var(--text-dim); }
+.cena-base-grade { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cena-base-grade[hidden] { display: none; }
+.cena-base-grade .thumb-img-opcao { width: 96px; }

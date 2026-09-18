@@ -5,7 +5,6 @@ Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 
 import io
 import json
-import random
 import re
 import shutil
 import sys
@@ -364,11 +363,16 @@ def _usos_biblioteca() -> dict:
         titulo = meta.get("titulo", pasta.name)
         if meta.get("som_fundo_biblioteca"):
             usos.setdefault(("audios", meta["som_fundo_biblioteca"]), []).append(titulo)
+        for nome_img in (meta.get("imagens_base_cenas") or {}).values():
+            if titulo not in usos.setdefault(("imagens", nome_img), []):
+                usos[("imagens", nome_img)].append(titulo)
         fonte = pasta / "thumbnail_fonte.txt"
         if fonte.exists():
             nome_fonte = fonte.read_text(encoding="utf-8").strip()
             if nome_fonte.startswith("biblioteca-"):
-                usos.setdefault(("imagens", nome_fonte[len("biblioteca-"):]), []).append(titulo)
+                lista = usos.setdefault(("imagens", nome_fonte[len("biblioteca-"):]), [])
+                if titulo not in lista:
+                    lista.append(titulo)
     return usos
 
 
@@ -764,92 +768,6 @@ def _rerenderizar_thumbnail(pasta: Path, base: Path, metadados: dict) -> None:
     thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados), efeito=metadados.get("thumbnail_efeito", "nenhum"))
 
 
-@app.post("/api/videos/{slug}/thumbnail/regenerar")
-def api_regenerar_thumbnail(slug: str) -> dict:
-    """Refaz só a thumbnail (rápido, não mexe no vídeo) — sorteia uma imagem
-    de cena diferente da atual como base, pra você poder ficar pedindo outra
-    até gostar."""
-    pasta = RAIZ_SAIDA / slug
-    caminho_meta = pasta / "metadata.json"
-    if not caminho_meta.exists():
-        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-
-    candidatas = sorted(pasta.glob("cena*_16x9.png"))
-    if not candidatas:
-        return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
-
-    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-
-    atual = pasta / "thumbnail_fonte.txt"
-    fonte_anterior = atual.read_text(encoding="utf-8").strip() if atual.exists() else None
-    opcoes = [c for c in candidatas if c.name != fonte_anterior] or candidatas
-    escolhida = random.choice(opcoes)
-
-    _rerenderizar_thumbnail(pasta, escolhida, metadados)
-    atual.write_text(escolhida.name, encoding="utf-8")
-
-    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}", "thumbnail_base": _thumbnail_base_url(pasta)}
-
-
-@app.get("/api/videos/{slug}/thumbnail-shorts/fundo")
-def api_fundo_thumbnail_shorts(slug: str) -> dict:
-    """Garante que o fundo procedural vertical existe (o editor precisa dele pra pré-visualizar)."""
-    pasta = RAIZ_SAIDA / slug
-    caminho_meta = pasta / "metadata.json"
-    if not caminho_meta.exists():
-        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    fundo = pasta / "thumbnail_shorts_fundo.png"
-    if not fundo.exists():
-        from engine import visuals as visuals_mod
-        visuals_mod.gerar_fundo_procedural(*thumbnail_mod.TAMANHO_SHORTS, fundo, semente=f"{metadados.get('titulo', slug)}{metadados.get('thumbnail_short_semente', '')}")
-    return {"procedural": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(fundo.stat().st_mtime)}",
-            "cena": f"/videos/{slug}/cena00_9x16.png" if (pasta / "cena00_9x16.png").exists() else None}
-
-
-@app.post("/api/videos/{slug}/thumbnail-shorts/editar")
-def api_editar_thumbnail_shorts(
-    slug: str,
-    texto: str = Form(...),
-    cor: str = Form(""),
-    tamanho_px: int = Form(120),
-    pos_x: float = Form(0.5),
-    pos_y: float = Form(0.5),
-    efeito: str = Form("youtuber"),
-    fundo: str = Form("procedural"),
-    novo_fundo: bool = Form(False),
-) -> dict:
-    """Salva e renderiza a thumbnail vertical (1080x1920) do Short. O que estiver
-    salvo aqui é o que o agendador envia ao YouTube."""
-    pasta = RAIZ_SAIDA / slug
-    caminho_meta = pasta / "metadata.json"
-    if not caminho_meta.exists():
-        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-    texto = texto.strip()
-    if not texto:
-        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
-    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    metadados["thumbnail_short"] = {
-        "texto": texto,
-        "cor": cor.strip().lstrip("#") if thumbnail_mod.cor_de_hex(cor) else "",
-        "tamanho_px": max(thumbnail_mod.TAMANHO_FONTE_MIN, min(thumbnail_mod.TAMANHO_FONTE_MAX, tamanho_px)),
-        "pos_x": min(max(pos_x, 0.0), 1.0),
-        "pos_y": min(max(pos_y, 0.0), 1.0),
-        "efeito": efeito if efeito in thumbnail_mod.EFEITOS else "youtuber",
-        "fundo": fundo if fundo in ("procedural", "cena") else "procedural",
-    }
-    if novo_fundo:
-        (pasta / "thumbnail_shorts_fundo.png").unlink(missing_ok=True)
-        metadados["thumbnail_short_semente"] = int(time.time())
-    thumbnail_mod.gerar_shorts(pasta, metadados)
-    metadados.pop("thumbnail_short_enviada", None) if not metadados.get("publicado") else None
-    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {
-        "thumbnail": f"/videos/{slug}/thumbnail_shorts.png?v={int(time.time())}",
-        "fundo": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(time.time())}" if fundo == "procedural" else f"/videos/{slug}/cena00_9x16.png?v={int(time.time())}",
-    }
-
-
 @app.get("/api/videos/{slug}/thumbnail/imagens")
 def api_listar_imagens_thumbnail(slug: str) -> dict:
     """Todas as imagens de cena (+ a customizada enviada, se houver) que dá
@@ -1033,6 +951,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "inicio_segundos": round(acumulado, 1),
                 "imagem": _url(i, "16x9"),
                 "imagem_vertical": _url(i, "9x16"),
+                "imagem_base": (metadados.get("imagens_base_cenas") or {}).get(str(i)),
             }
         )
         acumulado += duracao
@@ -1051,7 +970,40 @@ def api_regenerar_cena(slug: str, indice: int) -> dict:
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     titulo = metadados.get("titulo", slug)
 
+    _marcar_imagem_base_da_cena(caminho_meta, indice, None)
     job = jobs.criar_job_cena(titulo, slug, indice)
+    return {"job_id": job.id}
+
+
+def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | None) -> None:
+    """Registra (ou limpa, com None) qual imagem da Base está numa cena — é o que faz a Base mostrar "usado em"."""
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    mapa = meta.get("imagens_base_cenas") or {}
+    if nome:
+        mapa[str(indice)] = nome
+    else:
+        mapa.pop(str(indice), None)
+    meta["imagens_base_cenas"] = mapa
+    caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.post("/api/videos/{slug}/cenas/{indice}/imagem-base")
+def api_imagem_da_base_na_cena(slug: str, indice: int, nome: str = Form(...)) -> dict:
+    """Coloca uma imagem da Base numa cena (recortada pros dois formatos) e remonta o vídeo."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if not (0 <= indice < len(metadados.get("cenas") or [])):
+        return JSONResponse({"erro": "cena não existe"}, status_code=404)
+    origem = biblioteca.caminho_imagem_valida(nome)
+    if origem is None:
+        return JSONResponse({"erro": "imagem da Base inválida"}, status_code=400)
+    temporaria = pasta / f"cena{indice:02d}_upload.png"
+    Image.open(origem).convert("RGB").save(temporaria, "PNG")
+    _marcar_imagem_base_da_cena(caminho_meta, indice, origem.name)
+    job = jobs.criar_job_cena(metadados.get("titulo", slug), slug, indice, imagem_propria=temporaria)
     return {"job_id": job.id}
 
 
@@ -1080,6 +1032,7 @@ async def api_enviar_imagem_cena(slug: str, indice: int, arquivo: UploadFile = F
 
     temporaria = pasta / f"cena{indice:02d}_upload.png"
     imagem.save(temporaria, "PNG")
+    _marcar_imagem_base_da_cena(caminho_meta, indice, None)
     job = jobs.criar_job_cena(metadados.get("titulo", slug), slug, indice, imagem_propria=temporaria)
     return {"job_id": job.id}
 
