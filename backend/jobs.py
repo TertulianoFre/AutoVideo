@@ -133,6 +133,30 @@ def criar_job_cena(titulo: str, slug: str, indice: int, imagem_propria=None) -> 
     return job
 
 
+def criar_job_funcao(titulo: str, funcao) -> Job:
+    """Roda `funcao(progresso_cb) -> dict` numa thread e guarda o resultado como qualquer job."""
+    job = Job(id=str(uuid.uuid4()), titulo=titulo)
+    with _lock:
+        _jobs[job.id] = job
+
+    def rodar() -> None:
+        def progresso_cb(etapa: str, percentual: float) -> None:
+            job.etapa = etapa
+            job.progresso = round(percentual, 1)
+
+        try:
+            job.resultado = funcao(progresso_cb)
+            job.status = "pronto"
+            job.progresso = 100
+            job.etapa = "Pronto"
+        except Exception as erro:
+            job.status = "erro"
+            job.erro = str(erro)
+
+    threading.Thread(target=rodar, daemon=True).start()
+    return job
+
+
 def obter_job(job_id: str) -> Job | None:
     with _lock:
         return _jobs.get(job_id)

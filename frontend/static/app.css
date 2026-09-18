@@ -449,3 +449,17 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .roteiro-edicao { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; line-height: 1.5; margin: 8px 0; }
 
 .cenas-rodape { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+
+.status-revisar { background: rgba(226, 121, 61, .18); color: var(--accent); border: 1px solid var(--accent); }
+.btn-confirmar-publicacao { background: var(--accent); color: #14130F; border: none; border-radius: 8px; padding: 7px 12px; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.btn-confirmar-publicacao:disabled { opacity: .5; cursor: default; }
+.legenda-painel, .revisao-painel { display: none; padding: 4px 2px 14px; }
+.legenda-painel.aberto, .revisao-painel.aberto { display: block; }
+.legenda-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin: 10px 0; }
+.legenda-grade label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.legenda-grade select, .legenda-grade input[type="color"], .rev-valor { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.legenda-grade input[type="color"] { height: 34px; padding: 2px; }
+.rev-item { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); margin-top: 10px; }
+.rev-valor { width: 100%; line-height: 1.45; }
+.rev-obs { margin-top: 12px; font-size: 12.5px; color: var(--accent); }
+.rev-obs ul { margin: 6px 0 0 18px; padding: 0; }

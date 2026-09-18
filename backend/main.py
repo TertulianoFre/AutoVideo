@@ -29,6 +29,9 @@ from backend import jobs
 from engine import afiliados, agendador, agente, biblioteca, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import tts as tts_mod
+from engine import pipeline as pipeline_mod
+from engine import render as render_mod
+from engine import subtitles as subtitles_mod
 from engine import youtube as youtube_mod
 from engine.pipeline import RAIZ_SAIDA, slug_titulo
 
@@ -558,6 +561,12 @@ def api_criar_video(
     formatos: str = Form("ambos"),
     num_cenas: int | None = Form(None),
     imagens_base: str = Form(""),
+    transicao: str = Form("fade"),
+    legenda_modo: str = Form("karaoke"),
+    legenda_tamanho: str = Form("m"),
+    legenda_posicao: str = Form("baixo"),
+    legenda_cor: str = Form(""),
+    legenda_caixa: bool = Form(False),
     confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
@@ -611,11 +620,113 @@ def api_criar_video(
         formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
         num_cenas=num_cenas if num_cenas and 1 <= num_cenas <= 40 else None,
         imagens_base=[n for n in imagens_base.split("|") if n.strip()],
+        transicao=transicao if transicao in render_mod.TRANSICOES else "fade",
+        legenda=_config_legenda(legenda_modo, legenda_tamanho, legenda_posicao, legenda_cor, legenda_caixa),
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
     job = jobs.criar_job(titulo, params)
     return {"job_id": job.id}
+
+
+@app.post("/api/videos/{slug}/aprovacao")
+def api_aprovacao(slug: str, aprovado: bool = Form(...)) -> dict:
+    """Confirma (ou desfaz a confirmação de) publicação. Sem confirmar, o agendador nunca sobe o vídeo."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    metadados["aprovado"] = aprovado
+    if aprovado:
+        metadados.pop("publicacao_erro", None)
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "aprovado": aprovado}
+
+
+def _config_legenda(modo: str, tamanho: str, posicao: str, cor: str, caixa: bool) -> dict:
+    return {
+        "modo": modo if modo in ("karaoke", "simples", "nenhuma") else "karaoke",
+        "tamanho": tamanho if tamanho in ("p", "m", "g") else "m",
+        "posicao": posicao if posicao in ("baixo", "meio", "topo") else "baixo",
+        "cor": cor.strip().lstrip("#") if len(cor.strip().lstrip("#")) == 6 else subtitles_mod.COR_DESTAQUE,
+        "caixa": bool(caixa),
+    }
+
+
+@app.post("/api/videos/{slug}/legenda")
+def api_legenda(
+    slug: str,
+    modo: str = Form("karaoke"), tamanho: str = Form("m"), posicao: str = Form("baixo"),
+    cor: str = Form(""), caixa: bool = Form(True), transicao: str = Form(""),
+) -> dict:
+    """Muda o estilo da legenda (e opcionalmente a transição) e remonta os vídeos — sem refazer imagens/narração."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    if transicao in render_mod.TRANSICOES:
+        metadados["transicao"] = transicao
+        caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    config = _config_legenda(modo, tamanho, posicao, cor, caixa)
+    job = jobs.criar_job_funcao(metadados.get("titulo", slug), lambda cb: _resultado_videos(slug, pipeline_mod.regenerar_legenda(slug, config, progresso=cb)))
+    return {"job_id": job.id}
+
+
+def _resultado_videos(slug: str, r: dict) -> dict:
+    marca = int(time.time())
+    return {
+        "slug": slug,
+        "video_16_9": f"/videos/{slug}/{r['video_16_9']}?v={marca}" if r.get("video_16_9") else None,
+        "video_9_16": f"/videos/{slug}/{r['video_9_16']}?v={marca}" if r.get("video_9_16") else None,
+    }
+
+
+@app.post("/api/videos/{slug}/revisar")
+def api_revisar_video(slug: str) -> JSONResponse:
+    """O agente lê o vídeo (título, roteiro, cenas, descrição, tags) e sugere melhorias aplicáveis sem regenerar."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    roteiro = (pasta / "roteiro.txt").read_text(encoding="utf-8") if (pasta / "roteiro.txt").exists() else ""
+    tags = (pasta / "tags.txt").read_text(encoding="utf-8") if (pasta / "tags.txt").exists() else ""
+    try:
+        sugestao = agente.revisar_video(
+            titulo=metadados.get("titulo", slug),
+            roteiro=roteiro,
+            descricao_atual=metadados.get("descricao_youtube") or "",
+            tags=tags,
+            cenas=[c.get("texto", "") for c in (metadados.get("cenas") or [])],
+            thumbnail_texto=metadados.get("thumbnail_texto") or "",
+            contexto_canal=canal.obter_contexto(metadados.get("canal_id")),
+        )
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=502)
+    sugestao["atual"] = {
+        "titulo": metadados.get("titulo", slug),
+        "descricao_youtube": metadados.get("descricao_youtube") or "(hoje a descrição é o próprio roteiro)",
+        "tags": tags,
+        "thumbnail_texto": metadados.get("thumbnail_texto") or metadados.get("titulo", ""),
+    }
+    return JSONResponse(sugestao)
+
+
+@app.post("/api/videos/{slug}/revisar/aplicar")
+def api_aplicar_revisao(
+    slug: str,
+    titulo: str = Form(""), descricao_youtube: str = Form(""), tags: str = Form(""), thumbnail_texto: str = Form(""),
+) -> JSONResponse:
+    """Aplica só os campos marcados pelo usuário (sem regenerar o vídeo)."""
+    pedido = {
+        "slug": slug, "titulo": titulo, "descricao_youtube": descricao_youtube,
+        "tags": [t.strip() for t in tags.split(",") if t.strip()] or None, "thumbnail_texto": thumbnail_texto,
+    }
+    return JSONResponse(_aplicar_edicao_do_agente(pedido))
 
 
 @app.get("/api/videos/{slug}/roteiro")
@@ -686,6 +797,8 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         formatos=metadados.get("formatos", "ambos"),
         num_cenas=metadados.get("num_cenas"),
         imagens_base=metadados.get("imagens_base") or [],
+        transicao=metadados.get("transicao", "fade"),
+        legenda=metadados.get("legenda") or None,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
@@ -769,6 +882,8 @@ def _status_de(metadados: dict) -> str:
         return "publicado"
     if metadados.get("publicacao_erro"):
         return "erro"
+    if not metadados.get("aprovado", False):
+        return "revisar"  # gerado, mas ainda sem a sua confirmação de publicação
     data_postagem = metadados.get("data_postagem")
     if not data_postagem:
         return "aguardando"
@@ -1148,6 +1263,10 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_pos_y": metadados.get("thumbnail_pos_y"),
                 "thumbnail_base": _thumbnail_base_url(pasta),
                 "thumbnail_efeito": metadados.get("thumbnail_efeito", "nenhum"),
+                "aprovado": bool(metadados.get("aprovado", False)),
+                "transicao": metadados.get("transicao", "fade"),
+                "legenda": {**subtitles_mod.CONFIG_LEGENDA_PADRAO, **(metadados.get("legenda") or {})},
+                "tem_cues": (pasta / "cues.json").exists(),
                 "thumbnail_short": thumbnail_mod.config_shorts(metadados, pasta.name) if (pasta / "video_9x16.mp4").exists() or metadados.get("formatos") != "normal" else None,
                 "thumbnail_short_url": f"/videos/{pasta.name}/thumbnail_shorts.png?v={int((pasta / 'thumbnail_shorts.png').stat().st_mtime)}" if (pasta / "thumbnail_shorts.png").exists() else None,
                 "thumbnail_short_fundo_url": f"/videos/{pasta.name}/thumbnail_shorts_fundo.png" if (pasta / "thumbnail_shorts_fundo.png").exists() else None,

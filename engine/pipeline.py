@@ -93,6 +93,8 @@ def gerar_video(
     canal_id: str | None = None,
     num_cenas: int | None = None,
     imagens_base: list | None = None,
+    transicao: str = "fade",
+    legenda: dict | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -125,6 +127,9 @@ def gerar_video(
         formatos=formatos,
         num_cenas=num_cenas,
         imagens_base=imagens_base or [],
+        transicao=transicao,
+        legenda=legenda or {},
+        aprovado=False,  # só publica depois de você confirmar na Fila
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -238,6 +243,12 @@ def gerar_video(
         cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
+    if submaker is not None:
+        (pasta / "cues.json").write_text(
+            json.dumps([{"start": c.start.total_seconds(), "end": c.end.total_seconds(), "content": c.content} for c in submaker.cues], ensure_ascii=False),
+            encoding="utf-8",
+        )
+
     # imagens da Base escolhidas de antemão: a 1ª vai na cena 1, a 2ª na cena 2...
     imagens_base_validas = []
     for nome_base in imagens_base or []:
@@ -264,8 +275,8 @@ def gerar_video(
     for formato, estilo in formatos_ativos.items():
         sufixo = formato.replace(":", "x")
         legenda_path = None
-        if not sem_narracao:
-            legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro_final, **estilo)
+        if not sem_narracao and (legenda or {}).get("modo") != "nenhuma":
+            legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro_final, config=legenda, **estilo)
 
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
@@ -299,7 +310,7 @@ def gerar_video(
 
         avisar(f"Montando o vídeo ({formato})", 88 if formato == "16:9" else 94)
         videos[formato] = render.renderizar_slideshow(
-            imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4"
+            imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4", transicao=transicao
         )
 
     if "16:9" not in videos:
@@ -325,6 +336,62 @@ def _trava_do_video(slug: str) -> "threading.Lock":
     remontagem do mp4 é uma de cada vez (senão duas escrevem o mesmo arquivo)."""
     with _travas_lock:
         return _travas_de_video.setdefault(slug, threading.Lock())
+
+
+def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
+    """Refaz só a legenda (estilo, tamanho, posição, cor...) e remonta os vídeos,
+    sem mexer em roteiro, narração nem imagens. Precisa de cues.json (salvo em
+    vídeos gerados/regenerados depois desse recurso)."""
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    def avisar(etapa: str, percentual: float) -> None:
+        if progresso is not None:
+            progresso(etapa, percentual)
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("sem_narracao"):
+        raise RuntimeError("Vídeo sem narração não tem legenda.")
+    cues_arquivo = pasta / "cues.json"
+    roteiro_arquivo = pasta / "roteiro.txt"
+    if not cues_arquivo.exists() or not roteiro_arquivo.exists():
+        raise RuntimeError('Esse vídeo foi gerado antes da legenda ser editável — clique em "Regenerar" uma vez pra habilitar.')
+    audio_nome = metadados.get("audio_arquivo")
+    audio_path = pasta / audio_nome if audio_nome else None
+    if audio_path is None or not audio_path.exists() or not metadados.get("cenas"):
+        raise RuntimeError("Faltam arquivos originais — regenere o vídeo inteiro uma vez.")
+
+    cues = [
+        SimpleNamespace(start=timedelta(seconds=c["start"]), end=timedelta(seconds=c["end"]), content=c["content"])
+        for c in json.loads(cues_arquivo.read_text(encoding="utf-8"))
+    ]
+    submaker = SimpleNamespace(cues=cues)
+    roteiro = roteiro_arquivo.read_text(encoding="utf-8")
+    formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
+    nomes_video = {}
+    passo = 0
+    for formato, estilo in formatos_ativos.items():
+        sufixo = formato.replace(":", "x")
+        avisar(f"Refazendo a legenda ({formato})", 10 + 80 * passo / len(formatos_ativos))
+        legenda_path = None
+        if config.get("modo") != "nenhuma":
+            legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro, config=config, **estilo)
+        imagens = [(pasta / f"cena{i:02d}_{sufixo}.png", c["duracao_segundos"]) for i, c in enumerate(metadados["cenas"])]
+        if not all(p.exists() for p, _ in imagens):
+            raise RuntimeError("Imagem de alguma cena sumiu do disco — regenere o vídeo inteiro uma vez.")
+        avisar(f"Remontando o vídeo ({formato})", 10 + 80 * (passo + 0.5) / len(formatos_ativos))
+        with _trava_do_video(slug):
+            caminho_video = pasta / f"video_{sufixo}.mp4"
+            render.renderizar_slideshow(imagens, audio_path, legenda_path, formato, caminho_video, transicao=metadados.get("transicao", "fade"))
+        nomes_video[formato] = caminho_video.name
+        passo += 1
+    _salvar_metadados(pasta, legenda=config, aprovado=False)
+    avisar("Pronto", 100)
+    return {"video_16_9": nomes_video.get("16:9"), "video_9_16": nomes_video.get("9:16")}
 
 
 def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None, imagem_propria: Path | None = None) -> dict:
@@ -402,7 +469,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
             legenda_path = legenda_path if (not sem_narracao and legenda_path.exists()) else None
 
             caminho_video = pasta / f"video_{sufixo}.mp4"
-            render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video)
+            render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video, transicao=metadados.get("transicao", "fade"))
             nomes_video[formato] = caminho_video.name
 
     if indice == 0:
@@ -426,6 +493,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
 
     if imagem_propria:
         imagem_propria.unlink(missing_ok=True)
+    _salvar_metadados(pasta, aprovado=False)
     avisar("Pronto", 100)
     return {
         "video_16_9": nomes_video.get("16:9"),

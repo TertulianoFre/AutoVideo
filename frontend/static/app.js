@@ -33,6 +33,7 @@ function formatarDataPostagem(iso, hora) {
 
 const STATUS_FILA = {
   publicado: { rotulo: "publicado", classe: "status-publicado" },
+  revisar: { rotulo: "aguardando sua confirmação", classe: "status-revisar" },
   pronto: { rotulo: "pronto para enviar", classe: "status-pronto" },
   aguardando: { rotulo: "aguardando data de publicação", classe: "status-aguardando" },
   erro: { rotulo: "erro ao publicar", classe: "status-erro" },
@@ -91,12 +92,15 @@ function linhaDeVideo(v, comRegenerar) {
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
        ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
+       ${!publicado && v.aprovado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-desfazer-confirmacao" data-slug="${v.slug}" title="Volta a exigir confirmação antes de publicar">desfazer confirmação</button>` : ""}
+       ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-revisar" data-slug="${v.slug}" title="O agente sugere melhorias de título, descrição, tags e thumbnail (sem regenerar)">revisar com agente</button>` : ""}
+       ${!publicado && !v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-legenda" data-slug="${v.slug}" title="Mudar estilo, tamanho e posição da legenda e a transição entre cenas">legenda</button>` : ""}
        ${!publicado && !v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-roteiro" data-slug="${v.slug}" title="Corrigir o texto do roteiro e gerar o vídeo de novo com ele">editar roteiro</button>` : ""}
        ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar texto, cor, efeito e posição das thumbnails (normal e Shorts)">editar thumbnail</button>` : ""}
        ${v.tem_cenas && !publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
-  const badgeStatus = v.status === "pronto" || v.status === "aguardando" ? statusBadge(v) : "";
+  const badgeStatus = v.status === "pronto" || v.status === "aguardando" || v.status === "revisar" ? statusBadge(v) : "";
   return `
     <div class="video-item">
       <div class="video-row" data-slug="${v.slug}">
@@ -110,6 +114,7 @@ function linhaDeVideo(v, comRegenerar) {
         <div class="video-links">
           ${v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
           ${v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
+          ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Sem confirmar, o vídeo NÃO é publicado">Confirmar publicação</button>` : ""}
           ${botaoRegenerar}
           <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
@@ -117,6 +122,8 @@ function linhaDeVideo(v, comRegenerar) {
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
       ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="roteiro-painel" data-slug="${v.slug}"></div>` : ""}
+      ${comRegenerar && !publicado ? `<div class="revisao-painel" data-slug="${v.slug}"></div>` : ""}
+      ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="legenda-painel" data-slug="${v.slug}" data-tem-cues="${v.tem_cues}" data-legenda="${encodeURIComponent(JSON.stringify(v.legenda || {}))}" data-transicao="${v.transicao || "fade"}"></div>` : ""}
     </div>`;
 }
 
@@ -196,7 +203,7 @@ function aplicarFiltrosFila() {
   lista.querySelectorAll(".btn-editar-roteiro").forEach((botao) => {
     botao.addEventListener("click", () => alternarPainelRoteiro(botao));
   });
-  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb):not(.btn-editar-roteiro)").forEach((botao) => {
+  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb):not(.btn-editar-roteiro):not(.btn-legenda):not(.btn-revisar):not(.btn-desfazer-confirmacao)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
   });
   lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {

@@ -12,6 +12,8 @@ COR_TEXTO = "F6F2E9"     # ivory — cor da palavra antes/depois de ser falada
 COR_DESTAQUE = "E2793D"  # laranja do app — cor da palavra sendo falada agora
 COR_CAIXA = "141310"     # fundo (caixa) atrás do texto
 
+CONFIG_LEGENDA_PADRAO = {"modo": "karaoke", "tamanho": "m", "posicao": "baixo", "cor": COR_DESTAQUE, "caixa": True}
+
 _CABECALHO = """[Script Info]
 ScriptType: v4.00+
 PlayResX: {largura}
@@ -20,7 +22,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{fontname},{fontsize},{primary},{secondary},{outline},{back},1,0,0,0,100,100,0,0,3,0,0,2,40,40,{marginv},1
+Style: Default,{fontname},{fontsize},{primary},{secondary},{outline},{back},1,0,0,0,100,100,0,0,{borderstyle},{outlinew},0,{alignment},40,40,{marginv},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -65,8 +67,21 @@ def gerar_ass(
     palavras_por_legenda: int,
     roteiro: str,
     fontname: str = "Segoe UI",
+    config: dict | None = None,
 ) -> Path:
-    """Agrupa as palavras em blocos curtos e grava um .ass com destaque karaokê."""
+    """Agrupa as palavras em blocos curtos e grava um .ass. `config` (todos opcionais):
+    modo "karaoke" (palavra atual destacada) | "simples"; tamanho "p"|"m"|"g";
+    posicao "baixo"|"meio"|"topo"; cor (hex do destaque); caixa (fundo atrás do texto)."""
+    cfg = {**CONFIG_LEGENDA_PADRAO, **(config or {})}
+    fontsize = round(fontsize * {"p": 0.8, "m": 1.0, "g": 1.25}.get(cfg["tamanho"], 1.0))
+    alinhamento = {"baixo": 2, "meio": 5, "topo": 8}.get(cfg["posicao"], 2)
+    if alinhamento == 5:
+        marginv = 0
+    elif alinhamento == 8:
+        marginv = max(marginv, round(altura * 0.06))
+    cor_destaque = cfg["cor"] if len(str(cfg["cor"]).lstrip("#")) == 6 else COR_DESTAQUE
+    cor_destaque = str(cor_destaque).lstrip("#")
+    karaoke = cfg["modo"] != "simples"
     cues = submaker.cues
     textos = palavras_alinhadas(cues, roteiro)
     pares = list(zip(cues, textos))
@@ -78,7 +93,7 @@ def gerar_ass(
             continue
         inicio = _formatar_tempo_ass(grupo[0][0].start)
         fim = _formatar_tempo_ass(grupo[-1][0].end)
-        texto = _texto_karaoke(grupo)
+        texto = _texto_karaoke(grupo) if karaoke else " ".join(t.replace("{", "").replace("}", "") for _, t in grupo)
         eventos.append(f"Dialogue: 0,{inicio},{fim},Default,,0,0,0,,{texto}")
 
     cabecalho = _CABECALHO.format(
@@ -89,11 +104,14 @@ def gerar_ass(
         # No .ass, o \k mostra a "SecondaryColour" ANTES da palavra ser dita e
         # troca pra "PrimaryColour" quando o tempo dela chega — por isso o
         # destaque (cor de "já falado") vai em primary, e o normal em secondary.
-        primary=_ass_cor(COR_DESTAQUE),
+        primary=_ass_cor(cor_destaque if karaoke else COR_TEXTO),
         secondary=_ass_cor(COR_TEXTO),
         outline=_ass_cor("000000"),
         back=_ass_cor(COR_CAIXA, "40"),
         marginv=marginv,
+        alignment=alinhamento,
+        borderstyle=3 if cfg["caixa"] else 1,
+        outlinew=0 if cfg["caixa"] else 4,
     )
 
     caminho.write_text(cabecalho + "\n".join(eventos) + "\n", encoding="utf-8")

@@ -327,8 +327,63 @@
 
             </details>
 
+            <details class="secao" id="secao-legenda">
+              <summary>4. Transição e legenda</summary>
+              <div class="row-2">
+                <label>
+                  <span>Transição entre as cenas</span>
+                  <select name="transicao">
+                    <option value="fade" selected>Fade (suave)</option>
+                    <option value="dissolver">Dissolver</option>
+                    <option value="deslizar">Deslizar</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="circulo">Círculo</option>
+                    <option value="aleatoria">Aleatória (varia a cada cena)</option>
+                    <option value="nenhuma">Sem transição (corte seco)</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Estilo da legenda</span>
+                  <select name="legenda_modo">
+                    <option value="karaoke" selected>Karaokê (palavra atual em destaque)</option>
+                    <option value="simples">Simples (texto fixo)</option>
+                    <option value="nenhuma">Sem legenda</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row-2">
+                <label>
+                  <span>Tamanho da legenda</span>
+                  <select name="legenda_tamanho">
+                    <option value="p">Pequena</option>
+                    <option value="m" selected>Média</option>
+                    <option value="g">Grande</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Posição da legenda</span>
+                  <select name="legenda_posicao">
+                    <option value="baixo" selected>Embaixo</option>
+                    <option value="meio">No meio</option>
+                    <option value="topo">No topo</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row-2">
+                <label>
+                  <span>Cor de destaque</span>
+                  <input type="color" name="legenda_cor" value="#e2793d">
+                </label>
+                <label class="checkbox-row">
+                  <input type="checkbox" name="legenda_caixa" checked>
+                  <span>Fundo escuro atrás da legenda</span>
+                </label>
+              </div>
+              <p class="hint">Dá pra mudar tudo isso depois na Fila (botão "legenda"), sem gerar o vídeo de novo.</p>
+            </details>
+
             <details class="secao" id="secao-som">
-              <summary>4. Som de fundo</summary>
+              <summary>5. Som de fundo</summary>
             <label class="checkbox-row" id="linha-som-fundo">
               <input type="checkbox" name="som_fundo_ativo" id="campo-som-fundo-ativo">
               <span>Som de fundo (baixo, por baixo da narração)</span>
@@ -406,6 +461,7 @@
                 <option value="">Todos</option>
                 <option value="processando">Processando</option>
                 <option value="publicado">Publicado</option>
+                <option value="revisar">Aguardando confirmação</option>
                 <option value="pronto">Pronto para enviar</option>
                 <option value="aguardando">Aguardando data</option>
                 <option value="erro">Erro ao publicar</option>
@@ -510,6 +566,7 @@
 <script src="/static/thumb_shorts.js"></script>
 <script src="/static/anotacoes.js"></script>
 <script src="/static/base.js"></script>
+<script src="/static/revisao.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

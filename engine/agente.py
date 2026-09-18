@@ -100,3 +100,53 @@ def responder_livre(mensagem: str, contexto_canal: str = "", videos: list | None
         pass
     # modelo não seguiu o formato JSON pedido — trata a resposta toda como texto livre
     return {"acao": "responder", "texto": texto.strip()}
+
+
+PROMPT_SISTEMA_REVISAO = (
+    "Você é um editor experiente de canais de YouTube revisando um vídeo antes de ir ao ar. Recebe título, roteiro, "
+    "cenas, descrição e tags atuais. Responda SEMPRE com um único objeto JSON válido, sem markdown, neste formato:\n"
+    '{"resumo": "avaliação curta (1-2 frases)", "titulo": "título melhor (até 100 caracteres) ou null se o atual já está bom", '
+    '"descricao_youtube": "descrição completa e envolvente (2-4 parágrafos curtos, chamada pra se inscrever, hashtags no fim) ou null", '
+    '"tags": ["tag1", "tag2"] ou null, "thumbnail_texto": "texto curto e chamativo pra thumbnail (até 5 palavras) ou null", '
+    '"observacoes": ["problemas do ROTEIRO ou das CENAS que exigem regenerar o vídeo (erro de fato, trecho confuso, cena repetida...)"]}\n'
+    "Só sugira mudar o que realmente melhora; use null no que está bom. Não invente fatos novos na descrição além do que o roteiro diz."
+)
+
+
+def revisar_video(titulo: str, roteiro: str, descricao_atual: str, tags: str, cenas: list, thumbnail_texto: str, contexto_canal: str = "") -> dict:
+    """Revisão editorial de um vídeo pronto. Devolve sugestões de título/descrição/tags/thumbnail
+    (aplicáveis sem regenerar) e observações sobre roteiro/cenas (que exigem regenerar)."""
+    partes = [
+        f"Título atual: {titulo}",
+        f"Texto atual da thumbnail: {thumbnail_texto}",
+        f"Tags atuais: {tags or '(nenhuma)'}",
+        f"Descrição atual: {descricao_atual or '(usa o próprio roteiro como descrição)'}",
+        f"Nicho/tom do canal: {contexto_canal}" if contexto_canal else "",
+        "Roteiro:\n" + roteiro[:6000],
+        "Cenas (uma imagem por trecho):\n" + "\n".join(f"{i + 1}. {t[:200]}" for i, t in enumerate(cenas)),
+    ]
+    texto = chamar_pollinations(
+        [{"role": "system", "content": PROMPT_SISTEMA_REVISAO}, {"role": "user", "content": "\n\n".join(p for p in partes if p)}],
+        tentativas=3,
+    )
+    bruto = texto.strip()
+    if bruto.startswith("```"):
+        bruto = bruto.strip("`")
+        if bruto.lower().startswith("json"):
+            bruto = bruto[4:]
+        bruto = bruto.strip()
+    try:
+        dados = json.loads(bruto)
+        if isinstance(dados, dict):
+            tags_sug = dados.get("tags")
+            return {
+                "resumo": str(dados.get("resumo") or ""),
+                "titulo": str(dados["titulo"]).strip() if dados.get("titulo") else None,
+                "descricao_youtube": str(dados["descricao_youtube"]).strip() if dados.get("descricao_youtube") else None,
+                "tags": [str(t) for t in tags_sug] if isinstance(tags_sug, list) and tags_sug else None,
+                "thumbnail_texto": str(dados["thumbnail_texto"]).strip() if dados.get("thumbnail_texto") else None,
+                "observacoes": [str(o) for o in (dados.get("observacoes") or []) if o][:6],
+            }
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return {"resumo": texto.strip()[:600], "titulo": None, "descricao_youtube": None, "tags": None, "thumbnail_texto": None, "observacoes": []}
