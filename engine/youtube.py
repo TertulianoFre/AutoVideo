@@ -40,7 +40,12 @@ def _carregar_credenciais(nome_conta: str) -> Credentials | None:
     if not caminho.exists():
         return None
     try:
-        creds = Credentials.from_authorized_user_file(str(caminho), ESCOPOS)
+        # sem passar ESCOPOS aqui de propósito: usa os escopos que o token já
+        # tem de verdade (gravados no próprio arquivo). Se pedir pra renovar
+        # com um escopo diferente do que foi concedido originalmente (ex:
+        # ESCOPOS cresceu desde que essa conta conectou), o Google rejeita o
+        # refresh inteiro — a conta parece "desconectada" do nada.
+        creds = Credentials.from_authorized_user_file(str(caminho))
     except (ValueError, OSError):
         return None
     if creds and creds.expired and creds.refresh_token:
@@ -100,6 +105,19 @@ def obter_estatisticas_canal(nome_conta: str) -> dict:
         "visualizacoes": int(estatisticas.get("viewCount", 0)),
         "total_videos": int(estatisticas.get("videoCount", 0)),
     }
+
+
+def obter_tendencias(nome_conta: str, regiao: str = "BR", quantidade: int = 15) -> list:
+    """Títulos dos vídeos em alta no YouTube agora — usado como inspiração pro
+    Agente sugerir ideias (não copia os títulos, só usa como contexto do que
+    está bombando)."""
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+
+    youtube = build("youtube", "v3", credentials=creds)
+    resposta = youtube.videos().list(part="snippet", chart="mostPopular", regionCode=regiao, maxResults=quantidade).execute()
+    return [item["snippet"]["title"] for item in resposta.get("items", []) if item.get("snippet")]
 
 
 def publicar_video(
