@@ -21,7 +21,7 @@ Rodar:
 ```
 .venv\Scripts\uvicorn backend.main:app --reload
 ```
-Abre em `http://localhost:8000`, com 3 telas: **Painel** (vídeos recentes + contexto do canal), **Novo vídeo** (formulário com progresso real) e **Fila** (todos os vídeos gerados).
+Abre em `http://localhost:8000`, com 3 telas: **Painel** (vídeos recentes + contexto do canal), **Novo vídeo** (formulário com progresso real, thumbnail e hashtags no resultado) e **Fila** (todos os vídeos gerados, com botão de **Regenerar** — refaz o roteiro e as imagens do zero, direto na lista).
 
 Na tela "Novo vídeo", só **título** e **data de postagem** são obrigatórios. Tudo mais é opcional:
 - **Modo**: Narrado (roteiro + narração, padrão) ou Ambiente (som contínuo + imagem, sem narração — ex: "chuva pra relaxar", 15+ minutos).
@@ -44,6 +44,7 @@ Resumo do fluxo (`engine/`, testável também pelo `cli.py`):
    - `ia`: traduz a cena pro inglês (MyMemory Translator, grátis), troca verbos de expressão facial de risco (bocejar, gritar...) por uma descrição de cena mais genérica, e gera a imagem via Pollinations.ai (grátis, sem chave). Estilo padrão é desenho 2D; a "descrição do vídeo" pode pedir algo diferente (mais detalhado, infantil, etc). Até 3 tentativas; se falhar, cai pro procedural.
 6. **Legenda** (`engine/subtitles.py`) — arquivo `.ass` com destaque de cor por palavra (efeito "karaokê"), sincronizado com a narração. Não existe no modo ambiente.
 7. **Montagem** (`engine/render.py`) — FFmpeg junta as imagens (slideshow) + áudio (+ legenda, se houver), exporta 16:9 e 9:16.
+8. **Thumbnail** (`engine/thumbnail.py`) — 1280x720, título em destaque por cima da primeira cena, estilo YouTube (texto grande, contorno grosso, alto contraste).
 
 ### Modo ambiente (`engine/ambiente.py`, `pipeline.gerar_video_ambiente`)
 
@@ -59,9 +60,8 @@ Sem narração nem legenda: um som contínuo em loop (hoje só "chuva", sintetiz
 
 ## Requisitos já levantados, ainda não implementados
 
-- Botão de **regenerar vídeo** na tela "Novo vídeo", caso o resultado não fique bom.
-- **Geração de thumbnail**, com prévia editável (poder pedir pra alterar).
-- Poder **pedir alterações** num vídeo já gerado (não só regenerar do zero).
+- Prévia **editável** da thumbnail (hoje ela é gerada automaticamente, dá pra regenerar o vídeo inteiro mas não editar só a thumbnail).
+- Poder **pedir alterações pontuais** num vídeo já gerado (o botão "Regenerar" da Fila refaz tudo do zero, não é uma edição direcionada).
 - **Publicação automática na data escolhida** — hoje "data de postagem" é só guardada como metadado; publicar de verdade nessa data depende da integração com a YouTube Data API + agendamento.
 - Outros tipos de som ambiente além de chuva (hoje só `chuva` está implementado em `engine/ambiente.py`).
 
@@ -80,7 +80,7 @@ Sem narração nem legenda: um som contínuo em loop (hoje só "chuva", sintetiz
 
 ## Status
 
-App funcionando de ponta a ponta: tela real (Painel/Novo vídeo/Fila), motor completo (contexto do canal, roteiro automático com hashtags, narração, modo ambiente, 3 estilos de imagem, legenda com destaque, progresso real, download). Próximo: publicação de verdade no YouTube.
+App funcionando de ponta a ponta: tela real (Painel/Novo vídeo/Fila), motor completo (contexto do canal, roteiro automático com hashtags, narração, modo ambiente, 3 estilos de imagem, thumbnail automática, legenda com destaque, progresso real, download, regenerar). Próximo: publicação de verdade no YouTube.
 
 ## Próximos passos
 

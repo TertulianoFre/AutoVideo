@@ -26,20 +26,27 @@ function formatarDataPostagem(iso) {
   return `postar em ${dia}/${mes}/${ano}`;
 }
 
-function linhaDeVideo(v) {
+const ICONE_VIDEO = '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="10" height="9" rx="1.5"></rect><path d="M12.5 9l5-3v8l-5-3z"></path></svg>';
+
+function linhaDeVideo(v, comRegenerar) {
   const modoLabel = v.modo === "ambiente" ? "· ambiente" : "";
+  const thumb = v.thumbnail
+    ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
+    : ICONE_VIDEO;
+  const botaoRegenerar = comRegenerar
+    ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}">Regenerar</button>`
+    : "";
   return `
-    <div class="video-row">
-      <div class="video-thumb">
-        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="10" height="9" rx="1.5"></rect><path d="M12.5 9l5-3v8l-5-3z"></path></svg>
-      </div>
+    <div class="video-row" data-slug="${v.slug}">
+      <div class="video-thumb">${thumb}</div>
       <div class="video-info">
         <div class="video-title">${v.titulo}</div>
-        <div class="video-meta">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
+        <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
       </div>
       <div class="video-links">
         <a href="${v.video_16_9}" target="_blank">16:9</a>
         <a href="${v.video_9_16}" target="_blank">Shorts</a>
+        ${botaoRegenerar}
       </div>
     </div>`;
 }
@@ -62,8 +69,44 @@ async function carregarFila() {
   const videos = await buscarVideos();
   const lista = document.getElementById("fila-lista");
   lista.innerHTML = videos.length
-    ? videos.map(linhaDeVideo).join("")
+    ? videos.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo gerado ainda.</div>';
+
+  lista.querySelectorAll(".btn-regenerar").forEach((botao) => {
+    botao.addEventListener("click", () => regenerarVideo(botao));
+  });
+}
+
+async function regenerarVideo(botao) {
+  const slug = botao.dataset.slug;
+  const linha = botao.closest(".video-row");
+  const status = linha.querySelector(".video-meta-status");
+  const statusOriginal = status.textContent;
+  botao.disabled = true;
+  status.textContent = "Gerando de novo…";
+
+  const resposta = await fetch(`/api/videos/${slug}/regenerar`, { method: "POST" });
+  const { job_id, erro } = await resposta.json();
+  if (erro) {
+    status.textContent = erro;
+    botao.disabled = false;
+    return;
+  }
+
+  const intervalo = setInterval(async () => {
+    const r = await fetch(`/api/jobs/${job_id}`);
+    const job = await r.json();
+    status.textContent = `Gerando de novo… ${Math.round(job.progresso)}% — ${job.etapa}`;
+    if (job.status === "pronto") {
+      clearInterval(intervalo);
+      carregarFila();
+      carregarPainel();
+    } else if (job.status === "erro") {
+      clearInterval(intervalo);
+      status.textContent = `Deu erro: ${job.erro}`;
+      botao.disabled = false;
+    }
+  }, 1200);
 }
 
 // ---------------- Contexto do canal ----------------
@@ -159,7 +202,13 @@ function mostrarResultado(resultado) {
     .map((t) => `<span class="tag-pill">#${t}</span>`)
     .join("");
 
+  const thumbHtml = resultado.thumbnail
+    ? `<div class="resultado-formato"><h3>Thumbnail</h3><img src="${resultado.thumbnail}" style="width:100%;max-width:420px;border-radius:10px;border:1px solid var(--border);display:block">
+       <div class="resultado-actions"><a href="${resultado.thumbnail}" download>Baixar thumbnail</a></div></div>`
+    : "";
+
   document.getElementById("resultado-conteudo").innerHTML = `
+    ${thumbHtml}
     <div class="resultado-formato">
       <h3>16:9 — vídeo normal (${formatarDuracao(resultado.duracao_segundos)})</h3>
       <video controls src="${resultado.video_16_9}"></video>

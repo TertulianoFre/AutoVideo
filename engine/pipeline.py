@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from engine import ambiente, canal, render, roteiro as roteiro_mod, scenes, subtitles, tts, visuals
+from engine import ambiente, canal, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
 from engine.roteiro import PALAVRAS_POR_MINUTO
 
 RAIZ_SAIDA = Path(__file__).resolve().parent.parent / "output"
@@ -42,6 +42,7 @@ class ResultadoGeracao:
     duracao_segundos: float
     roteiro: str
     tags: list = field(default_factory=list)
+    thumbnail: Path | None = None
 
 
 def _salvar_metadados(pasta: Path, **campos) -> None:
@@ -68,7 +69,17 @@ def gerar_video(
 
     pasta = RAIZ_SAIDA / _slug(titulo)
     pasta.mkdir(parents=True, exist_ok=True)
-    _salvar_metadados(pasta, titulo=titulo, data_postagem=data_postagem, descricao_video=descricao_video, modo="narrado")
+    _salvar_metadados(
+        pasta,
+        titulo=titulo,
+        data_postagem=data_postagem,
+        descricao_video=descricao_video,
+        modo="narrado",
+        idioma=idioma,
+        voz=voz,
+        estilo_imagem=estilo_imagem,
+        duracao_alvo_minutos=duracao_alvo_minutos,
+    )
 
     if roteiro is None:
         avisar("Escrevendo o roteiro", 3)
@@ -151,8 +162,11 @@ def gerar_video(
             imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4"
         )
 
+    avisar("Gerando a thumbnail", 97)
+    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
+
     avisar("Pronto", 100)
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro, tags)
+    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro, tags, caminho_thumb)
 
 
 def gerar_video_ambiente(
@@ -174,7 +188,14 @@ def gerar_video_ambiente(
     pasta = RAIZ_SAIDA / _slug(titulo)
     pasta.mkdir(parents=True, exist_ok=True)
     _salvar_metadados(
-        pasta, titulo=titulo, data_postagem=data_postagem, descricao_video=descricao_video, modo="ambiente", tipo_som=tipo_som
+        pasta,
+        titulo=titulo,
+        data_postagem=data_postagem,
+        descricao_video=descricao_video,
+        modo="ambiente",
+        tipo_som=tipo_som,
+        estilo_imagem=estilo_imagem,
+        duracao_alvo_minutos=duracao_alvo_minutos,
     )
 
     duracao_segundos = duracao_alvo_minutos * 60
@@ -217,5 +238,8 @@ def gerar_video_ambiente(
             imagens_com_duracao, audio_path, None, formato, pasta / f"video_{sufixo}.mp4"
         )
 
+    avisar("Gerando a thumbnail", 97)
+    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "ambiente00_16x9.png", titulo, pasta / "thumbnail.png")
+
     avisar("Pronto", 100)
-    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_segundos, "", [])
+    return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_segundos, "", [], caminho_thumb)

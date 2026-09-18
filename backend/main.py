@@ -88,6 +88,44 @@ def api_criar_video(
     return {"job_id": job.id}
 
 
+@app.post("/api/videos/{slug}/regenerar")
+def api_regenerar_video(slug: str) -> dict:
+    """Gera tudo de novo (roteiro incluído) pro mesmo título/config — útil
+    quando o resultado não ficou bom. Sobrescreve os arquivos daquele vídeo."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    titulo = metadados.get("titulo", slug)
+    modo = metadados.get("modo", "narrado")
+
+    if modo == "ambiente":
+        params = dict(
+            titulo=titulo,
+            duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or 15.0,
+            tipo_som=metadados.get("tipo_som", "chuva"),
+            estilo_imagem=metadados.get("estilo_imagem", "procedural"),
+            descricao_video=metadados.get("descricao_video", ""),
+            data_postagem=metadados.get("data_postagem"),
+        )
+    else:
+        params = dict(
+            titulo=titulo,
+            roteiro=None,  # regenerar sempre escreve um roteiro novo
+            idioma=metadados.get("idioma", "pt-BR"),
+            voz=metadados.get("voz", "mulher"),
+            estilo_imagem=metadados.get("estilo_imagem", "procedural"),
+            duracao_alvo_minutos=metadados.get("duracao_alvo_minutos") or 1.0,
+            descricao_video=metadados.get("descricao_video", ""),
+            data_postagem=metadados.get("data_postagem"),
+        )
+
+    job = jobs.criar_job(titulo, modo, params)
+    return {"job_id": job.id}
+
+
 @app.get("/api/jobs/{job_id}")
 def api_status_job(job_id: str) -> JSONResponse:
     job = jobs.obter_job(job_id)
@@ -124,6 +162,7 @@ def api_listar_videos() -> list[dict]:
 
         tags_path = pasta / "tags.txt"
         tags = tags_path.read_text(encoding="utf-8") if tags_path.exists() else ""
+        thumb_path = pasta / "thumbnail.png"
 
         videos.append(
             {
@@ -133,6 +172,7 @@ def api_listar_videos() -> list[dict]:
                 "data_postagem": metadados.get("data_postagem"),
                 "video_16_9": f"/videos/{pasta.name}/video_16x9.mp4",
                 "video_9_16": f"/videos/{pasta.name}/video_9x16.mp4",
+                "thumbnail": f"/videos/{pasta.name}/thumbnail.png" if thumb_path.exists() else None,
                 "modificado_em": pasta.stat().st_mtime,
                 "tags": tags,
             }

@@ -35,6 +35,7 @@ def _rodar(job: Job, modo: str, params: dict) -> None:
             "slug": resultado.pasta.name,
             "video_16_9": f"/videos/{resultado.pasta.name}/{resultado.video_16_9.name}",
             "video_9_16": f"/videos/{resultado.pasta.name}/{resultado.video_9_16.name}",
+            "thumbnail": f"/videos/{resultado.pasta.name}/thumbnail.png" if resultado.thumbnail else None,
             "duracao_segundos": resultado.duracao_segundos,
             "roteiro": resultado.roteiro,
             "tags": resultado.tags,
