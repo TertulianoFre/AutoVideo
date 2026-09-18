@@ -329,6 +329,21 @@ def api_remover_imagem_biblioteca(nome: str) -> JSONResponse:
 # inserção automática nos vídeos)
 # ---------------------------------------------------------------------------
 
+ARQUIVO_ANOTACOES = RAIZ_SAIDA.parent / "dados" / "anotacoes.txt"
+
+
+@app.get("/api/anotacoes")
+def api_ler_anotacoes() -> dict:
+    return {"texto": ARQUIVO_ANOTACOES.read_text(encoding="utf-8") if ARQUIVO_ANOTACOES.exists() else ""}
+
+
+@app.put("/api/anotacoes")
+def api_salvar_anotacoes(texto: str = Form("")) -> dict:
+    ARQUIVO_ANOTACOES.parent.mkdir(parents=True, exist_ok=True)
+    ARQUIVO_ANOTACOES.write_text(texto[:200000], encoding="utf-8")
+    return {"ok": True}
+
+
 @app.get("/api/afiliados")
 def api_listar_afiliados() -> list[dict]:
     return afiliados.listar()

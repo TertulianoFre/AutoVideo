@@ -103,7 +103,31 @@ def gerar_roteiro(
         {"role": "user", "content": "\n".join(partes)},
     ]
     rascunho = chamar_pollinations(mensagens, tentativas)
+    rascunho = _ajustar_tamanho(mensagens, rascunho, palavras_alvo, tentativas)
     return _revisar_roteiro(rascunho)
+
+
+def _ajustar_tamanho(mensagens: list, roteiro: str, alvo: int, tentativas: int) -> str:
+    """O modelo costuma escrever bem menos (ou mais) que o pedido. Se ficar
+    fora de -15%/+20% da meta, pede uma reescrita e fica com a versão mais
+    próxima da meta (até 2 rodadas)."""
+    for _ in range(2):
+        n = len(roteiro.split())
+        if alvo * 0.85 <= n <= alvo * 1.2:
+            break
+        if n < alvo * 0.85:
+            pedido = (
+                f"O roteiro tem {n} palavras e precisa ter cerca de {alvo}. Reescreva-o COMPLETO, "
+                f"desenvolvendo mais cada ponto (detalhes, exemplos, curiosidades), sem repetir frases, "
+                f"até chegar perto de {alvo} palavras. Responda só com o roteiro."
+            )
+        else:
+            pedido = f"O roteiro tem {n} palavras e precisa ter cerca de {alvo}. Reescreva-o COMPLETO, mais enxuto, mantendo o essencial. Responda só com o roteiro."
+        novo = chamar_pollinations(mensagens + [{"role": "assistant", "content": roteiro}, {"role": "user", "content": pedido}], tentativas)
+        if abs(len(novo.split()) - alvo) >= abs(n - alvo):
+            break
+        roteiro = novo
+    return roteiro
 
 
 PROMPT_SISTEMA_TAGS = (

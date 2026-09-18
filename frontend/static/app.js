@@ -1,4 +1,4 @@
-const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila", base: "Base", afiliados: "Afiliados" };
+const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila", base: "Base", afiliados: "Afiliados", anotacoes: "Anotações" };
 
 function trocarAba(nome) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === nome));
@@ -9,6 +9,7 @@ function trocarAba(nome) {
   if (nome === "canais") carregarCanais();
   if (nome === "base") carregarBase();
   if (nome === "afiliados") carregarAfiliados();
+  if (nome === "anotacoes") carregarAnotacoes();
 }
 
 document.querySelectorAll(".nav-item").forEach((botao) => {
@@ -126,8 +127,10 @@ function desenharGraficoVideos(videos) {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const largura = canvas.clientWidth || 600;
-  canvas.width = largura;
-  canvas.height = 120;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(largura * dpr);
+  canvas.height = Math.round(120 * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, largura, 120);
 
   const SEMANAS = 8;
@@ -917,6 +920,12 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   }
 
   btnPreviewRoteiro.disabled = true;
+  const inicioRoteiro = Date.now();
+  const barra = document.getElementById("preview-roteiro-barra");
+  barra.hidden = false;
+  const relogio = setInterval(() => {
+    previewRoteiroStatus.textContent = `Escrevendo o roteiro… ${Math.round((Date.now() - inicioRoteiro) / 1000)}s (roteiros longos demoram)`;
+  }, 500);
   previewRoteiroStatus.textContent = "Escrevendo o roteiro…";
 
   const dados = new FormData();
@@ -931,11 +940,15 @@ btnPreviewRoteiro.addEventListener("click", async () => {
       previewRoteiroStatus.textContent = `Deu erro: ${dadosResposta.erro}`;
     } else {
       campoRoteiro.value = dadosResposta.roteiro;
-      previewRoteiroStatus.textContent = "Pronto — revise e edite à vontade antes de gerar o vídeo.";
+      const nPalavras = dadosResposta.roteiro.trim().split(/\s+/).length;
+      previewRoteiroStatus.textContent = `Pronto — ${nPalavras} palavras (~${(nPalavras / 150).toFixed(1)} min). Revise e edite antes de gerar o vídeo.`;
+      btnPreviewRoteiro.textContent = "Atualizar roteiro";
     }
   } catch {
     previewRoteiroStatus.textContent = "Deu erro de conexão, tenta de novo.";
   } finally {
+    clearInterval(relogio);
+    barra.hidden = true;
     btnPreviewRoteiro.disabled = false;
   }
 });
@@ -1180,10 +1193,12 @@ async function atualizarStatusYoutube() {
 function desenharLinha(canvasId, dias, valores, formato) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext("2d");
-  const L = canvas.clientWidth || 600;
-  const A = 140;
-  canvas.width = L;
-  canvas.height = A;
+  const L = canvas.clientWidth || 300;
+  const A = 110;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(L * dpr);
+  canvas.height = Math.round(A * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, L, A);
 
   const estilo = getComputedStyle(document.documentElement);

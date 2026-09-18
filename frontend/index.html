@@ -53,6 +53,10 @@
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="7.3"></circle><path d="M7 12.5l6-5M8 8h.01M12 12h.01"></path></svg>
         Afiliados
       </button>
+      <button class="nav-item" data-tab="anotacoes">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v11H5z"></path><path d="M8 9h5M8 12h5"></path></svg>
+        Anotações
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -81,10 +85,16 @@
         </div>
 
         <div class="card" id="card-graficos-youtube" hidden>
-          <div class="card-head">Inscritos — últimos 28 dias</div>
-          <canvas id="grafico-inscritos" height="140"></canvas>
-          <div class="card-head" style="margin-top:22px">Visualizações por dia — últimos 28 dias</div>
-          <canvas id="grafico-views" height="140"></canvas>
+          <div class="graficos-lado">
+            <div class="grafico-bloco">
+              <div class="card-head">Inscritos — últimos 28 dias</div>
+              <canvas id="grafico-inscritos"></canvas>
+            </div>
+            <div class="grafico-bloco">
+              <div class="card-head">Visualizações por dia — últimos 28 dias</div>
+              <canvas id="grafico-views"></canvas>
+            </div>
+          </div>
           <p class="hint" id="graficos-youtube-aviso"></p>
         </div>
 
@@ -242,6 +252,7 @@
               <div class="preview-row">
                 <button type="button" class="btn-secondary btn-compacto" id="btn-preview-roteiro">Pré-visualizar roteiro</button>
                 <span id="preview-roteiro-status" class="video-meta"></span>
+                <div class="barra-indeterminada" id="preview-roteiro-barra" hidden><div></div></div>
               </div>
 
               <div class="narracao-gravada" id="bloco-narracao-gravada">
@@ -412,6 +423,14 @@
         </div>
       </section>
 
+      <!-- ============ ANOTAÇÕES ============ -->
+      <section id="tab-anotacoes" class="tab">
+        <div class="card">
+          <div class="card-head">Anotações <span class="video-meta" id="anotacoes-status"></span></div>
+          <textarea id="anotacoes-texto" class="anotacoes-texto" placeholder="Escreva aqui ideias, lembretes, o que quiser. Salva sozinho."></textarea>
+        </div>
+      </section>
+
       <!-- ============ AFILIADOS ============ -->
       <section id="tab-afiliados" class="tab">
         <div class="card">
@@ -459,6 +478,7 @@
 </div>
 
 <script src="/static/thumb_shorts.js"></script>
+<script src="/static/anotacoes.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

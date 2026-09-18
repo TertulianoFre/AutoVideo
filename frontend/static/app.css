@@ -392,3 +392,17 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .cena-card-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .cena-card .btn-regenerar { width: auto; }
 .btn-enviar-cena { cursor: pointer; }
+
+.graficos-lado { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grafico-bloco { min-width: 0; }
+.grafico-bloco canvas, #grafico-videos { width: 100%; display: block; }
+.grafico-bloco canvas { height: 110px; }
+#grafico-videos { height: 120px; }
+@media (max-width: 760px) { .graficos-lado { grid-template-columns: 1fr; } }
+
+.anotacoes-texto { width: 100%; min-height: 60vh; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font: inherit; line-height: 1.5; }
+
+.barra-indeterminada { flex-basis: 100%; height: 4px; border-radius: 4px; background: var(--border); overflow: hidden; margin-top: 4px; }
+.barra-indeterminada[hidden] { display: none; }
+.barra-indeterminada > div { width: 35%; height: 100%; background: var(--accent); border-radius: 4px; animation: barra-vai 1.2s ease-in-out infinite; }
+@keyframes barra-vai { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }

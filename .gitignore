@@ -27,3 +27,5 @@ output/
 # SO
 .DS_Store
 Thumbs.db
+
+dados/anotacoes.txt
