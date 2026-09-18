@@ -503,6 +503,7 @@ def api_preview_roteiro(
     titulo: str = Form(...),
     duracao_alvo: float | None = Form(None),
     descricao_video: str = Form(""),
+    num_cenas: int | None = Form(None),
 ) -> JSONResponse:
     try:
         roteiro = roteiro_mod.gerar_roteiro(
@@ -510,6 +511,7 @@ def api_preview_roteiro(
             duracao_alvo or 1.0,
             contexto_canal=canal.obter_contexto(),
             descricao_video=descricao_video.strip(),
+            num_cenas=num_cenas if num_cenas and 1 < num_cenas <= 40 else None,
         )
         return JSONResponse({"roteiro": roteiro})
     except RuntimeError as erro:
@@ -555,6 +557,7 @@ def api_criar_video(
     privacidade: str = Form("public"),
     formatos: str = Form("ambos"),
     num_cenas: int | None = Form(None),
+    imagens_base: str = Form(""),
     confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
@@ -607,6 +610,7 @@ def api_criar_video(
         privacidade=privacidade,
         formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
         num_cenas=num_cenas if num_cenas and 1 <= num_cenas <= 40 else None,
+        imagens_base=[n for n in imagens_base.split("|") if n.strip()],
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -651,6 +655,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         privacidade=metadados.get("privacidade", "public"),
         formatos=metadados.get("formatos", "ambos"),
         num_cenas=metadados.get("num_cenas"),
+        imagens_base=metadados.get("imagens_base") or [],
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 

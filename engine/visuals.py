@@ -178,23 +178,28 @@ def _aplicar_overlay_legibilidade(imagem: Image.Image) -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def _buscar_openverse(termo_busca: str) -> bytes | None:
+    import random
+
     resposta = requests.get(
         OPENVERSE_URL,
-        params={"q": termo_busca, "page_size": 1, "license_type": "commercial", "orientation": "landscape"},
+        params={"q": termo_busca, "page_size": 8, "license_type": "commercial"},
         timeout=15,
     )
     if not resposta.ok:
         return None
     resultados = resposta.json().get("results") or []
-    if not resultados:
-        return None
-    url_imagem = resultados[0].get("url") or resultados[0].get("thumbnail")
-    if not url_imagem:
-        return None
-    imagem_resp = requests.get(url_imagem, timeout=20)
-    if not imagem_resp.ok:
-        return None
-    return imagem_resp.content
+    random.shuffle(resultados)  # "gerar outra imagem" precisa poder trazer uma foto diferente
+    for resultado in resultados[:4]:
+        url_imagem = resultado.get("url") or resultado.get("thumbnail")
+        if not url_imagem:
+            continue
+        try:
+            imagem_resp = requests.get(url_imagem, timeout=20)
+        except requests.RequestException:
+            continue
+        if imagem_resp.ok:
+            return imagem_resp.content
+    return None
 
 
 def _buscar_pexels(termo_busca: str, orientacao: str) -> bytes | None:
@@ -218,7 +223,41 @@ def _buscar_pexels(termo_busca: str, orientacao: str) -> bytes | None:
     return imagem_resp.content
 
 
-def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str) -> Path:
+def _termos_de_busca(cena: str, contexto: str) -> list:
+    """A frase inteira da cena nunca acha nada num banco de fotos. Pede pra IA
+    resumir em 2-4 palavras de busca (em inglês, junto do tema do vídeo) e usa
+    o tema do vídeo como plano B."""
+    import re
+    from engine.roteiro import chamar_pollinations
+
+    termos = []
+    try:
+        texto = chamar_pollinations(
+            [
+                {"role": "system", "content": "Você cria termos de busca pra um banco de fotos. Responda SÓ com 2 a 4 palavras-chave em inglês, sem pontuação, que achariam uma foto que ilustre o trecho, sempre ligada ao tema do vídeo. Mantenha exatamente os nomes próprios do tema (ex: Minecraft) e prefira termos simples e comuns."},
+                {"role": "user", "content": f"Tema do vídeo: {contexto}\nTrecho: {cena}"},
+            ],
+            2,
+        )
+        termo = re.sub(r"[^\w\s]", " ", texto).strip()
+        if termo:
+            palavras = termo.split()[:5]
+            termos += [" ".join(palavras), " ".join(palavras[:3]), " ".join(palavras[:2])]
+    except RuntimeError:
+        pass
+    # plano B: só o(s) nome(s) do tema que a IA manteve na busca (ex: "minecraft") —
+    # palavras genéricas do título em português ("curiosidades") trazem foto aleatória
+    ja_usadas = {w.casefold() for termo in termos for w in termo.split()}
+    termos += [w for w in re.sub(r"[^\w\s]", " ", contexto).split() if len(w) > 4 and w.casefold() in ja_usadas][:2]
+    termos.append(" ".join(cena.split()[:4]))
+    vistos = []
+    for t in termos:
+        if t and t.casefold() not in (v.casefold() for v in vistos):
+            vistos.append(t)
+    return vistos
+
+
+def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "") -> Path:
     """Busca uma foto real relacionada ao tema da cena. Tenta o Openverse primeiro
     (grátis, sem chave, agrega Flickr/Wikimedia/etc.); se não achar nada, tenta o
     Pexels (grátis, precisa de PEXELS_API_KEY — https://www.pexels.com/api/).
@@ -226,7 +265,11 @@ def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str)
     de "pessoa sorrindo pra câmera"), tenta a outra fonte antes de desistir."""
     orientacao = "portrait" if altura > largura else "landscape"
 
-    candidatos_bytes = [b for b in (_buscar_openverse(termo_busca), _buscar_pexels(termo_busca, orientacao)) if b]
+    candidatos_bytes = []
+    for termo in _termos_de_busca(termo_busca, contexto):
+        candidatos_bytes = [b for b in (_buscar_openverse(termo), _buscar_pexels(termo, orientacao)) if b]
+        if candidatos_bytes:
+            break
     if not candidatos_bytes:
         raise RuntimeError(
             f"Nenhuma foto encontrada para '{termo_busca}' (Openverse e Pexels). "
@@ -320,9 +363,9 @@ def gerar_fundo_ia(
 # dispatcher
 # ---------------------------------------------------------------------------
 
-def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "") -> Path:
+def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "", contexto: str = "") -> Path:
     if estilo == "foto":
-        return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena)
+        return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena, contexto=contexto)
     if estilo == "ia":
         return gerar_fundo_ia(largura, altura, caminho, cena=cena, estilo_extra=estilo_extra)
     return gerar_fundo_procedural(largura, altura, caminho, semente=cena)

@@ -434,3 +434,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .cena-base-grade { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .cena-base-grade[hidden] { display: none; }
 .cena-base-grade .thumb-img-opcao { width: 96px; }
+
+#novo-base-grade { display: flex; }
+#novo-base-grade .thumb-img-opcao { position: relative; width: 96px; }
+.base-ordem { position: absolute; left: 4px; bottom: 4px; background: var(--accent); color: #111; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }

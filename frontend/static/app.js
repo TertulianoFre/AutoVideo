@@ -8,6 +8,7 @@ function trocarAba(nome) {
   if (nome === "fila") carregarFila();
   if (nome === "canais") carregarCanais();
   if (nome === "base") carregarBase();
+  if (nome === "novo") montarSeletorBaseNovoVideo();
   if (nome === "afiliados") carregarAfiliados();
   if (nome === "anotacoes") carregarAnotacoes();
 }
@@ -987,6 +988,8 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   dados.set("titulo", titulo);
   dados.set("duracao_alvo", campoDuracao.value || "1");
   dados.set("descricao_video", campoDescricaoVideo.value || "");
+  const nCenas = document.querySelector("[name=num_cenas]").value;
+  if (nCenas) dados.set("num_cenas", nCenas);
 
   try {
     const resposta = await fetch("/api/roteiro/preview", { method: "POST", body: dados });

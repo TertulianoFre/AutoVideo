@@ -85,3 +85,39 @@ async function carregarBase() {
 }
 
 document.getElementById("base-filtro-canal").addEventListener("change", carregarBase);
+
+// ---- Novo vídeo: escolher imagens da Base pras primeiras cenas (a ordem do clique é a ordem das cenas) ----
+let selecionadasBase = [];
+
+async function montarSeletorBaseNovoVideo() {
+  const grade = document.getElementById("novo-base-grade");
+  if (!grade) return;
+  const dados = await fetch("/api/biblioteca").then((r) => r.json());
+  const imagens = dados.imagens || [];
+  selecionadasBase = selecionadasBase.filter((n) => imagens.some((i) => i.nome === n));
+  const campo = document.getElementById("campo-imagens-base");
+
+  const desenhar = () => {
+    campo.value = selecionadasBase.join("|");
+    grade.innerHTML = imagens.length
+      ? imagens.map((img) => {
+          const ordem = selecionadasBase.indexOf(img.nome);
+          return `<button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-nome="${escaparAttr(img.nome)}" title="${escaparAttr(img.nome)}${img.usado_em.length ? " — já usada em: " + escaparAttr(img.usado_em.join(", ")) : ""}"><img src="${img.url}" alt="">${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button>`;
+        }).join("")
+      : '<span class="video-meta">Nenhuma imagem na Base ainda — importe na aba Base.</span>';
+    grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
+      op.addEventListener("click", () => {
+        const nome = op.dataset.nome;
+        if (selecionadasBase.includes(nome)) {
+          selecionadasBase = selecionadasBase.filter((n) => n !== nome);
+        } else {
+          const usos = imagens.find((i) => i.nome === nome)?.usado_em || [];
+          if (usos.length && !confirm(`Essa imagem já foi usada em: ${usos.join(", ")}. Usar de novo?`)) return;
+          selecionadasBase.push(nome);
+        }
+        desenhar();
+      });
+    });
+  };
+  desenhar();
+}

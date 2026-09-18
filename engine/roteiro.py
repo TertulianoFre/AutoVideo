@@ -89,6 +89,7 @@ def gerar_roteiro(
     contexto_canal: str = "",
     descricao_video: str = "",
     tentativas: int = 3,
+    num_cenas: int | None = None,
 ) -> str:
     palavras_alvo = round(duracao_alvo_minutos * PALAVRAS_POR_MINUTO)
 
@@ -98,16 +99,25 @@ def gerar_roteiro(
     if descricao_video:
         partes.append(f"Instruções específicas pra esse vídeo: {descricao_video}")
 
+    if num_cenas and num_cenas > 1:
+        partes.append(
+            f"ESTRUTURA OBRIGATÓRIA: escreva EXATAMENTE {num_cenas} parágrafos, separados por uma linha em branco. "
+            "Cada parágrafo é um assunto/cena distinto (se o vídeo for de curiosidades, uma curiosidade por parágrafo), "
+            "e cada um vira uma cena com uma imagem própria. Não use títulos nem numeração."
+        )
+
     mensagens = [
         {"role": "system", "content": PROMPT_SISTEMA},
         {"role": "user", "content": "\n".join(partes)},
     ]
     rascunho = chamar_pollinations(mensagens, tentativas)
-    rascunho = _ajustar_tamanho(mensagens, rascunho, palavras_alvo, tentativas)
+    rascunho = _ajustar_tamanho(mensagens, rascunho, palavras_alvo, tentativas, num_cenas)
+    if num_cenas and num_cenas > 1:
+        return rascunho  # a revisão junta parágrafos; aqui a estrutura em blocos é o que importa
     return _revisar_roteiro(rascunho)
 
 
-def _ajustar_tamanho(mensagens: list, roteiro: str, alvo: int, tentativas: int) -> str:
+def _ajustar_tamanho(mensagens: list, roteiro: str, alvo: int, tentativas: int, num_cenas: int | None = None) -> str:
     """O modelo costuma escrever bem menos (ou mais) que o pedido. Se ficar
     fora de -15%/+20% da meta, pede uma reescrita e fica com a versão mais
     próxima da meta (até 2 rodadas)."""
@@ -123,6 +133,8 @@ def _ajustar_tamanho(mensagens: list, roteiro: str, alvo: int, tentativas: int) 
             )
         else:
             pedido = f"O roteiro tem {n} palavras e precisa ter cerca de {alvo}. Reescreva-o COMPLETO, mais enxuto, mantendo o essencial. Responda só com o roteiro."
+        if num_cenas and num_cenas > 1:
+            pedido += f" Mantenha EXATAMENTE {num_cenas} parágrafos separados por linha em branco."
         novo = chamar_pollinations(mensagens + [{"role": "assistant", "content": roteiro}, {"role": "user", "content": pedido}], tentativas)
         if abs(len(novo.split()) - alvo) >= abs(n - alvo):
             break

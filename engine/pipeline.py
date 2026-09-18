@@ -91,6 +91,7 @@ def gerar_video(
     formatos: str = "ambos",
     canal_id: str | None = None,
     num_cenas: int | None = None,
+    imagens_base: list | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -122,6 +123,7 @@ def gerar_video(
         privacidade=privacidade,
         formatos=formatos,
         num_cenas=num_cenas,
+        imagens_base=imagens_base or [],
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -161,6 +163,7 @@ def gerar_video(
                 duracao_alvo_minutos or 1.0,
                 contexto_canal=canal.obter_contexto(canal_id),
                 descricao_video=descricao_video,
+                num_cenas=num_cenas,
             )
             print(f"[roteiro gerado]\n{roteiro}\n")
         roteiro_final = roteiro
@@ -234,12 +237,20 @@ def gerar_video(
         cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
+    # imagens da Base escolhidas de antemão: a 1ª vai na cena 1, a 2ª na cena 2...
+    imagens_base_validas = []
+    for nome_base in imagens_base or []:
+        origem_base = biblioteca.caminho_imagem_valida(nome_base)
+        if origem_base is not None:
+            imagens_base_validas.append(origem_base.name)
+    imagens_base_validas = imagens_base_validas[: len(lista_cenas)]
+
     # guardado pra dar pra regenerar uma cena específica depois (regenerar_cena),
     # sem precisar refazer roteiro/narração/outras cenas
     _salvar_metadados(
         pasta,
         cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
-        imagens_base_cenas={},
+        imagens_base_cenas={str(i): n for i, n in enumerate(imagens_base_validas)},
         audio_arquivo=audio_path.name,
         duracao_segundos=round(duracao_real, 1),
     )
@@ -258,6 +269,13 @@ def gerar_video(
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
+            if i < len(imagens_base_validas):
+                base_img = Image.open(biblioteca.caminho_imagem_valida(imagens_base_validas[i])).convert("RGB")
+                visuals._cobrir(base_img, estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
+                imagens_com_duracao.append((caminho_imagem, duracao_cena))
+                imagens_feitas += 1
+                avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
+                continue
             try:
                 visuals.gerar_fundo(
                     estilo_imagem,
@@ -266,6 +284,7 @@ def gerar_video(
                     caminho_imagem,
                     cena=texto_cena,
                     estilo_extra=descricao_video,
+                    contexto=titulo,
                 )
             except RuntimeError as erro:
                 # Fonte externa (foto/ia) falhou (rede, serviço fora do ar) — não
@@ -350,7 +369,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
             try:
                 visuals.gerar_fundo(
                     estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
-                    cena=texto_cena, estilo_extra=descricao_video,
+                    cena=texto_cena, estilo_extra=descricao_video, contexto=metadados.get("titulo", slug),
                 )
             except RuntimeError as erro:
                 print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")
