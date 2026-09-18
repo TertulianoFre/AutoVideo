@@ -73,13 +73,13 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dad
 - O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).
 - Checagem automática de "imagem com qualidade ruim, refazer" foi tentada com detector de rosto (OpenCV) — funciona bem em foto real, mas **não funciona em desenho/ilustração**, então só está ligada no estilo `foto`.
 - O roteiro automático passa por uma segunda chamada de revisão (corrige gramática/frases estranhas antes de devolver) mas ainda é um modelo pequeno e gratuito — de vez em quando sai uma frase esquisita mesmo assim. Use o "Pré-visualizar roteiro" pra revisar antes.
-- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar. Pedir "outro" com descrição livre casa por palavra-chave com o mais parecido desses 5; ainda não sintetiza um som totalmente novo (ex: "floresta com pássaros" de verdade).
+- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar. Pedir "outro" com descrição livre escolhe o mais parecido desses 5 como base e ainda soma camadas extra por cima se a descrição menciona pássaros, trovão ou multidão/cafeteria; fora essas combinações reconhecidas, ainda não sintetiza um som totalmente novo e arbitrário.
 - Publicação automática depende do app ficar rodando (não é um serviço em nuvem) e da conta reconectada a cada 7 dias (limitação do modo "teste" do Google).
 
 ## Requisitos já levantados, ainda não implementados
 
 - Editor visual de thumbnail de verdade (arrastar/redimensionar o texto na tela, trocar fonte) — hoje só dá pra trocar o texto, a cor (5 opções) e a imagem-base, com posição/tamanho fixos.
-- Sintetizar **qualquer** som de fundo descrito de verdade (hoje são 5 tipos reais fixos — chuva, música, ondas, fogueira, vento — e "outro" só casa por palavra-chave com o mais parecido desses).
+- Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 3 camadas combináveis (pássaros, trovão, multidão) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo.
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
 
