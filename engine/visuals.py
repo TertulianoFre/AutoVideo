@@ -284,7 +284,12 @@ def gerar_fundo_ia(
     extra = f"{_traduzir_para_ingles(estilo_extra.strip()[:150])}, " if estilo_extra.strip() else ""
     prompt = ESTILO_PROMPT_IA.format(cena=resumo_cena, extra=extra)
     url = POLLINATIONS_URL.format(prompt=urllib.parse.quote(prompt))
-    params = {"width": largura, "height": altura, "nologo": "true"}
+    # a IA compõe o assunto espremido/alongado em quadros muito altos: pede
+    # quadrado (proporção natural) e o corte central pro vertical é feito depois
+    if altura > largura:
+        params = {"width": 1024, "height": 1024, "nologo": "true"}
+    else:
+        params = {"width": 1024, "height": 576, "nologo": "true"}
     if semente is not None:
         params["seed"] = semente
 
