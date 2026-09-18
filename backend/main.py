@@ -57,6 +57,15 @@ def _estado_de(canal_id: str) -> dict:
 biblioteca.PASTA_AUDIOS.mkdir(parents=True, exist_ok=True)
 biblioteca.PASTA_IMAGENS.mkdir(parents=True, exist_ok=True)
 
+@app.middleware("http")
+async def sem_cache_no_front(request, call_next):
+    """Front (JS/CSS/HTML) sempre revalida: sem isso o navegador serve arquivo velho depois de uma atualização."""
+    resposta = await call_next(request)
+    if request.url.path.startswith("/static") or request.url.path == "/":
+        resposta.headers["Cache-Control"] = "no-cache"
+    return resposta
+
+
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 app.mount("/videos", StaticFiles(directory=RAIZ_SAIDA), name="videos")
 app.mount("/biblioteca", StaticFiles(directory=biblioteca.RAIZ), name="biblioteca")
