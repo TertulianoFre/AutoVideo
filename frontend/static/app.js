@@ -356,6 +356,7 @@ async function atualizarStatusYoutube() {
     youtubeStatusTexto.textContent = "Conectado";
     btnYoutubeConectar.disabled = false;
     btnYoutubeConectar.textContent = "Reconectar";
+    carregarEstatisticasCanal();
   } else {
     youtubeDot.className = "dot dot-negative";
     youtubeStatusTexto.textContent = dados.erro ? `Não conectado (${dados.erro})` : "Não conectado";
@@ -363,6 +364,24 @@ async function atualizarStatusYoutube() {
     btnYoutubeConectar.textContent = "Conectar YouTube";
   }
   return dados;
+}
+
+async function carregarEstatisticasCanal() {
+  const linha = document.getElementById("stats-row-youtube");
+  const resposta = await fetch("/api/youtube/estatisticas");
+  const dados = await resposta.json();
+
+  if (dados.erro) {
+    // provavelmente conectou antes do escopo de leitura existir.
+    linha.hidden = true;
+    youtubeStatusTexto.textContent = "Conectado (reconecte pra liberar inscritos/visualizações)";
+    return;
+  }
+
+  document.getElementById("stat-canal-nome").textContent = dados.nome_canal ? `Inscritos — ${dados.nome_canal}` : "Inscritos";
+  document.getElementById("stat-inscritos").textContent = dados.inscritos.toLocaleString("pt-BR");
+  document.getElementById("stat-visualizacoes").textContent = dados.visualizacoes.toLocaleString("pt-BR");
+  linha.hidden = false;
 }
 
 btnYoutubeConectar.addEventListener("click", async () => {

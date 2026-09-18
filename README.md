@@ -58,6 +58,8 @@ Com isso feito, um agendador roda em segundo plano junto com o backend (`agendad
 
 **Limitação do Google, não do código**: como o app fica em modo "teste" (evita o processo de verificação do Google), a autorização expira a cada 7 dias — o Painel mostra "Não conectado" quando isso acontece, é só clicar em "Conectar" de novo.
 
+**Estatísticas do canal** (inscritos, visualizações totais) aparecem no Painel quando conectado. Como isso usa um escopo (`youtube.readonly`) que não existia nas primeiras versões, quem já tinha conectado antes precisa clicar em **"Reconectar"** uma vez pra liberar — o Painel avisa isso claramente, não precisa adivinhar.
+
 ### Limitações conhecidas
 
 - O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).

@@ -101,6 +101,16 @@ def api_youtube_conectar() -> dict:
     return {"status": "conectando"}
 
 
+@app.get("/api/youtube/estatisticas")
+def api_youtube_estatisticas() -> JSONResponse:
+    try:
+        return JSONResponse(youtube_mod.obter_estatisticas_canal(CONTA_YOUTUBE_PADRAO))
+    except Exception as erro:
+        # inclui HttpError da API do Google (ex: token sem o escopo readonly
+        # ainda, porque foi conectado antes desse escopo existir).
+        return JSONResponse({"erro": str(erro)}, status_code=409)
+
+
 # ---------------------------------------------------------------------------
 # pré-visualização do roteiro (antes de gerar o vídeo inteiro)
 # ---------------------------------------------------------------------------

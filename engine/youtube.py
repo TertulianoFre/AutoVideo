@@ -17,7 +17,10 @@ RAIZ = Path(__file__).resolve().parent.parent
 CLIENT_SECRET_PATH = RAIZ / "client_secret.json"
 PASTA_TOKENS = RAIZ / "dados" / "tokens"
 
-ESCOPOS = ["https://www.googleapis.com/auth/youtube.upload"]
+ESCOPOS = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",  # pro painel: inscritos, visualizações
+]
 CATEGORIA_PADRAO = "22"  # "Pessoas e blogs" — genérica, serve pra a maioria dos vídeos do canal
 
 
@@ -65,6 +68,30 @@ def conectar(nome_conta: str) -> None:
     flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), ESCOPOS)
     creds = flow.run_local_server(port=0, prompt="consent")
     _caminho_token(nome_conta).write_text(creds.to_json(), encoding="utf-8")
+
+
+def obter_estatisticas_canal(nome_conta: str) -> dict:
+    """Inscritos, visualizações totais e nº de vídeos do canal conectado.
+    Precisa do escopo youtube.readonly — se a conta foi conectada antes desse
+    escopo existir, vai faltar permissão até reconectar."""
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+
+    youtube = build("youtube", "v3", credentials=creds)
+    resposta = youtube.channels().list(part="statistics,snippet", mine=True).execute()
+    itens = resposta.get("items") or []
+    if not itens:
+        raise RuntimeError("Nenhum canal encontrado pra essa conta.")
+
+    canal = itens[0]
+    estatisticas = canal.get("statistics", {})
+    return {
+        "nome_canal": canal.get("snippet", {}).get("title", ""),
+        "inscritos": int(estatisticas.get("subscriberCount", 0)),
+        "visualizacoes": int(estatisticas.get("viewCount", 0)),
+        "total_videos": int(estatisticas.get("videoCount", 0)),
+    }
 
 
 def publicar_video(
