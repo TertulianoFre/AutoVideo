@@ -16,6 +16,8 @@ from engine.ferramentas import caminho_ffmpeg
 RAIZ = Path(__file__).resolve().parent.parent / "dados" / "biblioteca"
 PASTA_AUDIOS = RAIZ / "audios"
 PASTA_IMAGENS = RAIZ / "imagens"
+PASTA_VIDEOS = RAIZ / "videos"
+TAMANHO_MAX_VIDEO_BYTES = 250 * 1024 * 1024
 
 TAMANHO_MAX_BYTES = 40 * 1024 * 1024
 
@@ -23,6 +25,7 @@ TAMANHO_MAX_BYTES = 40 * 1024 * 1024
 def _garantir_pastas() -> None:
     PASTA_AUDIOS.mkdir(parents=True, exist_ok=True)
     PASTA_IMAGENS.mkdir(parents=True, exist_ok=True)
+    PASTA_VIDEOS.mkdir(parents=True, exist_ok=True)
 
 
 def _slug_arquivo(nome: str) -> str:
@@ -48,6 +51,46 @@ def listar_audios() -> list[str]:
 def listar_imagens() -> list[str]:
     _garantir_pastas()
     return sorted(p.name for p in PASTA_IMAGENS.iterdir() if p.is_file())
+
+
+def listar_videos() -> list[str]:
+    _garantir_pastas()
+    return sorted(p.name for p in PASTA_VIDEOS.iterdir() if p.is_file())
+
+
+def salvar_video(nome_sugerido: str, conteudo: bytes) -> str:
+    """Reencoda pra mp4 (H.264, no máximo 1080p, 30 fps) antes de guardar — assim qualquer
+    formato de entrada (mov, webm, mkv...) vira algo que o ffmpeg do app sempre consegue usar,
+    e arquivo que não é vídeo de verdade é rejeitado. O áudio, se existir, é mantido."""
+    _garantir_pastas()
+    if len(conteudo) > TAMANHO_MAX_VIDEO_BYTES:
+        raise ValueError("arquivo grande demais (máximo 250 MB)")
+    destino = _nome_unico(PASTA_VIDEOS, _slug_arquivo(nome_sugerido) or "video", ".mp4")
+    with tempfile.NamedTemporaryFile(suffix=Path(nome_sugerido).suffix or ".bin", delete=False) as tmp:
+        tmp.write(conteudo)
+        caminho_tmp = Path(tmp.name)
+    try:
+        comando = [
+            caminho_ffmpeg(), "-y", "-i", str(caminho_tmp),
+            "-vf", "scale='min(1920,iw)':-2,fps=30,format=yuv420p",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+            "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(destino),
+        ]
+        resultado = subprocess.run(comando, capture_output=True, text=True)
+        if resultado.returncode != 0 or not destino.exists():
+            destino.unlink(missing_ok=True)
+            raise ValueError("não consegui reconhecer esse arquivo como vídeo válido")
+    finally:
+        caminho_tmp.unlink(missing_ok=True)
+    return destino.name
+
+
+def remover_video(nome: str) -> bool:
+    return _remover(PASTA_VIDEOS, nome)
+
+
+def caminho_video_valido(nome: str) -> Path | None:
+    return PASTA_VIDEOS / nome if nome in listar_videos() else None
 
 
 def salvar_audio(nome_sugerido: str, conteudo: bytes) -> str:

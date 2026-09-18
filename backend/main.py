@@ -3,6 +3,7 @@
 Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 """
 
+import asyncio
 import io
 import json
 import re
@@ -389,6 +390,9 @@ def _usos_biblioteca() -> dict:
         titulo = meta.get("titulo", pasta.name)
         if meta.get("som_fundo_biblioteca"):
             usos.setdefault(("audios", meta["som_fundo_biblioteca"]), []).append(titulo)
+        for nome_vid in (meta.get("videos_base_cenas") or {}).values():
+            if titulo not in usos.setdefault(("videos", nome_vid), []):
+                usos[("videos", nome_vid)].append(titulo)
         for nome_img in (meta.get("imagens_base_cenas") or {}).values():
             if titulo not in usos.setdefault(("imagens", nome_img), []):
                 usos[("imagens", nome_img)].append(titulo)
@@ -419,6 +423,7 @@ def api_listar_biblioteca() -> dict:
         "audios_nomes": biblioteca.listar_audios(),
         "audios_info": [info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()],
         "imagens": [info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()],
+        "videos": [info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()],
         "canais": [{"id": c["id"], "nome": c["nome"]} for c in canal.listar_canais()],
     }
 
@@ -426,7 +431,7 @@ def api_listar_biblioteca() -> dict:
 @app.put("/api/biblioteca/{tipo}/{nome}/info")
 def api_info_biblioteca(tipo: str, nome: str, descricao: str = Form(""), canal_id: str = Form("")) -> dict:
     """Descrição e canal de um item da Base (só metadado, não mexe no arquivo)."""
-    existentes = biblioteca.listar_audios() if tipo == "audios" else biblioteca.listar_imagens() if tipo == "imagens" else None
+    existentes = {"audios": biblioteca.listar_audios, "imagens": biblioteca.listar_imagens, "videos": biblioteca.listar_videos}.get(tipo, lambda: None)()
     if existentes is None or nome not in existentes:
         return JSONResponse({"erro": "item não encontrado"}, status_code=404)
     meta = _meta_biblioteca()
@@ -453,6 +458,43 @@ def api_remover_audio_biblioteca(nome: str) -> JSONResponse:
     if not biblioteca.remover_audio(Path(nome).name):
         return JSONResponse({"erro": "áudio não encontrado"}, status_code=404)
     return JSONResponse({"ok": True})
+
+
+@app.post("/api/biblioteca/videos/upload")
+async def api_upload_video_biblioteca(arquivo: UploadFile = File(...)) -> JSONResponse:
+    """Vídeo (com ou sem áudio) pra usar numa cena. É reencodado pra mp4 e o áudio dele NÃO entra no
+    vídeo final: a narração continua sendo o áudio."""
+    conteudo = await arquivo.read()
+    try:
+        nome = await asyncio.to_thread(biblioteca.salvar_video, arquivo.filename or "video", conteudo)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    return JSONResponse({"nome": nome, "url": f"/biblioteca/videos/{nome}"})
+
+
+@app.delete("/api/biblioteca/videos/{nome}")
+def api_remover_video_biblioteca(nome: str) -> JSONResponse:
+    if not biblioteca.remover_video(nome):
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/videos/{slug}/cenas/{indice}/video-base")
+def api_video_da_base_na_cena(slug: str, indice: int, nome: str = Form(...)) -> dict:
+    """Coloca um vídeo da Base numa cena (cortado pro formato, em loop se for curto, sem o áudio dele)."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if not (0 <= indice < len(metadados.get("cenas") or [])):
+        return JSONResponse({"erro": "cena não existe"}, status_code=404)
+    origem = biblioteca.caminho_video_valido(nome)
+    if origem is None:
+        return JSONResponse({"erro": "vídeo da Base inválido"}, status_code=400)
+    _marcar_imagem_base_da_cena(caminho_meta, indice, None, video=origem.name)
+    job = jobs.criar_job_cena(metadados.get("titulo", slug), slug, indice, video_proprio=origem)
+    return {"job_id": job.id}
 
 
 @app.post("/api/biblioteca/imagens/upload")
@@ -1108,6 +1150,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "imagem": _url(i, "16x9"),
                 "imagem_vertical": _url(i, "9x16"),
                 "imagem_base": (metadados.get("imagens_base_cenas") or {}).get(str(i)),
+                "video_base": (metadados.get("videos_base_cenas") or {}).get(str(i)),
             }
         )
         acumulado += duracao
@@ -1134,16 +1177,20 @@ def api_regenerar_cena(slug: str, indice: int) -> dict:
 _trava_metadados_cenas = threading.Lock()
 
 
-def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | None) -> None:
+def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | None, video: str | None = None) -> None:
     """Registra (ou limpa, com None) qual imagem da Base está numa cena — é o que faz a Base mostrar "usado em"."""
     with _trava_metadados_cenas:
         meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
         mapa = meta.get("imagens_base_cenas") or {}
+        mapa_videos = meta.get("videos_base_cenas") or {}
+        mapa.pop(str(indice), None)
+        mapa_videos.pop(str(indice), None)  # a cena é imagem OU vídeo, nunca os dois
         if nome:
             mapa[str(indice)] = nome
-        else:
-            mapa.pop(str(indice), None)
+        if video:
+            mapa_videos[str(indice)] = video
         meta["imagens_base_cenas"] = mapa
+        meta["videos_base_cenas"] = mapa_videos
         caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

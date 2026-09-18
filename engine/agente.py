@@ -47,7 +47,6 @@ PROMPT_SISTEMA_LIVRE = (
     "dos vídeos existentes e o nicho pra dar um número concreto e uma recomendação direta). Quando o usuário falar de 'o vídeo', "
     "'o último vídeo' ou citar um assunto, identifique qual é pela lista. "
     "O usuário escreve um pedido em português (pode ser pergunta, pedido de ideias, ou comando). "
-    "O usuário escreve um pedido em português (pode ser pergunta, pedido de ideias, ou comando). "
     "Você recebe o nicho/tom do canal e a lista de vídeos já gerados (com slug e data de postagem). "
     "Responda SEMPRE com um único objeto JSON válido, sem markdown, sem texto fora dele, num destes formatos:\n"
     '{"acao": "responder", "texto": "..."} — pra responder pergunta, dar ideias/sugestões, ou qualquer '

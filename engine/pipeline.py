@@ -263,6 +263,7 @@ def gerar_video(
     # refazendo por causa de texto editado: as cenas cujo texto não mudou mantêm a imagem que já tinham
     cenas_mantidas = set()
     mapa_base_antigo = {}
+    meta_antiga_videos = {}
     if reaproveitar_imagens:
         try:
             meta_antiga = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
@@ -270,6 +271,7 @@ def gerar_video(
             meta_antiga = {}
         antigas = meta_antiga.get("cenas") or []
         mapa_base_antigo = meta_antiga.get("imagens_base_cenas") or {}
+        meta_antiga_videos = meta_antiga.get("videos_base_cenas") or {}
         for i, (texto_c, _) in enumerate(lista_cenas):
             if i < len(antigas) and antigas[i].get("texto", "").strip() == texto_c.strip():
                 cenas_mantidas.add(i)
@@ -287,6 +289,9 @@ def gerar_video(
     _salvar_metadados(
         pasta,
         cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
+        videos_base_cenas=(
+            {k: v for k, v in (meta_antiga_videos or {}).items() if int(k) in cenas_mantidas} if reaproveitar_imagens else {}
+        ),
         imagens_base_cenas=(
             {k: v for k, v in mapa_base_antigo.items() if int(k) in cenas_mantidas}
             if reaproveitar_imagens else {str(i): n for i, n in enumerate(imagens_base_validas)}
@@ -309,6 +314,8 @@ def gerar_video(
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
+            if i not in cenas_mantidas:
+                caminho_imagem.with_suffix(".mp4").unlink(missing_ok=True)  # sobra de um vídeo antigo nessa cena
             if i in cenas_mantidas and caminho_imagem.exists():
                 imagens_com_duracao.append((caminho_imagem, duracao_cena))
                 imagens_feitas += 1
@@ -427,7 +434,7 @@ def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float],
     return {"video_16_9": nomes_video.get("16:9"), "video_9_16": nomes_video.get("9:16")}
 
 
-def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None, imagem_propria: Path | None = None) -> dict:
+def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None, imagem_propria: Path | None = None, video_proprio: Path | None = None) -> dict:
     """Refaz só a imagem de UMA cena (a IA sorteia de novo) e remonta o vídeo
     final com as imagens das outras cenas intactas — não mexe em roteiro,
     narração nem legenda. Só funciona em vídeos gerados depois desse recurso
@@ -474,7 +481,15 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
 
         passo += 1
         avisar(f"{'Aplicando sua imagem' if imagem_propria else 'Gerando nova imagem'} da cena ({formato})", 10 + 80 * passo / total_passos)
-        if imagem_propria:
+        clip_cena = pasta / f"cena{indice:02d}_{sufixo}.mp4"
+        if video_proprio:
+            avisar(f"Preparando o vídeo da cena ({formato})", 10 + 80 * passo / total_passos)
+            render.preparar_clip(video_proprio, estilo["largura"], estilo["altura"], clip_cena, caminho_imagem)
+        else:
+            clip_cena.unlink(missing_ok=True)  # a cena volta a ser imagem
+        if video_proprio:
+            pass
+        elif imagem_propria:
             # imagem enviada por você: só recorta pro formato (sem distorcer), sem chamar a IA
             visuals._cobrir(Image.open(imagem_propria).convert("RGB"), estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
         else:

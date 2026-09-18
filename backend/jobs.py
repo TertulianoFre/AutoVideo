@@ -28,6 +28,7 @@ class Job:
     estimativa_bruta: float = 0.0  # segundos previstos, sem a correção aprendida
     estimativa: float = 0.0        # segundos previstos, com a correção
     iniciado_em: float = 0.0
+    na_fila: bool = False  # jobs de vídeo novo/regenerar passam pela fila; cena e legenda rodam direto
 
 
 _fila: "queue.Queue" = queue.Queue()
@@ -90,7 +91,7 @@ def _rodar(job: Job, params: dict) -> None:
 
 
 def criar_job(titulo: str, params: dict) -> Job:
-    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"), status="aguardando", etapa="Na fila")
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"), status="aguardando", etapa="Na fila", na_fila=True)
     with _lock:
         _jobs[job.id] = job
 
@@ -111,8 +112,10 @@ def tempo_ate_terminar(job: "Job") -> int:
             return max(3.0, j.estimativa * (1 - j.progresso / 100))
         return j.estimativa if j.status == "aguardando" else 0.0
 
+    if not job.na_fila:
+        return int(restante(job))
     with _lock:
-        antes = [j for j in _jobs.values() if j.status in ("rodando", "aguardando") and j.criado_em <= job.criado_em]
+        antes = [j for j in _jobs.values() if j.na_fila and j.status in ("rodando", "aguardando") and j.criado_em <= job.criado_em]
     return int(sum(restante(j) for j in antes))
 
 
@@ -123,13 +126,14 @@ def listar_rodando() -> list[Job]:
         return [j for j in _jobs.values() if j.status in ("rodando", "aguardando")]
 
 
-def _rodar_cena(job: Job, slug: str, indice: int, imagem_propria=None) -> None:
+def _rodar_cena(job: Job, slug: str, indice: int, imagem_propria=None, video_proprio=None) -> None:
+    job.iniciado_em = time.time()
     def progresso_cb(etapa: str, percentual: float) -> None:
         job.etapa = etapa
         job.progresso = round(percentual, 1)
 
     try:
-        resultado = regenerar_cena(slug, indice, progresso=progresso_cb, imagem_propria=imagem_propria)
+        resultado = regenerar_cena(slug, indice, progresso=progresso_cb, imagem_propria=imagem_propria, video_proprio=video_proprio)
         marca = int(time.time())
         job.resultado = {
             "slug": slug,
@@ -147,22 +151,23 @@ def _rodar_cena(job: Job, slug: str, indice: int, imagem_propria=None) -> None:
         job.erro = str(erro)
 
 
-def criar_job_cena(titulo: str, slug: str, indice: int, imagem_propria=None) -> Job:
-    job = Job(id=str(uuid.uuid4()), titulo=titulo)
+def criar_job_cena(titulo: str, slug: str, indice: int, imagem_propria=None, video_proprio=None) -> Job:
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, estimativa=45.0)  # ~ 1 imagem nova + remontar o vídeo
     with _lock:
         _jobs[job.id] = job
 
-    threading.Thread(target=_rodar_cena, args=(job, slug, indice, imagem_propria), daemon=True).start()
+    threading.Thread(target=_rodar_cena, args=(job, slug, indice, imagem_propria, video_proprio), daemon=True).start()
     return job
 
 
 def criar_job_funcao(titulo: str, funcao) -> Job:
     """Roda `funcao(progresso_cb) -> dict` numa thread e guarda o resultado como qualquer job."""
-    job = Job(id=str(uuid.uuid4()), titulo=titulo)
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, estimativa=35.0)  # refazer legenda + remontar
     with _lock:
         _jobs[job.id] = job
 
     def rodar() -> None:
+        job.iniciado_em = time.time()
         def progresso_cb(etapa: str, percentual: float) -> None:
             job.etapa = etapa
             job.progresso = round(percentual, 1)

@@ -18,6 +18,23 @@ def _legenda_para_filtro(caminho_legenda: Path) -> str:
     return f"subtitles='{escapado}'"
 
 
+def preparar_clip(origem: Path, largura: int, altura: int, saida_mp4: Path, saida_png: Path, max_segundos: int = 60) -> None:
+    """Deixa um vídeo da Base no tamanho exato do formato (corta o excesso, sem esticar), sem áudio
+    (a narração é o áudio do vídeo final), e tira o primeiro quadro como imagem da cena. O clip
+    é repetido em loop na montagem se a cena for mais longa que ele."""
+    filtro = f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},fps=30,setsar=1,format=yuv420p"
+    comando = [
+        caminho_ffmpeg(), "-y", "-i", str(origem), "-t", str(max_segundos), "-vf", filtro,
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", str(saida_mp4),
+    ]
+    resultado = subprocess.run(comando, capture_output=True, text=True)
+    if resultado.returncode != 0 or not saida_mp4.exists():
+        raise RuntimeError(f"FFmpeg falhou ao preparar o vídeo da cena:\n{resultado.stderr[-1500:]}")
+    quadro = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(saida_mp4), "-frames:v", "1", str(saida_png)], capture_output=True, text=True)
+    if quadro.returncode != 0 or not saida_png.exists():
+        raise RuntimeError("Não consegui tirar o primeiro quadro do vídeo da cena.")
+
+
 def mixar_audio_com_fundo(audio_principal: Path, som_fundo: Path, saida: Path, volume_fundo: float = 0.2) -> Path:
     """Mistura o som de fundo (chuva, música...) bem baixo por baixo do áudio
     principal (narração). O fundo repete em loop se for mais curto."""
@@ -74,7 +91,11 @@ def renderizar_slideshow(
     comando = [caminho_ffmpeg(), "-y"]
     for i, (imagem, _) in enumerate(imagens_com_duracao):
         extra = t if (usar_transicao and i < n - 1) else 0.0
-        comando += ["-loop", "1", "-framerate", "30", "-t", f"{duracoes[i] + extra:.3f}", "-i", str(imagem)]
+        clip = Path(imagem).with_suffix(".mp4")
+        if clip.exists():  # cena com vídeo (importado da Base): repete em loop até cobrir a cena
+            comando += ["-stream_loop", "-1", "-t", f"{duracoes[i] + extra:.3f}", "-i", str(clip)]
+        else:
+            comando += ["-loop", "1", "-framerate", "30", "-t", f"{duracoes[i] + extra:.3f}", "-i", str(imagem)]
     comando += ["-i", str(audio)]
 
     trechos_filtro = []
