@@ -204,6 +204,15 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
 }
 
+.narracao-gravada {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  margin: -4px 0 4px;
+}
+.narracao-gravada-titulo { font-size: 12px; color: var(--text-dim); }
+.narracao-gravada-controles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#narracao-gravada-player { width: 100%; height: 34px; }
+
 /* ---------- canais (aba de gerenciar) ---------- */
 
 .canais-lista { display: flex; flex-direction: column; gap: 14px; }

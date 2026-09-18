@@ -25,3 +25,20 @@ def caminho_ffmpeg() -> str:
         "Não encontrei o ffmpeg.exe. Confirme que ele está instalado "
         "(winget install Gyan.FFmpeg.Essentials) e tente de novo."
     )
+
+
+@functools.lru_cache(maxsize=1)
+def caminho_ffprobe() -> str:
+    encontrado = shutil.which("ffprobe")
+    if encontrado:
+        return encontrado
+
+    # ffprobe.exe fica do lado do ffmpeg.exe na mesma instalação
+    candidato = Path(caminho_ffmpeg()).with_name("ffprobe.exe")
+    if candidato.exists():
+        return str(candidato)
+
+    raise RuntimeError(
+        "Não encontrei o ffprobe.exe (deveria estar junto do ffmpeg.exe). "
+        "Confirme a instalação (winget install Gyan.FFmpeg.Essentials) e tente de novo."
+    )

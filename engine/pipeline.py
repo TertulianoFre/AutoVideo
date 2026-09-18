@@ -36,6 +36,9 @@ def _slug(texto: str) -> str:
     return texto.strip("-")[:60] or "video"
 
 
+slug_titulo = _slug  # nome público — usado pelo backend pra saber a pasta antes de disparar o job
+
+
 @dataclass
 class ResultadoGeracao:
     pasta: Path
@@ -69,6 +72,7 @@ def gerar_video(
     som_fundo_tipo: str = "",
     som_fundo_descricao: str = "",
     som_fundo_biblioteca: str = "",
+    narracao_customizada: bool = False,
     canal_id: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
@@ -97,6 +101,7 @@ def gerar_video(
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao,
         som_fundo_biblioteca=som_fundo_biblioteca,
+        narracao_customizada=narracao_customizada,
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -121,6 +126,12 @@ def gerar_video(
         roteiro_final = ""
     else:
         # --- com fala: roteiro + narração, som de fundo é opcional e mixado por baixo ---
+        if narracao_customizada and not roteiro:
+            raise ValueError(
+                "Narração gravada por você precisa do roteiro (o texto que você leu) — "
+                "sem ele não dá pra sincronizar cenas nem legenda."
+            )
+
         if roteiro is None:
             avisar("Escrevendo o roteiro", 3)
             # o contexto do canal é sempre levado em conta aqui, como base — não
@@ -137,12 +148,24 @@ def gerar_video(
         # "Regenerar" manter o mesmo roteiro depois, em vez de escrever um novo
         (pasta / "roteiro.txt").write_text(roteiro_final, encoding="utf-8")
 
-        avisar("Gerando a narração", 8)
-        narracao_path = pasta / "narracao.mp3"
-        submaker = tts.sintetizar(roteiro, idioma, voz, narracao_path)
+        if narracao_customizada:
+            # o áudio já foi salvo (e validado/reencodado) pelo backend antes
+            # de disparar esse job, como pasta/"narracao_custom.mp3"
+            avisar("Lendo a narração enviada por você", 8)
+            narracao_path = pasta / "narracao_custom.mp3"
+            if not narracao_path.exists():
+                raise ValueError("Não achei o áudio de narração enviado — tenta gravar/enviar de novo.")
+            duracao_real = tts.duracao_do_audio(narracao_path)
+            # sem timestamp real por palavra (isso só o TTS local dá) — aproxima
+            # um ritmo de fala constante pra cenas/legenda ainda funcionarem
+            submaker = tts.submaker_aproximado(roteiro_final, duracao_real)
+        else:
+            avisar("Gerando a narração", 8)
+            narracao_path = pasta / "narracao.mp3"
+            submaker = tts.sintetizar(roteiro, idioma, voz, narracao_path)
+            duracao_real = (submaker.cues[-1].end - submaker.cues[0].start).total_seconds()
 
-        duracao_real = (submaker.cues[-1].end - submaker.cues[0].start).total_seconds()
-        if duracao_alvo_minutos is not None:
+        if not narracao_customizada and duracao_alvo_minutos is not None:
             alvo_segundos = duracao_alvo_minutos * 60
             if duracao_real < alvo_segundos * 0.9:
                 palavras_faltando = round((alvo_segundos - duracao_real) / 60 * PALAVRAS_POR_MINUTO)

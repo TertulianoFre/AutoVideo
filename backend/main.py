@@ -29,8 +29,9 @@ from PIL import Image
 from backend import jobs
 from engine import agendador, agente, biblioteca, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
+from engine import tts as tts_mod
 from engine import youtube as youtube_mod
-from engine.pipeline import RAIZ_SAIDA
+from engine.pipeline import RAIZ_SAIDA, slug_titulo
 
 RAIZ = Path(__file__).resolve().parent.parent
 FRONTEND = RAIZ / "frontend"
@@ -336,11 +337,32 @@ def api_criar_video(
     som_fundo_tipo: str = Form(""),
     som_fundo_descricao: str = Form(""),
     som_fundo_biblioteca: str = Form(""),
+    narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
+    roteiro_limpo = roteiro.strip()
+    narracao_customizada = False
+
+    if narracao_audio is not None and narracao_audio.filename and not sem_narracao:
+        if not roteiro_limpo:
+            return JSONResponse(
+                {"erro": "com narração gravada/enviada, cole no campo Roteiro exatamente o texto que você leu antes de enviar"},
+                status_code=400,
+            )
+        conteudo = narracao_audio.file.read()
+        if len(conteudo) > TAMANHO_MAX_BIBLIOTECA_BYTES:
+            return JSONResponse({"erro": "áudio de narração maior que 40MB"}, status_code=400)
+        pasta = RAIZ_SAIDA / slug_titulo(titulo)
+        pasta.mkdir(parents=True, exist_ok=True)
+        try:
+            tts_mod.salvar_narracao_customizada(conteudo, pasta / "narracao_custom.mp3")
+        except ValueError as erro:
+            return JSONResponse({"erro": str(erro)}, status_code=400)
+        narracao_customizada = True
+
     params = dict(
         titulo=titulo,
-        roteiro=None if sem_narracao else (roteiro.strip() or None),
+        roteiro=None if sem_narracao else (roteiro_limpo or None),
         idioma=idioma,
         voz=voz,
         estilo_imagem=imagem,
@@ -352,6 +374,7 @@ def api_criar_video(
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao.strip(),
         som_fundo_biblioteca=som_fundo_biblioteca.strip(),
+        narracao_customizada=narracao_customizada,
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -392,6 +415,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
         som_fundo_biblioteca=metadados.get("som_fundo_biblioteca", ""),
+        narracao_customizada=metadados.get("narracao_customizada", False),
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 

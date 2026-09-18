@@ -868,6 +868,71 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   }
 });
 
+// ---------------- Novo vídeo: narração gravada por você ----------------
+
+let narracaoGravadaBlob = null;
+let mediaRecorderAtual = null;
+let mediaRecorderChunks = [];
+
+const btnGravarNarracao = document.getElementById("btn-gravar-narracao");
+const inputUploadNarracao = document.getElementById("input-upload-narracao");
+const narracaoGravadaStatus = document.getElementById("narracao-gravada-status");
+const narracaoGravadaPlayer = document.getElementById("narracao-gravada-player");
+const btnRemoverNarracaoGravada = document.getElementById("btn-remover-narracao-gravada");
+
+function definirNarracaoGravada(blob) {
+  narracaoGravadaBlob = blob;
+  narracaoGravadaPlayer.src = URL.createObjectURL(blob);
+  narracaoGravadaPlayer.hidden = false;
+  btnRemoverNarracaoGravada.hidden = false;
+}
+
+btnRemoverNarracaoGravada.addEventListener("click", () => {
+  narracaoGravadaBlob = null;
+  narracaoGravadaPlayer.hidden = true;
+  narracaoGravadaPlayer.removeAttribute("src");
+  btnRemoverNarracaoGravada.hidden = true;
+  narracaoGravadaStatus.textContent = "";
+  inputUploadNarracao.value = "";
+});
+
+inputUploadNarracao.addEventListener("change", () => {
+  const arquivo = inputUploadNarracao.files[0];
+  if (!arquivo) return;
+  definirNarracaoGravada(arquivo);
+  narracaoGravadaStatus.textContent = arquivo.name;
+});
+
+btnGravarNarracao.addEventListener("click", async () => {
+  if (mediaRecorderAtual && mediaRecorderAtual.state === "recording") {
+    mediaRecorderAtual.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    narracaoGravadaStatus.textContent = "Esse navegador não suporta gravação — envie um arquivo de áudio.";
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorderChunks = [];
+    mediaRecorderAtual = new MediaRecorder(stream);
+    mediaRecorderAtual.addEventListener("dataavailable", (evento) => {
+      if (evento.data.size > 0) mediaRecorderChunks.push(evento.data);
+    });
+    mediaRecorderAtual.addEventListener("stop", () => {
+      definirNarracaoGravada(new Blob(mediaRecorderChunks, { type: "audio/webm" }));
+      narracaoGravadaStatus.textContent = "Gravação pronta.";
+      btnGravarNarracao.textContent = "🎤 Gravar";
+      stream.getTracks().forEach((faixa) => faixa.stop());
+    });
+    mediaRecorderAtual.start();
+    btnGravarNarracao.textContent = "⏹ Parar gravação";
+    narracaoGravadaStatus.textContent = "Gravando…";
+  } catch {
+    narracaoGravadaStatus.textContent = "Não consegui acessar o microfone — confira a permissão do navegador.";
+  }
+});
+
 // ---------------- Novo vídeo: envio + progresso ----------------
 
 const form = document.getElementById("form-novo");
@@ -891,11 +956,22 @@ form.addEventListener("submit", async (ev) => {
   form.querySelector(".btn-primary").disabled = true;
 
   const dados = new FormData(form);
+  if (narracaoGravadaBlob) {
+    dados.set("narracao_audio", narracaoGravadaBlob, narracaoGravadaBlob.name || "narracao.webm");
+  }
   const resposta = await fetch("/api/videos", { method: "POST", body: dados });
-  const { job_id } = await resposta.json();
+  const resultado = await resposta.json();
+
+  if (resultado.erro) {
+    progressoCard.hidden = true;
+    erroCard.hidden = false;
+    document.getElementById("erro-conteudo").textContent = resultado.erro;
+    form.querySelector(".btn-primary").disabled = false;
+    return;
+  }
 
   if (poller) clearInterval(poller);
-  poller = setInterval(() => acompanharJob(job_id), 1200);
+  poller = setInterval(() => acompanharJob(resultado.job_id), 1200);
 });
 
 async function acompanharJob(jobId) {
@@ -922,6 +998,7 @@ async function acompanharJob(jobId) {
 function mostrarResultado(resultado) {
   progressoCard.hidden = true;
   resultadoCard.hidden = false;
+  btnRemoverNarracaoGravada.click(); // limpa a narração gravada — cada vídeo novo parte sem herdar a anterior
 
   const tags = (resultado.tags || [])
     .map((t) => `<span class="tag-pill">#${t}</span>`)

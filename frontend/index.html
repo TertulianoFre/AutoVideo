@@ -210,6 +210,21 @@
                 <span id="preview-roteiro-status" class="video-meta"></span>
               </div>
 
+              <div class="narracao-gravada" id="bloco-narracao-gravada">
+                <span class="narracao-gravada-titulo">Narração gravada por você (opcional — em branco usa narração por IA)</span>
+                <div class="narracao-gravada-controles">
+                  <button type="button" class="btn-secondary" id="btn-gravar-narracao">🎤 Gravar</button>
+                  <label class="btn-secondary" style="cursor:pointer">
+                    <input type="file" id="input-upload-narracao" accept="audio/*" hidden>
+                    Enviar arquivo
+                  </label>
+                  <span id="narracao-gravada-status" class="video-meta"></span>
+                </div>
+                <audio id="narracao-gravada-player" controls hidden></audio>
+                <button type="button" class="btn-regenerar btn-regenerar-sutil" id="btn-remover-narracao-gravada" hidden style="width:fit-content">remover gravação</button>
+                <p class="hint">Se gravar ou enviar um áudio, o campo Roteiro acima precisa ter exatamente o texto que você leu — é o que permite gerar cenas e legenda sincronizadas (de forma aproximada). Voz e idioma abaixo ficam sem efeito nesse caso.</p>
+              </div>
+
               <div class="row-2">
                 <label>
                   <span>Voz (narração por IA)</span>
