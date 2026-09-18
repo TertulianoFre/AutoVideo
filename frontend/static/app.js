@@ -51,6 +51,7 @@ function linhaDeVideo(v, comRegenerar) {
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
        ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
        <button type="button" class="btn-regenerar btn-regenerar-sutil btn-nova-thumb" data-slug="${v.slug}" title="Sorteia outra imagem de cena pra thumbnail">nova thumbnail</button>
+       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar o texto e a cor da thumbnail">editar thumbnail</button>
        ${v.tem_cenas ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
@@ -69,6 +70,7 @@ function linhaDeVideo(v, comRegenerar) {
           ${botaoRegenerar}
         </div>
       </div>
+      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-titulo="${v.titulo.replace(/"/g, "&quot;")}"></div>` : ""}
       ${comRegenerar && v.tem_cenas ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
@@ -94,7 +96,7 @@ async function carregarFila() {
     ? videos.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo gerado ainda.</div>';
 
-  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb):not(.btn-ver-cenas)").forEach((botao) => {
+  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb):not(.btn-ver-cenas):not(.btn-editar-thumb)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
   });
   lista.querySelectorAll(".btn-nova-thumb").forEach((botao) => {
@@ -103,6 +105,89 @@ async function carregarFila() {
   lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {
     botao.addEventListener("click", () => alternarPainelCenas(botao));
   });
+  lista.querySelectorAll(".btn-editar-thumb").forEach((botao) => {
+    botao.addEventListener("click", () => alternarPainelThumb(botao));
+  });
+}
+
+// ---------------- Fila: editar texto/cor da thumbnail ----------------
+
+const CORES_THUMB = [
+  { nome: "Padrão", hex: "" },
+  { nome: "Amarelo", hex: "FFD23F" },
+  { nome: "Vermelho", hex: "FF4C4C" },
+  { nome: "Verde", hex: "3DDC84" },
+  { nome: "Azul", hex: "4DA6FF" },
+];
+
+function alternarPainelThumb(botao) {
+  const slug = botao.dataset.slug;
+  const painel = document.querySelector(`.thumb-painel[data-slug="${slug}"]`);
+  if (!painel) return;
+
+  const abrindo = !painel.classList.contains("aberto");
+  painel.classList.toggle("aberto", abrindo);
+  botao.textContent = abrindo ? "esconder thumbnail" : "editar thumbnail";
+  if (!abrindo || painel.dataset.montado === "true") return;
+
+  painel.dataset.montado = "true";
+  const tituloPadrao = painel.dataset.titulo || "";
+  const swatches = CORES_THUMB.map(
+    (c, i) => `<button type="button" class="cor-swatch${i === 0 ? " selecionada" : ""}" data-hex="${c.hex}" title="${c.nome}" style="background:${c.hex ? "#" + c.hex : "#F6F2E9"}"></button>`
+  ).join("");
+
+  painel.innerHTML = `
+    <div class="thumb-form">
+      <input type="text" class="thumb-texto" value="${tituloPadrao}" maxlength="80" placeholder="Texto que aparece na thumbnail">
+      <div class="cor-swatches">${swatches}</div>
+      <button type="button" class="btn-secondary btn-salvar-thumb">Salvar</button>
+      <span class="video-meta thumb-status"></span>
+    </div>`;
+
+  painel.querySelectorAll(".cor-swatch").forEach((sw) => {
+    sw.addEventListener("click", () => {
+      painel.querySelectorAll(".cor-swatch").forEach((s) => s.classList.remove("selecionada"));
+      sw.classList.add("selecionada");
+    });
+  });
+
+  painel.querySelector(".btn-salvar-thumb").addEventListener("click", () => salvarThumb(slug, painel));
+}
+
+async function salvarThumb(slug, painel) {
+  const texto = painel.querySelector(".thumb-texto").value.trim();
+  const corSelecionada = painel.querySelector(".cor-swatch.selecionada");
+  const status = painel.querySelector(".thumb-status");
+  const botaoSalvar = painel.querySelector(".btn-salvar-thumb");
+
+  if (!texto) {
+    status.textContent = "Escreve algum texto primeiro.";
+    return;
+  }
+
+  botaoSalvar.disabled = true;
+  status.textContent = "Salvando…";
+
+  const dados = new FormData();
+  dados.set("texto", texto);
+  dados.set("cor", corSelecionada ? corSelecionada.dataset.hex : "");
+
+  try {
+    const resposta = await fetch(`/api/videos/${slug}/thumbnail/editar`, { method: "POST", body: dados });
+    const resultado = await resposta.json();
+    botaoSalvar.disabled = false;
+    if (resultado.erro) {
+      status.textContent = `Deu erro: ${resultado.erro}`;
+      return;
+    }
+    status.textContent = "Salvo!";
+    setTimeout(() => (status.textContent = ""), 3000);
+    const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+    if (thumbImg) thumbImg.src = resultado.thumbnail;
+  } catch {
+    botaoSalvar.disabled = false;
+    status.textContent = "Deu erro de conexão, tenta de novo.";
+  }
 }
 
 // ---------------- Fila: editar uma cena específica ----------------

@@ -246,15 +246,50 @@ def api_regenerar_thumbnail(slug: str) -> dict:
         return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    titulo = metadados.get("titulo", slug)
+    texto = metadados.get("thumbnail_texto") or metadados.get("titulo", slug)
+    cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
 
     atual = pasta / "thumbnail_fonte.txt"
     fonte_anterior = atual.read_text(encoding="utf-8").strip() if atual.exists() else None
     opcoes = [c for c in candidatas if c.name != fonte_anterior] or candidatas
     escolhida = random.choice(opcoes)
 
-    thumbnail_mod.gerar_thumbnail(escolhida, titulo, pasta / "thumbnail.png")
+    thumbnail_mod.gerar_thumbnail(escolhida, texto, pasta / "thumbnail.png", cor)
     atual.write_text(escolhida.name, encoding="utf-8")
+
+    return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
+
+
+@app.post("/api/videos/{slug}/thumbnail/editar")
+def api_editar_thumbnail(slug: str, texto: str = Form(...), cor: str = Form("")) -> dict:
+    """Troca o texto (e opcionalmente a cor) da thumbnail, mantendo a mesma
+    imagem de base atual. Fica salvo pro vídeo (sobrevive a "nova thumbnail"
+    e a regenerar a cena 0) até você editar de novo."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    texto = texto.strip()
+    if not texto:
+        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
+
+    fonte_txt = pasta / "thumbnail_fonte.txt"
+    fonte_nome = fonte_txt.read_text(encoding="utf-8").strip() if fonte_txt.exists() else "cena00_16x9.png"
+    base = pasta / fonte_nome
+    if not base.exists():
+        candidatas = sorted(pasta.glob("cena*_16x9.png"))
+        if not candidatas:
+            return JSONResponse({"erro": "não achei nenhuma imagem de cena pra usar de base"}, status_code=404)
+        base = candidatas[0]
+
+    cor_rgb = thumbnail_mod.cor_de_hex(cor)
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["thumbnail_texto"] = texto
+    metadados["thumbnail_cor"] = cor.strip().lstrip("#") if cor_rgb else ""
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
 

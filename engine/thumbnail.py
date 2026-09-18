@@ -24,7 +24,19 @@ def _fonte(tamanho: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def gerar_thumbnail(imagem_base: Path, titulo: str, caminho_saida: Path) -> Path:
+def cor_de_hex(hex_str: str) -> tuple[int, int, int] | None:
+    """"FFD23F" ou "#FFD23F" -> (255, 210, 63); None se vazio/inválido (cai no padrão)."""
+    hex_str = (hex_str or "").strip().lstrip("#")
+    if len(hex_str) != 6:
+        return None
+    try:
+        return tuple(int(hex_str[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+
+
+def gerar_thumbnail(imagem_base: Path, titulo: str, caminho_saida: Path, cor_texto: tuple[int, int, int] | None = None) -> Path:
+    cor = cor_texto or COR_TEXTO
     base = Image.open(imagem_base).convert("RGB").resize((LARGURA, ALTURA), Image.LANCZOS)
 
     # escurece a parte de baixo pra o título ficar legível em cima de qualquer imagem
@@ -49,7 +61,7 @@ def gerar_thumbnail(imagem_base: Path, titulo: str, caminho_saida: Path) -> Path
         # contorno grosso (stroke manual) pra legibilidade em qualquer fundo
         for dx, dy in [(-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, 2), (-2, 2), (2, -2)]:
             desenho.text((x + dx, y + dy), linha, font=fonte, fill=COR_CAIXA)
-        desenho.text((x, y), linha, font=fonte, fill=COR_TEXTO)
+        desenho.text((x, y), linha, font=fonte, fill=cor)
         y += altura_linha
 
     imagem.save(caminho_saida, "PNG")

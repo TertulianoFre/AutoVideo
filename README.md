@@ -50,6 +50,8 @@ Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, test
 
 **Editar uma cena específica** (`engine.pipeline.regenerar_cena`, botão "cenas" na Fila): mostra cada cena do vídeo (texto + imagem) com um botão "Regenerar essa cena" — refaz só a imagem daquela cena (a IA sorteia de novo) e remonta o vídeo com ffmpeg, sem tocar no roteiro, na narração, na legenda nem nas outras cenas. Só funciona em vídeos gerados depois desse recurso existir (precisa do `metadata.json` ter a lista de cenas salva — clique em "Regenerar" uma vez em vídeos antigos pra habilitar).
 
+**Editar a thumbnail** (botão "editar thumbnail" na Fila): troca o texto exibido (independente do título do vídeo) e a cor (5 opções) sem mexer na imagem de base. Fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`) — sobrevive a "nova thumbnail" (só troca a imagem) e a regenerar a cena 0. Não é um editor visual (sem arrastar/redimensionar texto na tela).
+
 ### Publicação automática (`engine/youtube.py`, `engine/agendador.py`)
 
 Precisa de um `client_secret.json` na raiz do projeto (credencial OAuth "App para computador", criada no Google Cloud Console — ver checklist abaixo) e de conectar sua conta uma vez no Painel (botão "Conectar YouTube": abre o navegador, você loga e autoriza).
@@ -76,7 +78,7 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dad
 
 ## Requisitos já levantados, ainda não implementados
 
-- Prévia **editável** da thumbnail de verdade (hoje só troca a imagem-base por outra cena — "nova thumbnail" na Fila — não dá pra desenhar/ajustar).
+- Editor visual de thumbnail de verdade (arrastar/redimensionar o texto na tela, trocar fonte) — hoje só dá pra trocar o texto, a cor (5 opções) e a imagem-base, com posição/tamanho fixos.
 - Sintetizar **qualquer** som de fundo descrito de verdade (hoje são 5 tipos reais fixos — chuva, música, ondas, fogueira, vento — e "outro" só casa por palavra-chave com o mais parecido desses).
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
@@ -96,7 +98,7 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dad
 
 ## Status
 
-App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pré-visualização de roteiro, narração opcional, som de fundo opcional (mixado ou sozinho), 3 estilos de imagem, thumbnail automática (regenerável à parte), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro), editar uma cena específica sem regenerar tudo, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal no perfil.
+App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pré-visualização de roteiro (com revisão automática), narração opcional, som de fundo opcional (5 tipos, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e editável (texto/cor/imagem), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro), editar uma cena específica sem regenerar tudo, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal no perfil.
 
 ## Checklist do Google Cloud Console (feito uma vez, por você)
 
