@@ -1169,9 +1169,33 @@ form.addEventListener("submit", async (ev) => {
   poller = setInterval(() => acompanharJob(resultado.job_id), 1200);
 });
 
+let falhasJob = 0;
+
+function abandonarJob(mensagem) {
+  clearInterval(poller);
+  form.querySelector(".btn-primary").disabled = false;
+  progressoCard.hidden = true;
+  erroCard.hidden = false;
+  document.getElementById("erro-conteudo").textContent = mensagem;
+}
+
 async function acompanharJob(jobId) {
-  const resposta = await fetch(`/api/jobs/${jobId}`);
-  const job = await resposta.json();
+  let job;
+  try {
+    const resposta = await fetch(`/api/jobs/${jobId}`);
+    if (resposta.status === 404) {
+      // o servidor foi reiniciado (os jobs vivem na memória dele): a geração parou junto
+      abandonarJob("O servidor foi reiniciado durante a geração e o vídeo parou no meio. Gere de novo (se ele aparecer na Fila, use Regenerar).");
+      return;
+    }
+    job = await resposta.json();
+    falhasJob = 0;
+  } catch {
+    // falha de rede passageira: tenta de novo, só desiste depois de várias seguidas
+    if (++falhasJob >= 8) abandonarJob("Perdi a conexão com o servidor. Confira se o app está rodando e olhe a Fila.");
+    return;
+  }
+  if (typeof job.progresso !== "number") return;
 
   progressFill.style.width = `${job.progresso}%`;
   progressoPct.textContent = `${Math.round(job.progresso)}%`;

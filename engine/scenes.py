@@ -30,23 +30,47 @@ def dividir_em_cenas(submaker, roteiro: str, duracao_minima: timedelta = DURACAO
     return _dividir_por_minimo(submaker, roteiro, duracao_minima)
 
 
+def _fim_de_frase(palavra: str) -> bool:
+    return palavra.rstrip().endswith((".", "?", "!"))
+
+
 def _por_paragrafos(submaker, roteiro: str, n: int) -> list | None:
-    """Corta nas quebras de parágrafo do roteiro quando há exatamente n deles."""
+    """Cada parágrafo do roteiro vira uma cena, sempre cortando em fim de frase
+    (nunca no meio dela). Conta quantas frases cada parágrafo tem e agrupa as
+    frases da narração de acordo; se a contagem não bater, escolhe a frase
+    mais próxima da proporção de palavras."""
     paragrafos = [p for p in roteiro.replace("\r", "").split("\n") if p.strip()]
     if len(paragrafos) != n:
         return None
-    cues = submaker.cues
-    textos = palavras_alinhadas(cues, roteiro)
-    total_palavras = sum(len(p.split()) for p in paragrafos) or 1
-    cenas, inicio, acumulado = [], 0, 0
-    for k, paragrafo in enumerate(paragrafos):
-        acumulado += len(paragrafo.split())
-        fim = len(cues) if k == n - 1 else max(inicio + 1, round(acumulado / total_palavras * len(cues)))
-        fim = min(fim, len(cues) - (n - 1 - k))
-        if fim <= inicio:
+    frases = _dividir_por_minimo(submaker, roteiro, timedelta(0))
+    if len(frases) < n:
+        return None
+
+    contagens = []
+    for paragrafo in paragrafos:
+        palavras = paragrafo.split()
+        contagens.append(max(1, sum(1 for w in palavras if _fim_de_frase(w)) + (0 if _fim_de_frase(palavras[-1]) else 1)))
+
+    if sum(contagens) == len(frases):
+        limites, acumulado = [], 0
+        for c in contagens:
+            acumulado += c
+            limites.append(acumulado)
+    else:
+        total_palavras = sum(len(p.split()) for p in paragrafos) or 1
+        limites, acumulado = [], 0
+        for k, paragrafo in enumerate(paragrafos):
+            acumulado += len(paragrafo.split())
+            limite = len(frases) if k == n - 1 else round(acumulado / total_palavras * len(frases))
+            limites.append(min(max(limite, (limites[-1] + 1) if limites else 1), len(frases) - (n - 1 - k)))
+
+    cenas, inicio = [], 0
+    for limite in limites:
+        grupo = frases[inicio:limite]
+        if not grupo:
             return None
-        cenas.append(Cena(" ".join(textos[inicio:fim]), cues[inicio].start, cues[fim - 1].end))
-        inicio = fim
+        cenas.append(Cena(" ".join(f.texto for f in grupo), grupo[0].inicio, grupo[-1].fim))
+        inicio = limite
     return cenas
 
 

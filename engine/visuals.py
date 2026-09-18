@@ -177,28 +177,126 @@ def _aplicar_overlay_legibilidade(imagem: Image.Image) -> Image.Image:
 # foto real — Openverse (sem chave) com Pexels como fonte extra (se configurado)
 # ---------------------------------------------------------------------------
 
-def _buscar_openverse(termo_busca: str) -> bytes | None:
+def _buscar_openverse(termo_busca: str, assunto: str = "", excluir: set | None = None) -> tuple | None:
+    """Devolve (bytes, url) de uma foto sorteada entre os melhores resultados.
+    Com `assunto`, só aceita foto cujo título/tags mencionam o assunto (evita
+    foto aleatória); `excluir` são URLs já usadas em outras cenas do vídeo."""
     import random
 
+    excluir = excluir or set()
     resposta = requests.get(
         OPENVERSE_URL,
-        params={"q": termo_busca, "page_size": 8, "license_type": "commercial"},
+        params={"q": termo_busca, "page_size": 20, "license": "cc0,pdm"},
         timeout=15,
     )
     if not resposta.ok:
         return None
     resultados = resposta.json().get("results") or []
-    random.shuffle(resultados)  # "gerar outra imagem" precisa poder trazer uma foto diferente
-    for resultado in resultados[:4]:
+    palavras_assunto = [w.casefold() for w in assunto.split() if len(w) > 2]
+
+    def relevante(r: dict) -> bool:
+        if not palavras_assunto:
+            return True
+        texto = f'{r.get("title") or ""} ' + " ".join(tag.get("name", "") for tag in (r.get("tags") or []))
+        return any(w in texto.casefold() for w in palavras_assunto)
+
+    candidatos = [r for r in resultados if relevante(r) and (r.get("url") or r.get("thumbnail")) not in excluir]
+    random.shuffle(candidatos)  # "gerar outra imagem" precisa poder trazer uma foto diferente
+    for resultado in candidatos[:4]:
         url_imagem = resultado.get("url") or resultado.get("thumbnail")
-        if not url_imagem:
-            continue
         try:
             imagem_resp = requests.get(url_imagem, timeout=20)
         except requests.RequestException:
             continue
         if imagem_resp.ok:
-            return imagem_resp.content
+            return imagem_resp.content, url_imagem
+    return None
+
+
+USER_AGENT = {"User-Agent": "ProjetoYT/1.0 (gerador local de videos; fotos de dominio publico)"}
+WIKIMEDIA_URL = "https://commons.wikimedia.org/w/api.php"
+NASA_URL = "https://images-api.nasa.gov"
+
+
+def _mencionam_assunto(texto: str, assunto: str) -> bool:
+    palavras = [w.casefold() for w in assunto.split() if len(w) > 2]
+    return not palavras or any(w in texto.casefold() for w in palavras)
+
+
+def _baixar(url: str) -> bytes | None:
+    try:
+        resposta = requests.get(url, headers=USER_AGENT, timeout=25)
+    except requests.RequestException:
+        return None
+    return resposta.content if resposta.ok else None
+
+
+def _buscar_wikimedia(termo_busca: str, assunto: str = "", excluir: set | None = None) -> tuple | None:
+    """Wikimedia Commons: só arquivos em domínio público / CC0 (checado na licença de cada um)."""
+    import random
+
+    excluir = excluir or set()
+    try:
+        resposta = requests.get(
+            WIKIMEDIA_URL,
+            headers=USER_AGENT,
+            params={
+                "action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
+                "gsrsearch": f"{termo_busca} filetype:bitmap", "gsrlimit": 30,
+                "prop": "imageinfo", "iiprop": "url|extmetadata|size|mime", "iiurlwidth": 1920,
+            },
+            timeout=15,
+        )
+    except requests.RequestException:
+        return None
+    if not resposta.ok:
+        return None
+    paginas = (resposta.json().get("query") or {}).get("pages") or {}
+    candidatos = []
+    for pagina in paginas.values():
+        info = (pagina.get("imageinfo") or [{}])[0]
+        licenca = ((info.get("extmetadata") or {}).get("LicenseShortName") or {}).get("value", "").casefold()
+        livre = licenca.startswith(("public domain", "pd", "cc0", "cc-zero"))
+        url = info.get("thumburl") or info.get("url")
+        if (
+            livre and url and url not in excluir and info.get("mime") in ("image/jpeg", "image/png")
+            and (info.get("width") or 0) >= 1000 and _mencionam_assunto(pagina.get("title", ""), assunto)
+        ):
+            candidatos.append(url)
+    random.shuffle(candidatos)
+    for url in candidatos[:3]:
+        conteudo = _baixar(url)
+        if conteudo:
+            return conteudo, url
+    return None
+
+
+def _buscar_nasa(termo_busca: str, assunto: str = "", excluir: set | None = None) -> tuple | None:
+    """Biblioteca de imagens da NASA (domínio público) — ótima pra espaço."""
+    import random
+
+    excluir = excluir or set()
+    try:
+        resposta = requests.get(f"{NASA_URL}/search", headers=USER_AGENT, params={"q": termo_busca, "media_type": "image"}, timeout=15)
+        if not resposta.ok:
+            return None
+        itens = (resposta.json().get("collection") or {}).get("items") or []
+        itens = [
+            i for i in itens
+            if i.get("data") and _mencionam_assunto(i["data"][0].get("title") or "", assunto)
+        ]
+        random.shuffle(itens)
+        for item in itens[:4]:
+            nasa_id = item["data"][0].get("nasa_id")
+            arquivos = requests.get(f"{NASA_URL}/asset/{nasa_id}", headers=USER_AGENT, timeout=15).json()["collection"]["items"]
+            urls = [a["href"] for a in arquivos if a["href"].lower().endswith((".jpg", ".jpeg", ".png"))]
+            url = next((u for u in urls if "~large" in u), None) or next((u for u in urls if "~medium" in u), None)
+            if url and url not in excluir:
+                conteudo = _baixar(url)
+                if conteudo:
+                    return conteudo, url
+    except (requests.RequestException, KeyError, ValueError):
+        return None
     return None
 
 
@@ -223,38 +321,69 @@ def _buscar_pexels(termo_busca: str, orientacao: str) -> bytes | None:
     return imagem_resp.content
 
 
-def _termos_de_busca(cena: str, contexto: str) -> list:
-    """A frase inteira da cena nunca acha nada num banco de fotos. Pede pra IA
-    resumir em 2-4 palavras de busca (em inglês, junto do tema do vídeo) e usa
-    o tema do vídeo como plano B."""
+_PALAVRAS_GENERICAS = {
+    "curiosidades", "curiosidade", "sobre", "porque", "por", "que", "como", "quando", "quais", "qual", "mais",
+    "historia", "história", "fatos", "coisas", "incríveis", "incriveis", "melhores", "maiores", "nunca", "sempre",
+}
+
+
+def _assunto_do_video(contexto: str, pasta: Path) -> str:
+    """Assunto principal do vídeo em inglês (1-2 palavras, ex: "octopus"). Uma
+    chamada por vídeo, guardada em assunto_foto.txt — o serviço gratuito de IA
+    limita chamadas seguidas, então não dá pra pedir de novo a cada cena."""
+    import re
+    import time
+    from engine.roteiro import chamar_pollinations
+
+    arquivo = pasta / "assunto_foto.txt"
+    if arquivo.exists() and arquivo.read_text(encoding="utf-8").strip():
+        return arquivo.read_text(encoding="utf-8").strip()
+    for tentativa in range(3):
+        try:
+            texto = chamar_pollinations(
+                [
+                    {"role": "system", "content": "Responda SÓ com 1 ou 2 palavras em inglês: o assunto principal do vídeo, do jeito que se buscaria num banco de fotos (ex: octopus, Eiffel Tower, Saturn, pizza). Sem pontuação."},
+                    {"role": "user", "content": contexto},
+                ],
+                2,
+            )
+            assunto = " ".join(re.sub(r"[^\w\s]", " ", texto).split()[:2])
+            if assunto:
+                arquivo.write_text(assunto, encoding="utf-8")
+                return assunto
+        except RuntimeError:
+            time.sleep(4 * (tentativa + 1))
+    # IA indisponível: usa as palavras "de peso" do próprio título (em português mesmo)
+    palavras = [w for w in re.sub(r"[^\w\s]", " ", contexto).split() if len(w) > 3 and w.casefold() not in _PALAVRAS_GENERICAS]
+    return " ".join(palavras[:2])
+
+
+def _termos_de_busca(cena: str, contexto: str, pasta: Path) -> tuple:
+    """A frase inteira da cena nunca acha nada num banco de fotos. Toda busca
+    carrega o ASSUNTO do vídeo (a foto fica na mesma área) e, se a IA responder,
+    palavras-chave da cena. Devolve (lista de buscas, assunto)."""
     import re
     from engine.roteiro import chamar_pollinations
 
-    termos = []
+    assunto = _assunto_do_video(contexto, pasta)
+    chaves = ""
     try:
         texto = chamar_pollinations(
             [
-                {"role": "system", "content": "Você cria termos de busca pra um banco de fotos. Responda SÓ com 2 a 4 palavras-chave em inglês, sem pontuação, que achariam uma foto que ilustre o trecho, sempre ligada ao tema do vídeo. Mantenha exatamente os nomes próprios do tema (ex: Minecraft) e prefira termos simples e comuns."},
-                {"role": "user", "content": f"Tema do vídeo: {contexto}\nTrecho: {cena}"},
+                {"role": "system", "content": f"Responda SÓ com 1 a 3 palavras-chave em inglês, simples e comuns, pra buscar num banco de fotos uma imagem que ilustre o trecho. O assunto do vídeo é \"{assunto}\"; a foto deve ser sobre ele. Sem pontuação."},
+                {"role": "user", "content": cena},
             ],
-            2,
+            1,
         )
-        termo = re.sub(r"[^\w\s]", " ", texto).strip()
-        if termo:
-            palavras = termo.split()[:5]
-            termos += [" ".join(palavras), " ".join(palavras[:3]), " ".join(palavras[:2])]
+        chaves = " ".join(re.sub(r"[^\w\s]", " ", texto).split()[:3])
     except RuntimeError:
         pass
-    # plano B: só o(s) nome(s) do tema que a IA manteve na busca (ex: "minecraft") —
-    # palavras genéricas do título em português ("curiosidades") trazem foto aleatória
-    ja_usadas = {w.casefold() for termo in termos for w in termo.split()}
-    termos += [w for w in re.sub(r"[^\w\s]", " ", contexto).split() if len(w) > 4 and w.casefold() in ja_usadas][:2]
-    termos.append(" ".join(cena.split()[:4]))
-    vistos = []
-    for t in termos:
-        if t and t.casefold() not in (v.casefold() for v in vistos):
-            vistos.append(t)
-    return vistos
+    termos = []
+    if assunto and chaves and chaves.casefold() != assunto.casefold():
+        termos.append(f"{assunto} {chaves}")
+    if assunto:
+        termos.append(assunto)
+    return termos, assunto
 
 
 def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "") -> Path:
@@ -265,19 +394,39 @@ def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str,
     de "pessoa sorrindo pra câmera"), tenta a outra fonte antes de desistir."""
     orientacao = "portrait" if altura > largura else "landscape"
 
-    candidatos_bytes = []
-    for termo in _termos_de_busca(termo_busca, contexto):
-        candidatos_bytes = [b for b in (_buscar_openverse(termo), _buscar_pexels(termo, orientacao)) if b]
-        if candidatos_bytes:
+    # fotos já usadas em qualquer cena desse vídeo (inclusive a que está sendo
+    # trocada) não entram de novo — o arquivo .fonte guarda a URL de cada uma
+    usadas = set()
+    for arquivo in caminho.parent.glob("cena*.fonte"):
+        usadas.add(arquivo.read_text(encoding="utf-8").strip())
+
+    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent)
+    candidatos = []  # (bytes, url)
+    for termo in termos:
+        for buscador in (_buscar_openverse, _buscar_wikimedia, _buscar_nasa):
+            try:
+                achou = buscador(termo, assunto, usadas)
+            except requests.RequestException:
+                achou = None
+            if achou:
+                candidatos.append(achou)
+        pexels = _buscar_pexels(termo, orientacao)
+        if pexels:
+            candidatos.append((pexels, None))
+        if candidatos:
             break
-    if not candidatos_bytes:
+    import random
+    random.shuffle(candidatos)  # varia a fonte entre cenas
+    if not candidatos:
         raise RuntimeError(
-            f"Nenhuma foto encontrada para '{termo_busca}' (Openverse e Pexels). "
+            f"Nenhuma foto livre (domínio público) encontrada para '{assunto or termo_busca}' (Openverse e Pexels). "
             "Configure PEXELS_API_KEY pra ter uma fonte extra."
         )
 
-    candidatos = [Image.open(io.BytesIO(b)).convert("RGB") for b in candidatos_bytes]
-    foto = next((c for c in candidatos if not _rosto_grande_demais(c)), candidatos[0])
+    imagens = [(Image.open(io.BytesIO(b)).convert("RGB"), url) for b, url in candidatos]
+    foto, url_escolhida = next(((im, u) for im, u in imagens if not _rosto_grande_demais(im)), imagens[0])
+    if url_escolhida:
+        caminho.with_suffix(".fonte").write_text(url_escolhida, encoding="utf-8")
 
     foto = _cobrir(foto, largura, altura)
     foto = _aplicar_overlay_legibilidade(foto)
