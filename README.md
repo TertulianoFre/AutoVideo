@@ -17,11 +17,11 @@ Tudo roda localmente no Windows, sem custo de API paga.
 
 Já existe um app de verdade, não só o terminal — `backend/` (FastAPI) serve a tela em `frontend/`.
 
-Rodar:
+Rodar: dê dois cliques em `iniciar.bat` (ativa o venv, sobe o servidor na porta 8080 e abre o navegador sozinho). Se preferir manual:
 ```
-.venv\Scripts\uvicorn backend.main:app --reload
+.venv\Scripts\uvicorn backend.main:app --reload --port 8080
 ```
-Abre em `http://localhost:8000`, com 3 telas: **Painel** (vídeos recentes + contexto do canal), **Novo vídeo** (formulário único com progresso real) e **Fila** (todos os vídeos gerados, com botão de **Regenerar**).
+Abre em `http://localhost:8080`, com 3 telas: **Painel** (vídeos recentes, conexão com o YouTube, contexto do canal), **Novo vídeo** (formulário único com progresso real) e **Fila** (todos os vídeos gerados, com **Regenerar**, **roteiro novo** e **nova thumbnail**).
 
 Na tela "Novo vídeo", só **título** e **data de postagem** são obrigatórios. É um formulário só — nada de tela separada pra "vídeo ambiente". Tudo mais é opcional:
 - **Descrição do vídeo**: texto livre que ajusta o estilo — ex: "2D simples", "mais detalhado/realista", "infantil e colorido". Influencia tanto o roteiro quanto a imagem gerada por IA.

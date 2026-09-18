@@ -4,8 +4,8 @@
     {
       "name": "projeto-yt-app",
       "runtimeExecutable": "E:\\Projeto YT\\.venv\\Scripts\\uvicorn.exe",
-      "runtimeArgs": ["backend.main:app", "--host", "127.0.0.1", "--port", "8000"],
-      "port": 8000
+      "runtimeArgs": ["backend.main:app", "--host", "127.0.0.1", "--port", "8080"],
+      "port": 8080
     }
   ]
 }
