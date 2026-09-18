@@ -181,3 +181,22 @@ def preparar_audio_para_video(nome: str, duracao_segundos: float, destino: Path)
     if resultado.returncode != 0:
         raise RuntimeError(f"FFmpeg falhou ao preparar áudio da biblioteca:\n{resultado.stderr[-2000:]}")
     return destino
+
+
+_cache_duracao: dict = {}
+
+
+def duracao_video(nome: str) -> float:
+    """Duração (s) de um vídeo da Base, com cache por data de modificação."""
+    caminho = caminho_video_valido(nome)
+    if caminho is None:
+        return 0.0
+    chave = (nome, caminho.stat().st_mtime)
+    if chave not in _cache_duracao:
+        from engine.ferramentas import caminho_ffprobe
+        r = subprocess.run([caminho_ffprobe(), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(caminho)], capture_output=True, text=True)
+        try:
+            _cache_duracao[chave] = round(float(r.stdout.strip()), 1)
+        except ValueError:
+            _cache_duracao[chave] = 0.0
+    return _cache_duracao[chave]

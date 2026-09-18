@@ -11,7 +11,7 @@ POLLINATIONS_CHAT_URL = "https://text.pollinations.ai/openai"
 
 # Ritmo médio de fala do edge-tts nas vozes usadas aqui — usado tanto pra pedir
 # o roteiro do tamanho certo quanto pro aviso de duração em pipeline.py.
-PALAVRAS_POR_MINUTO = 150
+PALAVRAS_POR_MINUTO = 165  # ritmo medido da narração (≈ 2,8 palavras/s)
 
 PROMPT_SISTEMA = (
     "Você escreve roteiros bem elaborados, em português do Brasil, para narração em vídeo. "

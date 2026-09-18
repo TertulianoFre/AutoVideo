@@ -17,6 +17,8 @@ VOZES = {
         "mulher": "pt-BR-FranciscaNeural",
         "homem": "pt-BR-AntonioNeural",
         "crianca": "pt-BR-FranciscaNeural",
+        "mulher_animada": "pt-BR-ThalitaMultilingualNeural",
+        "homem_animado": "pt-BR-AntonioNeural",
     },
     "en-US": {
         "mulher": "en-US-AvaNeural",
@@ -41,19 +43,27 @@ PITCH_POR_VOZ = {
     "mulher": "+0Hz",
     "homem": "+0Hz",
     "crianca": "+35Hz",
+    "mulher_animada": "+6Hz",
+    "homem_animado": "+4Hz",
+}
+
+# Vozes "animadas": a neural multilíngue (Thalita) é a mais expressiva em português; junto com ritmo
+# um pouco mais rápido e tom mais alto dá a entonação empolgada de vídeo de curiosidades.
+RITMO_POR_VOZ = {
+    "mulher_animada": "+12%",
+    "homem_animado": "+10%",
 }
 
 
-def resolver_voz(idioma: str, voz: str) -> tuple[str, str]:
+def resolver_voz(idioma: str, voz: str) -> tuple[str, str, str]:
     vozes_do_idioma = VOZES.get(idioma, VOZES["pt-BR"])
-    voice_id = vozes_do_idioma.get(voz, vozes_do_idioma["mulher"])
-    pitch = PITCH_POR_VOZ.get(voz, "+0Hz")
-    return voice_id, pitch
+    voice_id = vozes_do_idioma.get(voz) or vozes_do_idioma["homem" if voz == "homem_animado" else "mulher"]
+    return voice_id, PITCH_POR_VOZ.get(voz, "+0Hz"), RITMO_POR_VOZ.get(voz, "+0%")
 
 
 async def _sintetizar_async(texto: str, idioma: str, voz: str, audio_path: Path) -> edge_tts.SubMaker:
-    voice_id, pitch = resolver_voz(idioma, voz)
-    comunicador = edge_tts.Communicate(texto, voice_id, pitch=pitch, boundary="WordBoundary")
+    voice_id, pitch, ritmo = resolver_voz(idioma, voz)
+    comunicador = edge_tts.Communicate(texto, voice_id, rate=ritmo, pitch=pitch, boundary="WordBoundary")
     submaker = edge_tts.SubMaker()
 
     with open(audio_path, "wb") as arquivo_audio:

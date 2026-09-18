@@ -591,7 +591,7 @@ function formatarTempo(segundos) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function cardDeCena(slug, cena) {
+function cardDeCena(slug, cena, tempoEditavel) {
   const semImagem = `<div class="cena-img-vazia">${ICONE_VIDEO}</div>`;
   const img16 = cena.imagem ? `<img class="cena-img cena-img-16" src="${cena.imagem}" alt="">` : semImagem;
   const img9 = cena.imagem_vertical ? `<img class="cena-img cena-img-9" src="${cena.imagem_vertical}" alt="">` : "";
@@ -600,6 +600,14 @@ function cardDeCena(slug, cena) {
     ? `<div class="video-meta cena-da-base">▶ Vídeo da Base: ${escaparAttr(cena.video_base)}</div>`
     : cena.imagem_base ? `<div class="video-meta cena-da-base">Imagem da Base: ${escaparAttr(cena.imagem_base)}</div>` : "";
   const texto = escaparAttr(cena.texto || "");
+  const natural = Math.ceil((cena.duracao_natural_segundos ?? cena.duracao_segundos ?? 0) * 10) / 10;
+  const tempo = tempoEditavel
+    ? `<label class="cena-tempo" title="Tempo que a cena fica na tela. Só pode aumentar: o extra vira uma pausa depois da fala e as próximas cenas andam pra frente.">
+         Tempo da cena
+         <input type="number" class="cena-duracao" min="${natural}" step="0.5" value="${(Math.round((cena.duracao_segundos || 0) * 10) / 10)}" data-natural="${natural}" data-original="${(Math.round((cena.duracao_segundos || 0) * 10) / 10)}"> s
+         <span class="video-meta">(mínimo ${natural} s — o tempo da fala)</span>
+       </label>`
+    : "";
   return `
     <div class="cena-card" data-indice="${cena.indice}">
       <div class="cena-card-imagens">${img16}${img9}</div>
@@ -608,6 +616,7 @@ function cardDeCena(slug, cena) {
           <span class="cena-card-tempo">${formatarTempo(cena.inicio_segundos)}–${formatarTempo(fim)} · ${Math.round(cena.duracao_segundos || 0)}s</span>
         </div>
         <p class="cena-card-texto">${texto}</p>
+        ${tempo}
         <div class="cena-edicao" hidden>
           <textarea class="cena-edicao-texto" rows="4" data-original="${texto}">${texto}</textarea>
           <div class="video-meta cena-edicao-info"></div>
@@ -652,10 +661,11 @@ async function alternarPainelCenas(botao) {
   painel.dataset.carregado = "true";
   const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
-    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
-    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>
+    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (<b class="cenas-total" data-original="${total}">${formatarTempo(total)}</b> no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
+    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c, dados.tempo_editavel)).join("")}</div>
     <div class="cenas-rodape">
       <button type="button" class="btn-primary btn-salvar-textos" hidden>Salvar textos e refazer narração</button>
+      <button type="button" class="btn-primary btn-aplicar-tempos" hidden>Aplicar tempos</button>
       <button type="button" class="btn-secondary btn-concluir-cenas">Concluir e fechar</button>
       <span class="video-meta cenas-rodape-status"></span>
     </div>`;
@@ -674,6 +684,7 @@ async function alternarPainelCenas(botao) {
     carregarFila();
   });
   painel.querySelector(".btn-salvar-textos").addEventListener("click", () => salvarTextosDasCenas(painel, slug));
+  painel.querySelector(".btn-aplicar-tempos").addEventListener("click", () => aplicarTemposDasCenas(painel, slug));
 
   painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
     b.addEventListener("click", () => regenerarCena(b));
@@ -1047,7 +1058,7 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   const dados = new FormData();
   dados.set("titulo", titulo);
   dados.set("duracao_alvo", campoDuracao.value || "1");
-  dados.set("descricao_video", campoDescricaoVideo.value || "");
+  dados.set("descricao_video", typeof descricaoParaRoteiro === "function" ? descricaoParaRoteiro() : (campoDescricaoVideo.value || ""));
   const nCenas = document.querySelector("[name=num_cenas]").value;
   if (nCenas) dados.set("num_cenas", nCenas);
 

@@ -276,6 +276,32 @@ def _aplicar_edicao_do_agente(pedido: dict) -> dict:
     return {"acao": "editar", "resposta": resposta, "slug": slug}
 
 
+AMOSTRAS_VOZ = {
+    "pt-BR": "Você sabia que o polvo tem três corações? Incrível, não é? Agora vem a parte mais surpreendente!",
+    "en-US": "Did you know that an octopus has three hearts? Amazing, right? Now comes the most surprising part!",
+    "es-ES": "¿Sabías que el pulpo tiene tres corazones? ¡Increíble! Ahora viene la parte más sorprendente.",
+    "fr-FR": "Saviez-vous que la pieuvre a trois cœurs ? Incroyable ! Voici la partie la plus surprenante.",
+}
+
+
+@app.get("/api/voz/amostra")
+async def api_amostra_voz(voz: str = "mulher", idioma: str = "pt-BR"):
+    """Amostra curta da voz escolhida (guardada em dados/amostras pra não sintetizar de novo)."""
+    from fastapi.responses import FileResponse
+
+    if idioma not in AMOSTRAS_VOZ or voz not in ("mulher", "homem", "crianca", "mulher_animada", "homem_animado"):
+        return JSONResponse({"erro": "voz ou idioma inválido"}, status_code=400)
+    arquivo = RAIZ_SAIDA.parent / "dados" / "amostras" / f"{idioma}_{voz}.mp3"
+    if not arquivo.exists():
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            await asyncio.to_thread(tts_mod.sintetizar, AMOSTRAS_VOZ[idioma], idioma, voz, arquivo)
+        except Exception as erro:
+            arquivo.unlink(missing_ok=True)
+            return JSONResponse({"erro": f"não consegui gerar a amostra: {erro}"}, status_code=502)
+    return FileResponse(arquivo, media_type="audio/mpeg")
+
+
 @app.post("/api/agente/duracao")
 def api_sugerir_duracao(titulo: str = Form(""), num_cenas: int | None = Form(None), descricao_video: str = Form("")) -> dict:
     """O agente recomenda quantos minutos esse tipo de vídeo deve ter neste canal (usado no botão "Sugerir" do Novo vídeo)."""
@@ -423,7 +449,7 @@ def api_listar_biblioteca() -> dict:
         "audios_nomes": biblioteca.listar_audios(),
         "audios_info": [info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()],
         "imagens": [info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()],
-        "videos": [info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()],
+        "videos": [{**info("videos", n, f"/biblioteca/videos/{n}"), "duracao_segundos": biblioteca.duracao_video(n)} for n in biblioteca.listar_videos()],
         "canais": [{"id": c["id"], "nome": c["nome"]} for c in canal.listar_canais()],
     }
 
@@ -648,6 +674,8 @@ def api_criar_video(
     legenda_posicao: str = Form("baixo"),
     legenda_cor: str = Form(""),
     legenda_caixa: bool = Form(False),
+    legenda_fundo: str = Form(""),
+    video_base_geral: str = Form(""),
     confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
@@ -702,7 +730,8 @@ def api_criar_video(
         num_cenas=num_cenas if num_cenas and 1 <= num_cenas <= 40 else None,
         imagens_base=[n for n in imagens_base.split("|") if n.strip()],
         transicao=transicao if transicao in render_mod.TRANSICOES else "fade",
-        legenda=_config_legenda(legenda_modo, legenda_tamanho, legenda_posicao, legenda_cor, legenda_caixa),
+        legenda=_config_legenda(legenda_modo, legenda_tamanho, legenda_posicao, legenda_cor, legenda_caixa, legenda_fundo),
+        video_base_geral=video_base_geral if biblioteca.caminho_video_valido(video_base_geral) else None,
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -726,21 +755,21 @@ def api_aprovacao(slug: str, aprovado: bool = Form(...)) -> dict:
     return {"ok": True, "aprovado": aprovado}
 
 
-def _config_legenda(modo: str, tamanho: str, posicao: str, cor: str, caixa: bool) -> dict:
-    return {
+def _config_legenda(modo: str, tamanho: str, posicao: str, cor: str, caixa: bool, fundo: str = "") -> dict:
+    return subtitles_mod.normalizar_config({
         "modo": modo if modo in ("karaoke", "simples", "nenhuma") else "karaoke",
         "tamanho": tamanho if tamanho in ("p", "m", "g") else "m",
         "posicao": posicao if posicao in ("baixo", "meio", "topo") else "baixo",
-        "cor": cor.strip().lstrip("#") if len(cor.strip().lstrip("#")) == 6 else subtitles_mod.COR_DESTAQUE,
-        "caixa": bool(caixa),
-    }
+        "cor": cor,
+        "fundo": fundo if fundo in subtitles_mod.FUNDOS_LEGENDA else ("caixa" if caixa else "contorno"),
+    })
 
 
 @app.post("/api/videos/{slug}/legenda")
 def api_legenda(
     slug: str,
     modo: str = Form("karaoke"), tamanho: str = Form("m"), posicao: str = Form("baixo"),
-    cor: str = Form(""), caixa: bool = Form(True), transicao: str = Form(""),
+    cor: str = Form(""), caixa: bool = Form(True), transicao: str = Form(""), fundo: str = Form(""),
 ) -> dict:
     """Muda o estilo da legenda (e opcionalmente a transição) e remonta os vídeos — sem refazer imagens/narração."""
     caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
@@ -752,7 +781,7 @@ def api_legenda(
     if transicao in render_mod.TRANSICOES:
         metadados["transicao"] = transicao
         caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
-    config = _config_legenda(modo, tamanho, posicao, cor, caixa)
+    config = _config_legenda(modo, tamanho, posicao, cor, caixa, fundo)
     job = jobs.criar_job_funcao(metadados.get("titulo", slug), lambda cb: _resultado_videos(slug, pipeline_mod.regenerar_legenda(slug, config, progresso=cb)))
     return {"job_id": job.id}
 
@@ -846,6 +875,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         imagens_base=metadados.get("imagens_base") or [],
         transicao=metadados.get("transicao", "fade"),
         legenda=metadados.get("legenda") or None,
+        video_base_geral=metadados.get("video_base_geral") or None,
         reaproveitar_imagens=reaproveitar_imagens,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
@@ -1148,6 +1178,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "indice": i,
                 "texto": cena.get("texto", ""),
                 "duracao_segundos": duracao,
+                "duracao_natural_segundos": cena.get("duracao_natural", duracao),
                 "inicio_segundos": round(acumulado, 1),
                 "imagem": _url(i, "16x9"),
                 "imagem_vertical": _url(i, "9x16"),
@@ -1157,7 +1188,8 @@ def api_listar_cenas(slug: str) -> dict:
             }
         )
         acumulado += duracao
-    return {"cenas": resultado}
+    tempo_editavel = not metadados.get("sem_narracao") and (pasta / "cues.json").exists() and bool(metadados.get("narracao_arquivo") or (pasta / "narracao.mp3").exists())
+    return {"cenas": resultado, "tempo_editavel": tempo_editavel}
 
 
 @app.post("/api/videos/{slug}/cenas/{indice}/regenerar")
@@ -1207,6 +1239,23 @@ def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | Non
         meta["imagens_base_cenas"] = mapa
         meta["videos_base_cenas"] = mapa_videos
         caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.post("/api/videos/{slug}/cenas/duracoes")
+def api_duracoes_das_cenas(slug: str, duracoes: str = Form(...)) -> dict:
+    """Novo tempo de cada cena ({"indice": segundos}). Só aumenta: as cenas seguintes são empurradas pra frente."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    try:
+        pedido = {str(int(k)): float(v) for k, v in json.loads(duracoes).items()}
+    except (ValueError, AttributeError, TypeError):
+        return JSONResponse({"erro": "tempos inválidos"}, status_code=400)
+    job = jobs.criar_job_funcao(metadados.get("titulo", slug), lambda cb: _resultado_videos(slug, pipeline_mod.aplicar_duracoes(slug, pedido, progresso=cb)), estimativa=60.0)
+    return {"job_id": job.id}
 
 
 @app.post("/api/videos/{slug}/cenas/{indice}/imagem-base")
@@ -1334,7 +1383,7 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_efeito": metadados.get("thumbnail_efeito", "nenhum"),
                 "aprovado": bool(metadados.get("aprovado", False)),
                 "transicao": metadados.get("transicao", "fade"),
-                "legenda": {**subtitles_mod.CONFIG_LEGENDA_PADRAO, **(metadados.get("legenda") or {})},
+                "legenda": subtitles_mod.normalizar_config(metadados.get("legenda")),
                 "tem_cues": (pasta / "cues.json").exists(),
                 "thumbnail_short": thumbnail_mod.config_shorts(metadados, pasta.name) if (pasta / "video_9x16.mp4").exists() or metadados.get("formatos") != "normal" else None,
                 "thumbnail_short_url": f"/videos/{pasta.name}/thumbnail_shorts.png?v={int((pasta / 'thumbnail_shorts.png').stat().st_mtime)}" if (pasta / "thumbnail_shorts.png").exists() else None,

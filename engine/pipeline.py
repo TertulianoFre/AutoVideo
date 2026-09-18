@@ -96,6 +96,7 @@ def gerar_video(
     transicao: str = "fade",
     legenda: dict | None = None,
     reaproveitar_imagens: bool = False,
+    video_base_geral: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -131,6 +132,7 @@ def gerar_video(
         transicao=transicao,
         legenda=legenda or {},
         aprovado=False,  # só publica depois de você confirmar na Fila
+        video_base_geral=video_base_geral or "",
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -251,7 +253,7 @@ def gerar_video(
         lista_cenas = [(contexto_cena, duracao_por_imagem) for _ in range(n_imagens)]
     else:
         avisar("Dividindo o roteiro em cenas", 18)
-        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
+        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=1 if video_base_geral else num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
     if submaker is not None:
@@ -288,7 +290,9 @@ def gerar_video(
     # sem precisar refazer roteiro/narração/outras cenas
     _salvar_metadados(
         pasta,
-        cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
+        cenas=[{"texto": texto, "duracao_segundos": duracao, "duracao_natural": duracao} for texto, duracao in lista_cenas],
+        narracao_arquivo=(narracao_path.name if not sem_narracao else ""),
+        audio_natural=audio_path.name,
         videos_base_cenas=(
             {k: v for k, v in (meta_antiga_videos or {}).items() if int(k) in cenas_mantidas} if reaproveitar_imagens else {}
         ),
@@ -314,6 +318,17 @@ def gerar_video(
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
+            if video_base_geral and i == 0:
+                # o vídeo da Base é o fundo do vídeo inteiro (uma cena só): recortado no formato e repetido se a narração for mais longa
+                origem_v = biblioteca.caminho_video_valido(video_base_geral)
+                if origem_v is None:
+                    raise ValueError(f'O vídeo "{video_base_geral}" não está mais na Base.')
+                render.preparar_clip(origem_v, estilo["largura"], estilo["altura"], caminho_imagem.with_suffix(".mp4"), caminho_imagem, max_segundos=int(duracao_real) + 5)
+                _salvar_metadados(pasta, videos_base_cenas={"0": video_base_geral})
+                imagens_com_duracao.append((caminho_imagem, duracao_cena))
+                imagens_feitas += 1
+                avisar(f"Preparando o vídeo da Base ({formato})", 20 + 65 * imagens_feitas / total_imagens)
+                continue
             if i not in cenas_mantidas:
                 caminho_imagem.with_suffix(".mp4").unlink(missing_ok=True)  # sobra de um vídeo antigo nessa cena
             if i in cenas_mantidas and caminho_imagem.exists():
@@ -378,6 +393,124 @@ def _trava_do_video(slug: str) -> "threading.Lock":
         return _travas_de_video.setdefault(slug, threading.Lock())
 
 
+def _cues_ajustados(pasta: Path, metadados: dict) -> list:
+    """Tempos das palavras da narração já deslocados pelas pausas que você adicionou nas cenas
+    (cada pausa vem DEPOIS da narração da cena e empurra tudo que vem depois)."""
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    cenas = metadados.get("cenas") or []
+    naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
+    extras = [max(0.0, c["duracao_segundos"] - n) for c, n in zip(cenas, naturais)]
+    fronteiras = [0.0]
+    for n in naturais:
+        fronteiras.append(fronteiras[-1] + n)
+
+    def deslocamento(t: float) -> float:
+        idx = 0
+        for i in range(len(naturais)):
+            if fronteiras[i] <= t + 1e-6:
+                idx = i
+        return sum(extras[:idx])
+
+    dados = json.loads((pasta / "cues.json").read_text(encoding="utf-8"))
+    return [
+        SimpleNamespace(start=timedelta(seconds=c["start"] + deslocamento(c["start"])), end=timedelta(seconds=c["end"] + deslocamento(c["start"])), content=c["content"])
+        for c in dados
+    ]
+
+
+def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
+    """Muda o tempo de cada cena. Só dá pra AUMENTAR (nunca abaixo do tempo da narração da cena): o tempo
+    extra vira uma pausa depois da fala daquela cena, e as cenas seguintes são empurradas pra frente.
+    Refaz o áudio (com o som de fundo, se houver), a legenda e os vídeos."""
+    import subprocess
+
+    from engine.ferramentas import caminho_ffmpeg
+
+    def avisar(etapa: str, pct: float) -> None:
+        if progresso is not None:
+            progresso(etapa, pct)
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("sem_narracao"):
+        raise RuntimeError("Vídeo sem narração: o tempo de cada cena já é o da imagem.")
+    cenas = metadados.get("cenas") or []
+    narracao = pasta / (metadados.get("narracao_arquivo") or "narracao.mp3")
+    if not narracao.exists():
+        narracao = pasta / "narracao_custom.mp3"
+    if not cenas or not narracao.exists() or not (pasta / "cues.json").exists():
+        raise RuntimeError('Esse vídeo foi gerado antes do tempo das cenas ser editável — use "Regenerar" uma vez para habilitar.')
+
+    for i, c in enumerate(cenas):
+        natural = c.get("duracao_natural", c["duracao_segundos"])
+        c["duracao_natural"] = natural
+        desejado = float(duracoes.get(str(i), duracoes.get(i, c["duracao_segundos"])))
+        c["duracao_segundos"] = round(max(natural, min(desejado, natural + 120)), 2)
+    naturais = [c["duracao_natural"] for c in cenas]
+    extras = [round(c["duracao_segundos"] - c["duracao_natural"], 3) for c in cenas]
+
+    # --- áudio: narração original com uma pausa depois de cada cena que ganhou tempo ---
+    avisar("Refazendo o áudio com as pausas", 10)
+    natural_audio = metadados.get("audio_natural") or metadados.get("audio_arquivo")
+    if any(e > 0.01 for e in extras):
+        filtros, t, n = [], 0.0, len(cenas)
+        for i, (nat, ext) in enumerate(zip(naturais, extras)):
+            inicio = t
+            t += nat
+            trecho = f"atrim=start={inicio:.3f}" + (f":end={t:.3f}" if i < n - 1 else "")
+            pausa = f",apad=pad_dur={ext:.3f}" if ext > 0.01 else ""
+            filtros.append(f"[0:a]{trecho},asetpts=PTS-STARTPTS{pausa}[a{i}]")
+        filtros.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[saida]")
+        com_pausas = pasta / "narracao_com_pausas.wav"
+        r = subprocess.run(
+            [caminho_ffmpeg(), "-y", "-i", str(narracao), "-filter_complex", ";".join(filtros), "-map", "[saida]", "-ar", "44100", "-ac", "2", str(com_pausas)],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"FFmpeg falhou ao inserir as pausas:\n{r.stderr[-1500:]}")
+        final = pasta / "audio_ajustado.m4a"
+        som_fundo = pasta / "som_fundo.wav"
+        if metadados.get("som_fundo_tipo") and som_fundo.exists():
+            render.mixar_audio_com_fundo(com_pausas, som_fundo, final, VOLUME_SOM_DE_FUNDO)
+        else:
+            r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(com_pausas), "-c:a", "aac", "-b:a", "192k", str(final)], capture_output=True, text=True)
+            if r.returncode != 0:
+                raise RuntimeError(f"FFmpeg falhou ao gerar o áudio final:\n{r.stderr[-1500:]}")
+        com_pausas.unlink(missing_ok=True)
+        audio_path = final
+    else:
+        audio_path = pasta / natural_audio
+
+    metadados.update(cenas=cenas, audio_natural=natural_audio, audio_arquivo=audio_path.name, aprovado=False)
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # --- legenda (tempos deslocados) + vídeos ---
+    from types import SimpleNamespace
+    submaker = SimpleNamespace(cues=_cues_ajustados(pasta, metadados))
+    roteiro = (pasta / "roteiro.txt").read_text(encoding="utf-8")
+    config = metadados.get("legenda") or {}
+    formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
+    nomes = {}
+    for k, (formato, estilo) in enumerate(formatos_ativos.items()):
+        sufixo = formato.replace(":", "x")
+        avisar(f"Remontando o vídeo ({formato})", 30 + 60 * k / len(formatos_ativos))
+        legenda_path = None
+        if config.get("modo") != "nenhuma":
+            legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro, config=config, **estilo)
+        imagens = [(pasta / f"cena{i:02d}_{sufixo}.png", c["duracao_segundos"]) for i, c in enumerate(cenas)]
+        with _trava_do_video(slug):
+            saida = pasta / f"video_{sufixo}.mp4"
+            render.renderizar_slideshow(imagens, audio_path, legenda_path, formato, saida, transicao=metadados.get("transicao", "fade"))
+        nomes[formato] = saida.name
+    avisar("Pronto", 100)
+    return {"video_16_9": nomes.get("16:9"), "video_9_16": nomes.get("9:16")}
+
+
 def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
     """Refaz só a legenda (estilo, tamanho, posição, cor...) e remonta os vídeos,
     sem mexer em roteiro, narração nem imagens. Precisa de cues.json (salvo em
@@ -405,11 +538,7 @@ def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float],
     if audio_path is None or not audio_path.exists() or not metadados.get("cenas"):
         raise RuntimeError("Faltam arquivos originais — regenere o vídeo inteiro uma vez.")
 
-    cues = [
-        SimpleNamespace(start=timedelta(seconds=c["start"]), end=timedelta(seconds=c["end"]), content=c["content"])
-        for c in json.loads(cues_arquivo.read_text(encoding="utf-8"))
-    ]
-    submaker = SimpleNamespace(cues=cues)
+    submaker = SimpleNamespace(cues=_cues_ajustados(pasta, metadados))
     roteiro = roteiro_arquivo.read_text(encoding="utf-8")
     formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
     nomes_video = {}

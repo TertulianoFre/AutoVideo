@@ -37,24 +37,41 @@ function textoDeProgresso(job) {
 
 const COR_TEXTO_LEGENDA = "#F6F2E9";
 
+function luminanciaHex(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.replace("#", "").slice(i - 1, i + 1), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 function desenharPreviewLegenda(mock, cfg) {
   const altura = mock.clientHeight || 160;
   const escala = { p: 0.8, m: 1, g: 1.25 }[cfg.tamanho] || 1;
   const px = altura * (82 / 1080) * escala; // mesma proporção usada no vídeo 16:9
-  const cor = cfg.cor?.startsWith("#") ? cfg.cor : `#${cfg.cor || "E2793D"}`;
+  const cor = `#${String(cfg.cor || "E2793D").replace("#", "")}`;
+  const fundo = cfg.fundo || (cfg.caixa === false ? "contorno" : "caixa");
   const contorno = Math.max(1, px * 0.05);
-  const sombra = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]].map(([x, y]) => `${x * contorno}px ${y * contorno}px 0 #000`).join(",");
+  const sombraContorno = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]].map(([x, y]) => `${x * contorno}px ${y * contorno}px 0 #000`).join(",");
   mock.innerHTML = '<div class="leg-mock-fundo"></div>';
   if (cfg.modo === "nenhuma") {
     mock.insertAdjacentHTML("beforeend", '<div class="leg-mock-nenhuma">Sem legenda</div>');
     return;
   }
-  const palavras = cfg.modo === "karaoke"
-    ? `Assim vai ficar a <span style="color:${cor}">legenda</span> no vídeo`
-    : "Assim vai ficar a legenda no vídeo";
+  const caixa = `padding:${px * 0.1}px ${px * 0.35}px;border-radius:${px * 0.08}px`;
+  let estilo = "";
+  let corTexto = COR_TEXTO_LEGENDA;
+  let destaque = cor;
+  if (fundo === "caixa") estilo = `background:rgba(20,19,15,.78);${caixa}`;
+  else if (fundo === "cor") {
+    corTexto = luminanciaHex(cor) > 0.55 ? "#14130F" : "#FFFFFF";
+    estilo = `background:${cor};${caixa}`;
+    destaque = corTexto; // na caixa colorida o destaque é "apagado → cheio", não outra cor
+  } else if (fundo === "sombra") estilo = `text-shadow:0 ${px * 0.06}px ${px * 0.12}px rgba(0,0,0,.9),0 0 ${px * 0.35}px rgba(0,0,0,.55)`;
+  else estilo = `text-shadow:${sombraContorno}`;
+  let palavras;
+  if (cfg.modo !== "karaoke") palavras = "Assim vai ficar a legenda no vídeo";
+  else if (fundo === "cor") palavras = `Assim vai ficar a legenda<span style="opacity:.5"> no vídeo</span>`;
+  else palavras = `Assim vai ficar a <span style="color:${destaque}">legenda</span> no vídeo`;
   const posicao = { baixo: "bottom:5%", meio: "top:50%;transform:translateY(-50%)", topo: "top:6%" }[cfg.posicao] || "bottom:5%";
-  const estiloCaixa = cfg.caixa ? `background:rgba(20,19,15,.75);padding:${px * 0.1}px ${px * 0.35}px;border-radius:${px * 0.1}px` : `text-shadow:${sombra}`;
-  mock.insertAdjacentHTML("beforeend", `<div class="leg-mock-linha" style="${posicao}"><span class="leg-mock-texto" style="font-size:${px}px;color:${COR_TEXTO_LEGENDA};${estiloCaixa}">${palavras}</span></div>`);
+  mock.insertAdjacentHTML("beforeend", `<div class="leg-mock-linha" style="${posicao}"><span class="leg-mock-texto" style="font-size:${px}px;color:${corTexto};${estilo}">${palavras}</span></div>`);
 }
 
 // ---------------- confirmar publicação ----------------
@@ -86,6 +103,7 @@ const OPCOES_LEGENDA = {
   tamanho: [["p", "Pequena"], ["m", "Média"], ["g", "Grande"]],
   posicao: [["baixo", "Embaixo"], ["meio", "No meio"], ["topo", "No topo"]],
 };
+const OPCOES_FUNDO = [["caixa", "Caixa escura"], ["cor", "Caixa colorida (cor de destaque)"], ["contorno", "Só contorno"], ["sombra", "Sombra suave"]];
 const OPCOES_TRANSICAO = [["fade", "Fade (suave)"], ["dissolver", "Dissolver"], ["deslizar", "Deslizar suave"], ["aleatoria", "Variada (só as suaves)"], ["nenhuma", "Sem transição (corte seco)"]];
 
 function selectHtml(classe, opcoes, atual) {
@@ -106,7 +124,8 @@ function alternarPainelLegenda(botao) {
     painel.innerHTML = '<div class="cenas-status">Esse vídeo foi gerado antes da legenda ser editável. Use "Regenerar" uma vez para habilitar.</div>';
     return;
   }
-  const cfg = JSON.parse(decodeURIComponent(painel.dataset.legenda));
+  const cfg = { modo: "karaoke", tamanho: "m", posicao: "baixo", cor: "E2793D", fundo: "caixa", ...JSON.parse(decodeURIComponent(painel.dataset.legenda)) };
+  cfg.cor = String(cfg.cor || "E2793D").replace("#", "");
   painel.innerHTML = `
     <div class="cenas-status">Muda só a legenda e a transição: o vídeo é remontado com as mesmas imagens e narração.</div>
     <div class="legenda-editor">
@@ -116,7 +135,7 @@ function alternarPainelLegenda(botao) {
         <label><span>Posição</span>${selectHtml("leg-posicao", OPCOES_LEGENDA.posicao, cfg.posicao)}</label>
         <label><span>Cor de destaque</span><input type="color" class="leg-cor" value="#${cfg.cor}"></label>
         <label><span>Transição entre cenas</span>${selectHtml("leg-transicao", OPCOES_TRANSICAO, painel.dataset.transicao || "fade")}</label>
-        <label class="leg-check"><input type="checkbox" class="leg-caixa"${cfg.caixa ? " checked" : ""}><span>Fundo escuro atrás</span></label>
+        <label><span>Fundo do texto</span>${selectHtml("leg-fundo", OPCOES_FUNDO, cfg.fundo)}</label>
       </div>
       <div class="leg-preview-bloco">
         <span class="video-meta">Exemplo (aproximado)</span>
@@ -132,7 +151,7 @@ function alternarPainelLegenda(botao) {
     tamanho: painel.querySelector(".leg-tamanho").value,
     posicao: painel.querySelector(".leg-posicao").value,
     cor: painel.querySelector(".leg-cor").value,
-    caixa: painel.querySelector(".leg-caixa").checked,
+    fundo: painel.querySelector(".leg-fundo").value,
   });
   const mock = painel.querySelector(".leg-mock");
   const redesenhar = () => desenharPreviewLegenda(mock, ler());
@@ -150,7 +169,7 @@ async function aplicarLegenda(slug, painel, ler) {
   corpo.set("tamanho", cfg.tamanho);
   corpo.set("posicao", cfg.posicao);
   corpo.set("cor", cfg.cor);
-  corpo.set("caixa", cfg.caixa ? "true" : "false");
+  corpo.set("fundo", cfg.fundo);
   corpo.set("transicao", painel.querySelector(".leg-transicao").value);
   botao.disabled = true;
   status.textContent = "Enviando…";

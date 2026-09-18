@@ -12,7 +12,27 @@ COR_TEXTO = "F6F2E9"     # ivory — cor da palavra antes/depois de ser falada
 COR_DESTAQUE = "E2793D"  # laranja do app — cor da palavra sendo falada agora
 COR_CAIXA = "141310"     # fundo (caixa) atrás do texto
 
-CONFIG_LEGENDA_PADRAO = {"modo": "karaoke", "tamanho": "m", "posicao": "baixo", "cor": COR_DESTAQUE, "caixa": True}
+FUNDOS_LEGENDA = ("contorno", "caixa", "cor", "sombra")
+CONFIG_LEGENDA_PADRAO = {"modo": "karaoke", "tamanho": "m", "posicao": "baixo", "cor": COR_DESTAQUE, "fundo": "caixa"}
+
+
+def normalizar_config(config: dict | None) -> dict:
+    """Config completa da legenda. Aceita o formato antigo (caixa True/False) e vira `fundo`."""
+    config = dict(config or {})
+    cfg = {**CONFIG_LEGENDA_PADRAO, **config}
+    if "fundo" not in config and "caixa" in config:
+        cfg["fundo"] = "caixa" if config["caixa"] else "contorno"
+    if cfg["fundo"] not in FUNDOS_LEGENDA:
+        cfg["fundo"] = "caixa"
+    cor = str(cfg.get("cor") or "").lstrip("#")
+    cfg["cor"] = cor if len(cor) == 6 else COR_DESTAQUE
+    cfg.pop("caixa", None)
+    return cfg
+
+
+def _luminancia(hex_rgb: str) -> float:
+    r, g, b = (int(hex_rgb[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 _CABECALHO = """[Script Info]
 ScriptType: v4.00+
@@ -22,7 +42,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{fontname},{fontsize},{primary},{secondary},{outline},{back},1,0,0,0,100,100,0,0,{borderstyle},{outlinew},0,{alignment},40,40,{marginv},1
+Style: Default,{fontname},{fontsize},{primary},{secondary},{outline},{back},1,0,0,0,100,100,0,0,{borderstyle},{outlinew},{shadow},{alignment},40,40,{marginv},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -72,7 +92,7 @@ def gerar_ass(
     """Agrupa as palavras em blocos curtos e grava um .ass. `config` (todos opcionais):
     modo "karaoke" (palavra atual destacada) | "simples"; tamanho "p"|"m"|"g";
     posicao "baixo"|"meio"|"topo"; cor (hex do destaque); caixa (fundo atrás do texto)."""
-    cfg = {**CONFIG_LEGENDA_PADRAO, **(config or {})}
+    cfg = normalizar_config(config)
     fontsize = round(fontsize * {"p": 0.8, "m": 1.0, "g": 1.25}.get(cfg["tamanho"], 1.0))
     alinhamento = {"baixo": 2, "meio": 5, "topo": 8}.get(cfg["posicao"], 2)
     if alinhamento == 5:
@@ -96,22 +116,42 @@ def gerar_ass(
         texto = _texto_karaoke(grupo) if karaoke else " ".join(t.replace("{", "").replace("}", "") for _, t in grupo)
         eventos.append(f"Dialogue: 0,{inicio},{fim},Default,,0,0,0,,{texto}")
 
+    # ----- estilo do fundo do texto -----
+    fundo = cfg["fundo"]
+    respiro = max(6, round(fontsize * 0.14))
+    texto_base, spoken, unspoken, outline, back = COR_TEXTO, None, None, _ass_cor("000000"), _ass_cor(COR_CAIXA, "40")
+    borderstyle, outlinew, sombra = 1, 4, 0
+    if fundo == "caixa":  # caixa escura translúcida
+        borderstyle, outlinew, outline = 3, respiro, _ass_cor(COR_CAIXA, "38")
+    elif fundo == "cor":  # caixa na cor de destaque; texto escuro ou claro conforme o contraste
+        borderstyle, outlinew, outline = 3, respiro, _ass_cor(cor_destaque, "10")
+        texto_base = COR_CAIXA if _luminancia(cor_destaque) > 0.55 else "FFFFFF"
+    elif fundo == "sombra":  # sem caixa nem contorno: sombra suave e grande
+        outlinew, sombra = 0, max(3, round(fontsize * 0.06))
+        back = _ass_cor("000000", "50")
+    if fundo == "cor":
+        # karaokê: palavra ainda não falada mais apagada, a falada em cor cheia
+        primary, secondary = _ass_cor(texto_base), _ass_cor(texto_base, "80" if karaoke else "00")
+    else:
+        # No .ass, o \k mostra a "SecondaryColour" ANTES da palavra ser dita e troca pra
+        # "PrimaryColour" quando o tempo dela chega — por isso o destaque vai em primary.
+        primary = _ass_cor(cor_destaque if karaoke else COR_TEXTO)
+        secondary = _ass_cor(COR_TEXTO)
+
     cabecalho = _CABECALHO.format(
         largura=largura,
         altura=altura,
         fontname=fontname,
         fontsize=fontsize,
-        # No .ass, o \k mostra a "SecondaryColour" ANTES da palavra ser dita e
-        # troca pra "PrimaryColour" quando o tempo dela chega — por isso o
-        # destaque (cor de "já falado") vai em primary, e o normal em secondary.
-        primary=_ass_cor(cor_destaque if karaoke else COR_TEXTO),
-        secondary=_ass_cor(COR_TEXTO),
-        outline=_ass_cor(COR_CAIXA, "38") if cfg["caixa"] else _ass_cor("000000"),  # com BorderStyle 3 é a cor da caixa
-        back=_ass_cor(COR_CAIXA, "40"),
+        primary=primary,
+        secondary=secondary,
+        outline=outline,
+        back=back,
         marginv=marginv,
         alignment=alinhamento,
-        borderstyle=3 if cfg["caixa"] else 1,
-        outlinew=max(6, round(fontsize * 0.14)) if cfg["caixa"] else 4,  # com caixa, é o "respiro" em volta do texto
+        borderstyle=borderstyle,
+        outlinew=outlinew,
+        shadow=sombra,
     )
 
     caminho.write_text(cabecalho + "\n".join(eventos) + "\n", encoding="utf-8")

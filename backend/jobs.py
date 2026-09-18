@@ -160,9 +160,9 @@ def criar_job_cena(titulo: str, slug: str, indice: int, imagem_propria=None, vid
     return job
 
 
-def criar_job_funcao(titulo: str, funcao) -> Job:
+def criar_job_funcao(titulo: str, funcao, estimativa: float = 35.0) -> Job:
     """Roda `funcao(progresso_cb) -> dict` numa thread e guarda o resultado como qualquer job."""
-    job = Job(id=str(uuid.uuid4()), titulo=titulo, estimativa=35.0)  # refazer legenda + remontar
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, estimativa=estimativa)  # tempo aproximado do trabalho
     with _lock:
         _jobs[job.id] = job
 

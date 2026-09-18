@@ -109,6 +109,7 @@ async function montarSeletorBaseNovoVideo() {
   const imagens = dados.imagens || [];
   selecionadasBase = selecionadasBase.filter((n) => imagens.some((i) => i.nome === n));
   const campo = document.getElementById("campo-imagens-base");
+  if (typeof preencherVideosBaseNovoVideo === "function") preencherVideosBaseNovoVideo(dados.videos || []);
 
   const desenhar = () => {
     campo.value = selecionadasBase.join("|");

@@ -82,7 +82,7 @@ function lerLegendaDoFormulario() {
     tamanho: formNovo.legenda_tamanho.value,
     posicao: formNovo.legenda_posicao.value,
     cor: formNovo.legenda_cor.value,
-    caixa: formNovo.legenda_caixa.checked,
+    fundo: formNovo.legenda_fundo.value,
   };
 }
 
@@ -90,8 +90,74 @@ function redesenharLegendaNovo() {
   if (mockNovo.clientHeight) desenharPreviewLegenda(mockNovo, lerLegendaDoFormulario());
 }
 
-["legenda_modo", "legenda_tamanho", "legenda_posicao", "legenda_cor", "legenda_caixa"].forEach((nome) => {
+["legenda_modo", "legenda_tamanho", "legenda_posicao", "legenda_cor", "legenda_fundo"].forEach((nome) => {
   formNovo[nome].addEventListener("input", redesenharLegendaNovo);
 });
 document.getElementById("secao-legenda").addEventListener("toggle", () => requestAnimationFrame(redesenharLegendaNovo));
 document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { redesenharLegendaNovo(); agendarEstimativa(); }, 50));
+
+
+// ---------------- vídeo da Base como fundo do vídeo inteiro + roteiro do tamanho dele ----------------
+
+let videosBase = [];
+const campoVideoBase = document.getElementById("campo-video-base-geral");
+
+function videoBaseEscolhido() {
+  return videosBase.find((v) => v.nome === campoVideoBase.value) || null;
+}
+
+function preencherVideosBaseNovoVideo(videos) {
+  videosBase = videos;
+  const atual = campoVideoBase.value;
+  campoVideoBase.innerHTML = '<option value="">Nenhum</option>' + videos.map((v) => `<option value="${escaparAttr(v.nome)}">${escaparAttr(v.descricao || v.nome)} (${Math.round(v.duracao_segundos)} s)</option>`).join("");
+  campoVideoBase.value = videos.some((v) => v.nome === atual) ? atual : "";
+}
+
+function descricaoParaRoteiro() {
+  const base = formNovo.descricao_video.value.trim();
+  const v = videoBaseEscolhido();
+  if (!v) return base;
+  return `${base} O roteiro será narrado sobre um vídeo importado, "${v.descricao || v.nome}" (${Math.round(v.duracao_segundos)} segundos). Escreva a narração acompanhando o que esse vídeo provavelmente mostra, sem citar o nome do arquivo.`.trim();
+}
+
+campoVideoBase.addEventListener("change", () => {
+  const v = videoBaseEscolhido();
+  const info = document.getElementById("video-base-info");
+  const botao = document.getElementById("btn-roteiro-do-video");
+  if (v) {
+    formNovo.duracao_alvo.value = Math.max(0.3, Math.round((v.duracao_segundos / 60) * 100) / 100); // o roteiro tem o tempo do vídeo
+    formNovo.num_cenas.value = "";
+    formNovo.num_cenas.disabled = true; // o vídeo inteiro é uma cena só
+    const s = Math.round(v.duracao_segundos);
+    info.textContent = `Vídeo de ${s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`}: a duração alvo foi ajustada para esse tempo. O vídeo vira uma cena só; se a narração for mais longa ele repete em loop.`;
+    botao.hidden = false;
+  } else {
+    formNovo.num_cenas.disabled = false;
+    info.textContent = "";
+    botao.hidden = true;
+  }
+  agendarEstimativa();
+});
+
+document.getElementById("btn-roteiro-do-video").addEventListener("click", () => {
+  document.getElementById("btn-preview-roteiro").click(); // usa o mesmo fluxo da prévia (com barra de progresso)
+});
+
+// ---------------- ouvir amostra da voz ----------------
+
+document.getElementById("btn-ouvir-voz").addEventListener("click", async (ev) => {
+  const botao = ev.currentTarget;
+  const original = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "carregando…";
+  try {
+    const audio = new Audio(`/api/voz/amostra?voz=${encodeURIComponent(formNovo.voz.value)}&idioma=${encodeURIComponent(formNovo.idioma.value)}`);
+    audio.addEventListener("ended", () => { botao.disabled = false; botao.textContent = original; });
+    audio.addEventListener("error", () => { botao.disabled = false; botao.textContent = original; });
+    await audio.play();
+    botao.textContent = "tocando…";
+  } catch {
+    botao.disabled = false;
+    botao.textContent = original;
+  }
+});

@@ -33,13 +33,27 @@ document.addEventListener("click", (ev) => {
 function executarAcaoMenu(item) {
   const slug = item.dataset.slug;
   const alvo = { dataset: { slug }, textContent: "" }; // as funções dos painéis só precisam do slug
-  switch (item.dataset.acao) {
+  const acao = item.dataset.acao;
+  if (["cenas", "legenda", "thumb"].includes(acao) && !fecharOutrosPaineis(acao, slug)) return;
+  switch (acao) {
     case "cenas": alternarPainelCenas(alvo); break;
     case "legenda": alternarPainelLegenda(alvo); break;
     case "thumb": alternarPainelThumb(alvo); break;
     case "regen-mesmo": confirmarRegenerar(slug, item.dataset.titulo, true); break;
     case "regen-novo": confirmarRegenerar(slug, item.dataset.titulo, false); break;
   }
+}
+
+// abrir uma edição fecha a que estiver aberta (em qualquer vídeo) — senão vira informação demais na tela
+function fecharOutrosPaineis(acao, slug) {
+  const classe = { cenas: "cenas-painel", legenda: "legenda-painel", thumb: "thumb-painel" }[acao];
+  for (const painel of document.querySelectorAll(".cenas-painel.aberto, .legenda-painel.aberto, .thumb-painel.aberto")) {
+    if (painel.classList.contains(classe) && painel.dataset.slug === slug) continue; // esse mesmo: o clique vai fechá-lo
+    if (painel.classList.contains("cenas-painel") && (contarEdicoesDeTexto(painel) || temposAlterados(painel)) && !confirm("Tem alterações nas cenas que ainda não foram salvas. Fechar mesmo assim (elas serão descartadas)?")) return false;
+    if (painel.classList.contains("cenas-painel")) painel.dataset.carregado = ""; // reabre limpo
+    painel.classList.remove("aberto");
+  }
+  return true;
 }
 
 // ---------------- regenerar (com confirmação) ----------------
@@ -142,3 +156,80 @@ document.addEventListener("click", (ev) => {
   lapis.classList.toggle("aberto", !campo.hidden);
   if (!campo.hidden) campo.focus();
 });
+
+
+// ---------------- tempo de cada cena (só aumenta; as seguintes andam pra frente) ----------------
+
+function temposAlterados(painel) {
+  return [...painel.querySelectorAll(".cena-duracao")].some((i) => Math.abs((parseFloat(i.value) || 0) - parseFloat(i.dataset.original)) > 0.05);
+}
+
+function recalcularTemposDasCenas(painel) {
+  let acumulado = 0;
+  painel.querySelectorAll(".cena-card").forEach((card) => {
+    const campo = card.querySelector(".cena-duracao");
+    const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.natural)) : parseFloat(card.dataset.duracao || 0);
+    const rotulo = card.querySelector(".cena-card-tempo");
+    if (rotulo) rotulo.textContent = `${formatarTempo(acumulado)}–${formatarTempo(acumulado + dur)} · ${Math.round(dur * 10) / 10}s`;
+    acumulado += dur;
+  });
+  const total = painel.querySelector(".cenas-total");
+  if (total) total.textContent = formatarTempo(acumulado);
+  const botao = painel.querySelector(".btn-aplicar-tempos");
+  const mudou = temposAlterados(painel);
+  botao.hidden = !mudou;
+  if (mudou) botao.textContent = `Aplicar tempos (vídeo de ${formatarTempo(parseFloat(total.dataset.original))} → ${formatarTempo(acumulado)})`;
+}
+
+document.addEventListener("input", (ev) => {
+  const campo = ev.target.closest(".cena-duracao");
+  if (campo) recalcularTemposDasCenas(campo.closest(".cenas-painel"));
+});
+
+document.addEventListener("change", (ev) => {
+  const campo = ev.target.closest(".cena-duracao");
+  if (!campo) return;
+  const minimo = parseFloat(campo.dataset.natural);
+  if (!(parseFloat(campo.value) >= minimo)) campo.value = minimo; // nunca abaixo do tempo da fala
+  recalcularTemposDasCenas(campo.closest(".cenas-painel"));
+});
+
+async function aplicarTemposDasCenas(painel, slug) {
+  const status = painel.querySelector(".cenas-rodape-status");
+  const botao = painel.querySelector(".btn-aplicar-tempos");
+  const duracoes = {};
+  painel.querySelectorAll(".cena-card").forEach((card) => {
+    const campo = card.querySelector(".cena-duracao");
+    if (campo) duracoes[card.dataset.indice] = Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.natural));
+  });
+  if (!confirm("Aplicar os novos tempos? O áudio ganha pausas depois da fala das cenas que aumentaram, a legenda acompanha e o vídeo é remontado. A publicação precisará ser confirmada de novo.")) return;
+  botao.disabled = true;
+  const corpo = new FormData();
+  corpo.set("duracoes", JSON.stringify(duracoes));
+  const { job_id, erro } = await fetch(`/api/videos/${slug}/cenas/duracoes`, { method: "POST", body: corpo }).then((r) => r.json());
+  if (erro) {
+    status.textContent = `Deu erro: ${erro}`;
+    botao.disabled = false;
+    return;
+  }
+  const rodape = painel.querySelector(".cenas-rodape");
+  const intervalo = setInterval(async () => {
+    const job = await fetch(`/api/jobs/${job_id}`).then((r) => r.json()).catch(() => null);
+    if (!job || typeof job.progresso !== "number") return;
+    status.textContent = textoDeProgresso(job);
+    atualizarMiniBarra(rodape.parentElement, job.progresso);
+    if (job.status === "pronto" || job.status === "erro") {
+      clearInterval(intervalo);
+      removerMiniBarra(rodape.parentElement);
+      botao.disabled = false;
+      if (job.status === "erro") {
+        status.textContent = `Deu erro: ${job.erro}`;
+        return;
+      }
+      painel.dataset.carregado = ""; // recarrega as cenas com os tempos novos
+      painel.classList.remove("aberto");
+      alternarPainelCenas({ dataset: { slug }, textContent: "" });
+      carregarFila(true).then(() => alternarPainelCenas({ dataset: { slug }, textContent: "" }));
+    }
+  }, 1200);
+}

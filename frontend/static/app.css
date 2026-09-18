@@ -536,3 +536,16 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .base-linha-corpo .base-descricao { width: 100%; }
 .base-preview-imagem { max-width: 320px; width: 100%; border-radius: 8px; border: 1px solid var(--border); }
 .base-preview-audio { height: 36px; width: 100%; max-width: 420px; }
+
+/* legenda: editor em duas colunas (controles + prévia) */
+.legenda-editor { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(240px, 340px); gap: 22px; align-items: start; }
+.legenda-editor .legenda-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.leg-preview-bloco { flex: none; max-width: none; }
+@media (max-width: 900px) { .legenda-editor { grid-template-columns: 1fr; } }
+
+/* tempo da cena e vídeo-base do Novo vídeo */
+.cena-tempo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; margin: 6px 0; color: var(--text-dim); }
+.cena-duracao { width: 78px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; }
+.video-base-geral { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 10px; }
+.video-base-geral label { width: 100%; }
+.video-base-geral select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font: inherit; max-width: 100%; }

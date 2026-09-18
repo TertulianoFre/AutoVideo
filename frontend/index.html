@@ -282,11 +282,16 @@
               <div class="row-2" id="linha-voz-idioma">
                 <label>
                   <span>Voz (narração por IA)</span>
-                  <select name="voz">
-                    <option value="mulher">Mulher</option>
-                    <option value="homem">Homem</option>
-                    <option value="crianca">Criança</option>
-                  </select>
+                  <span class="linha-duracao">
+                    <select name="voz">
+                      <option value="mulher">Mulher</option>
+                      <option value="homem">Homem</option>
+                      <option value="mulher_animada">Mulher animada (empolgada, com entonação)</option>
+                      <option value="homem_animado">Homem animado (empolgado, com entonação)</option>
+                      <option value="crianca">Criança</option>
+                    </select>
+                    <button type="button" class="btn-secondary btn-compacto" id="btn-ouvir-voz" title="Ouvir uma amostra dessa voz">▶ Ouvir</button>
+                  </span>
                 </label>
                 <label>
                   <span>Idioma</span>
@@ -327,6 +332,14 @@
               <span class="video-meta">Imagens da sua Base pras cenas (opcional — clique na ordem desejada: a 1ª vai na cena 1, a 2ª na cena 2... as outras cenas usam o estilo acima)</span>
               <div id="novo-base-grade" class="cena-base-grade" style="margin-top:8px"></div>
               <input type="hidden" name="imagens_base" id="campo-imagens-base">
+            </div>
+            <div class="video-base-geral">
+              <label>
+                <span>Vídeo da Base como fundo do vídeo inteiro (opcional — a narração fala por cima dele)</span>
+                <select name="video_base_geral" id="campo-video-base-geral"><option value="">Nenhum</option></select>
+              </label>
+              <span class="video-meta" id="video-base-info"></span>
+              <button type="button" class="btn-secondary btn-compacto" id="btn-roteiro-do-video" hidden>Gerar roteiro para este vídeo</button>
             </div>
 
             </details>
@@ -376,9 +389,14 @@
                   <span>Cor de destaque</span>
                   <input type="color" name="legenda_cor" value="#e2793d">
                 </label>
-                <label class="checkbox-row">
-                  <input type="checkbox" name="legenda_caixa" checked>
-                  <span>Fundo escuro atrás da legenda</span>
+                <label>
+                  <span>Fundo do texto</span>
+                  <select name="legenda_fundo">
+                    <option value="caixa" selected>Caixa escura</option>
+                    <option value="cor">Caixa colorida (cor de destaque)</option>
+                    <option value="contorno">Só contorno</option>
+                    <option value="sombra">Sombra suave</option>
+                  </select>
                 </label>
               </div>
               <div class="leg-preview-bloco">
