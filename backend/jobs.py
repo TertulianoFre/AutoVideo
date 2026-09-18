@@ -1,11 +1,12 @@
 """Gerencia os jobs de geração de vídeo em background, com progresso real."""
 
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from engine.pipeline import gerar_video
+from engine.pipeline import gerar_video, regenerar_cena
 
 _jobs: dict[str, "Job"] = {}
 _lock = threading.Lock()
@@ -53,6 +54,38 @@ def criar_job(titulo: str, params: dict) -> Job:
         _jobs[job.id] = job
 
     threading.Thread(target=_rodar, args=(job, params), daemon=True).start()
+    return job
+
+
+def _rodar_cena(job: Job, slug: str, indice: int) -> None:
+    def progresso_cb(etapa: str, percentual: float) -> None:
+        job.etapa = etapa
+        job.progresso = round(percentual, 1)
+
+    try:
+        resultado = regenerar_cena(slug, indice, progresso=progresso_cb)
+        marca = int(time.time())
+        job.resultado = {
+            "slug": slug,
+            "video_16_9": f"/videos/{slug}/{resultado['video_16_9']}?v={marca}",
+            "video_9_16": f"/videos/{slug}/{resultado['video_9_16']}?v={marca}",
+            "cena_imagem": f"/videos/{slug}/cena{indice:02d}_16x9.png?v={marca}",
+            "thumbnail": f"/videos/{slug}/thumbnail.png?v={marca}" if resultado["thumbnail_atualizada"] else None,
+        }
+        job.status = "pronto"
+        job.progresso = 100
+        job.etapa = "Pronto"
+    except Exception as erro:
+        job.status = "erro"
+        job.erro = str(erro)
+
+
+def criar_job_cena(titulo: str, slug: str, indice: int) -> Job:
+    job = Job(id=str(uuid.uuid4()), titulo=titulo)
+    with _lock:
+        _jobs[job.id] = job
+
+    threading.Thread(target=_rodar_cena, args=(job, slug, indice), daemon=True).start()
     return job
 
 

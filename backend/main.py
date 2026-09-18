@@ -259,6 +259,52 @@ def api_regenerar_thumbnail(slug: str) -> dict:
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}"}
 
 
+@app.get("/api/videos/{slug}/cenas")
+def api_listar_cenas(slug: str) -> dict:
+    """Lista as cenas do vídeo (texto + imagem de cada uma) pra edição pontual."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    cenas = metadados.get("cenas")
+    if not cenas:
+        return JSONResponse(
+            {"erro": 'Esse vídeo foi gerado antes desse recurso existir — clique em "Regenerar" uma vez pra habilitar.'},
+            status_code=409,
+        )
+
+    resultado = []
+    for i, cena in enumerate(cenas):
+        caminho_imagem = pasta / f"cena{i:02d}_16x9.png"
+        resultado.append(
+            {
+                "indice": i,
+                "texto": cena.get("texto", ""),
+                "duracao_segundos": cena.get("duracao_segundos", 0),
+                "imagem": f"/videos/{slug}/cena{i:02d}_16x9.png?v={int(caminho_imagem.stat().st_mtime)}" if caminho_imagem.exists() else None,
+            }
+        )
+    return {"cenas": resultado}
+
+
+@app.post("/api/videos/{slug}/cenas/{indice}/regenerar")
+def api_regenerar_cena(slug: str, indice: int) -> dict:
+    """Refaz só a imagem de uma cena e remonta o vídeo — não mexe em roteiro,
+    narração nem nas outras cenas."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    titulo = metadados.get("titulo", slug)
+
+    job = jobs.criar_job_cena(titulo, slug, indice)
+    return {"job_id": job.id}
+
+
 @app.get("/api/jobs/{job_id}")
 def api_status_job(job_id: str) -> JSONResponse:
     job = jobs.obter_job(job_id)
@@ -312,6 +358,7 @@ def api_listar_videos() -> list[dict]:
                 "publicado": metadados.get("publicado", False),
                 "youtube_video_id": metadados.get("youtube_video_id"),
                 "publicacao_erro": metadados.get("publicacao_erro"),
+                "tem_cenas": bool(metadados.get("cenas")),
             }
         )
     return videos

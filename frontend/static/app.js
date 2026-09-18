@@ -50,22 +50,26 @@ function linhaDeVideo(v, comRegenerar) {
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
        ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
-       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-nova-thumb" data-slug="${v.slug}" title="Sorteia outra imagem de cena pra thumbnail">nova thumbnail</button>`
+       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-nova-thumb" data-slug="${v.slug}" title="Sorteia outra imagem de cena pra thumbnail">nova thumbnail</button>
+       ${v.tem_cenas ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
   return `
-    <div class="video-row" data-slug="${v.slug}">
-      <div class="video-thumb">${thumb}</div>
-      <div class="video-info">
-        <div class="video-title">${v.titulo}</div>
-        <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
-        ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
+    <div class="video-item">
+      <div class="video-row" data-slug="${v.slug}">
+        <div class="video-thumb">${thumb}</div>
+        <div class="video-info">
+          <div class="video-title">${v.titulo}</div>
+          <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
+          ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
+        </div>
+        <div class="video-links">
+          <a href="${v.video_16_9}" target="_blank">16:9</a>
+          <a href="${v.video_9_16}" target="_blank">Shorts</a>
+          ${botaoRegenerar}
+        </div>
       </div>
-      <div class="video-links">
-        <a href="${v.video_16_9}" target="_blank">16:9</a>
-        <a href="${v.video_9_16}" target="_blank">Shorts</a>
-        ${botaoRegenerar}
-      </div>
+      ${comRegenerar && v.tem_cenas ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
 
@@ -90,12 +94,104 @@ async function carregarFila() {
     ? videos.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo gerado ainda.</div>';
 
-  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb)").forEach((botao) => {
+  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb):not(.btn-ver-cenas)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
   });
   lista.querySelectorAll(".btn-nova-thumb").forEach((botao) => {
     botao.addEventListener("click", () => regenerarThumbnail(botao));
   });
+  lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {
+    botao.addEventListener("click", () => alternarPainelCenas(botao));
+  });
+}
+
+// ---------------- Fila: editar uma cena específica ----------------
+
+function cardDeCena(slug, cena) {
+  const imagem = cena.imagem
+    ? `<img class="cena-card-img" src="${cena.imagem}" alt="">`
+    : `<div class="cena-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${ICONE_VIDEO}</div>`;
+  return `
+    <div class="cena-card" data-indice="${cena.indice}">
+      ${imagem}
+      <div class="cena-card-body">
+        <div class="cena-card-indice">Cena ${cena.indice + 1}</div>
+        <p class="cena-card-texto">${cena.texto || ""}</p>
+        <button type="button" class="btn-regenerar btn-regenerar-cena" data-slug="${slug}" data-indice="${cena.indice}">Regenerar essa cena</button>
+      </div>
+    </div>`;
+}
+
+async function alternarPainelCenas(botao) {
+  const slug = botao.dataset.slug;
+  const painel = document.querySelector(`.cenas-painel[data-slug="${slug}"]`);
+  if (!painel) return;
+
+  const abrindo = !painel.classList.contains("aberto");
+  painel.classList.toggle("aberto", abrindo);
+  botao.textContent = abrindo ? "esconder cenas" : "cenas";
+  if (!abrindo || painel.dataset.carregado === "true") return;
+
+  painel.innerHTML = '<div class="cenas-status">Carregando cenas…</div>';
+  const resposta = await fetch(`/api/videos/${slug}/cenas`);
+  const dados = await resposta.json();
+
+  if (dados.erro) {
+    painel.innerHTML = `<div class="cenas-status">${dados.erro}</div>`;
+    return;
+  }
+
+  painel.dataset.carregado = "true";
+  painel.innerHTML = `
+    <div class="cenas-status">Regenerar uma cena só refaz a imagem dela (a IA sorteia de novo) e remonta o vídeo — roteiro, narração e as outras cenas continuam intactos.</div>
+    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>`;
+
+  painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
+    b.addEventListener("click", () => regenerarCena(b));
+  });
+}
+
+async function regenerarCena(botao) {
+  const slug = botao.dataset.slug;
+  const indice = botao.dataset.indice;
+  const card = botao.closest(".cena-card");
+  const imagem = card.querySelector(".cena-card-img");
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "Gerando…";
+
+  const resposta = await fetch(`/api/videos/${slug}/cenas/${indice}/regenerar`, { method: "POST" });
+  const { job_id, erro } = await resposta.json();
+  if (erro) {
+    botao.disabled = false;
+    botao.textContent = rotulo;
+    alert(erro);
+    return;
+  }
+
+  const intervalo = setInterval(async () => {
+    const r = await fetch(`/api/jobs/${job_id}`);
+    const job = await r.json();
+    botao.textContent = `${Math.round(job.progresso)}% — ${job.etapa}`;
+    if (job.status === "pronto") {
+      clearInterval(intervalo);
+      botao.disabled = false;
+      botao.textContent = "Regenerar essa cena";
+      if (imagem && imagem.tagName === "IMG") imagem.src = job.resultado.cena_imagem;
+      // atualiza só a miniatura da linha (se essa era a cena 0) sem recarregar
+      // a fila inteira — assim o painel de cenas continua aberto pra você
+      // poder corrigir mais de uma em sequência.
+      if (job.resultado.thumbnail) {
+        const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+        if (thumbImg) thumbImg.src = job.resultado.thumbnail;
+      }
+    } else if (job.status === "erro") {
+      clearInterval(intervalo);
+      botao.disabled = false;
+      botao.textContent = rotulo;
+      alert(`Deu erro: ${job.erro}`);
+    }
+  }, 1200);
 }
 
 async function regenerarThumbnail(botao) {

@@ -118,8 +118,10 @@ def gerar_video(
                 descricao_video=descricao_video,
             )
             print(f"[roteiro gerado]\n{roteiro}\n")
-            (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
         roteiro_final = roteiro
+        # salva sempre (gerado por IA ou colado por você) — é o que permite o
+        # "Regenerar" manter o mesmo roteiro depois, em vez de escrever um novo
+        (pasta / "roteiro.txt").write_text(roteiro_final, encoding="utf-8")
 
         avisar("Gerando a narração", 8)
         narracao_path = pasta / "narracao.mp3"
@@ -171,6 +173,14 @@ def gerar_video(
         cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
+    # guardado pra dar pra regenerar uma cena específica depois (regenerar_cena),
+    # sem precisar refazer roteiro/narração/outras cenas
+    _salvar_metadados(
+        pasta,
+        cenas=[{"texto": texto, "duracao_segundos": duracao} for texto, duracao in lista_cenas],
+        audio_arquivo=audio_path.name,
+    )
+
     total_imagens = len(lista_cenas) * len(ESTILO_LEGENDA_POR_FORMATO)
     imagens_feitas = 0
 
@@ -213,3 +223,87 @@ def gerar_video(
 
     avisar("Pronto", 100)
     return ResultadoGeracao(pasta, audio_path, videos["16:9"], videos["9:16"], duracao_real, roteiro_final, tags, caminho_thumb)
+
+
+def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None) -> dict:
+    """Refaz só a imagem de UMA cena (a IA sorteia de novo) e remonta o vídeo
+    final com as imagens das outras cenas intactas — não mexe em roteiro,
+    narração nem legenda. Só funciona em vídeos gerados depois desse recurso
+    existir (precisa do metadata.json ter "cenas" salvo)."""
+
+    def avisar(etapa: str, percentual: float) -> None:
+        if progresso is not None:
+            progresso(etapa, percentual)
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    cenas = metadados.get("cenas")
+    if not cenas:
+        raise RuntimeError(
+            "Esse vídeo foi gerado antes desse recurso existir — clique em "
+            '"Regenerar" uma vez pra habilitar a edição por cena.'
+        )
+    if not (0 <= indice < len(cenas)):
+        raise RuntimeError(f"Cena {indice} não existe (esse vídeo tem {len(cenas)} cenas).")
+
+    audio_nome = metadados.get("audio_arquivo")
+    audio_path = pasta / audio_nome if audio_nome else None
+    if audio_path is None or not audio_path.exists():
+        raise RuntimeError("Áudio original não encontrado — regenere o vídeo inteiro uma vez.")
+
+    estilo_imagem = metadados.get("estilo_imagem", "procedural")
+    descricao_video = metadados.get("descricao_video", "")
+    sem_narracao = metadados.get("sem_narracao", False)
+    texto_cena = cenas[indice]["texto"]
+
+    total_passos = len(ESTILO_LEGENDA_POR_FORMATO) * 2  # gerar imagem + remontar, por formato
+    passo = 0
+    thumbnail_atualizada = False
+    nomes_video = {}
+
+    for formato, estilo in ESTILO_LEGENDA_POR_FORMATO.items():
+        sufixo = formato.replace(":", "x")
+        caminho_imagem = pasta / f"cena{indice:02d}_{sufixo}.png"
+
+        passo += 1
+        avisar(f"Gerando nova imagem da cena ({formato})", 10 + 80 * passo / total_passos)
+        try:
+            visuals.gerar_fundo(
+                estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
+                cena=texto_cena, estilo_extra=descricao_video,
+            )
+        except RuntimeError as erro:
+            print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")
+            visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=f"{texto_cena}-{passo}")
+
+        passo += 1
+        avisar(f"Remontando o vídeo ({formato})", 10 + 80 * passo / total_passos)
+        imagens_com_duracao = []
+        for i, cena in enumerate(cenas):
+            img = pasta / f"cena{i:02d}_{sufixo}.png"
+            if not img.exists():
+                raise RuntimeError(f"Imagem da cena {i} sumiu do disco — regenere o vídeo inteiro uma vez.")
+            imagens_com_duracao.append((img, cena["duracao_segundos"]))
+
+        legenda_path = pasta / f"legenda_{sufixo}.ass"
+        legenda_path = legenda_path if (not sem_narracao and legenda_path.exists()) else None
+
+        caminho_video = pasta / f"video_{sufixo}.mp4"
+        render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video)
+        nomes_video[formato] = caminho_video.name
+
+    if indice == 0:
+        avisar("Atualizando a thumbnail", 95)
+        thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", metadados.get("titulo", slug), pasta / "thumbnail.png")
+        thumbnail_atualizada = True
+
+    avisar("Pronto", 100)
+    return {
+        "video_16_9": nomes_video["16:9"],
+        "video_9_16": nomes_video["9:16"],
+        "thumbnail_atualizada": thumbnail_atualizada,
+    }
