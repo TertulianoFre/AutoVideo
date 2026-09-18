@@ -19,12 +19,37 @@ function blocoInfoBase(tipo, item, canais) {
     ${usos}`;
 }
 
+function linhaBase(tipo, item, canais, miniatura, preview) {
+  const usos = item.usado_em?.length ? `<span class="base-selo base-selo-usado">em ${item.usado_em.length} vídeo${item.usado_em.length > 1 ? "s" : ""}</span>` : '<span class="base-selo">livre</span>';
+  const titulo = item.descricao || item.nome;
+  const rotuloBotao = { audios: "áudio", imagens: "imagem", videos: "vídeo" }[tipo];
+  return `
+    <details class="base-linha" data-item-base>
+      <summary>
+        <span class="base-linha-mini">${miniatura}</span>
+        <span class="base-linha-textos">
+          <span class="base-linha-titulo">${escaparAttr(titulo)}</span>
+          ${item.descricao ? `<span class="base-linha-arquivo">${escaparAttr(item.nome)}</span>` : ""}
+        </span>
+        ${usos}
+      </summary>
+      <div class="base-linha-corpo">
+        ${preview}
+        <span class="video-meta">Arquivo: ${escaparAttr(item.nome)}</span>
+        ${blocoInfoBase(tipo, item, canais)}
+        <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-${{ audios: "audio", imagens: "imagem", videos: "video" }[tipo]}-base" data-nome="${escaparAttr(item.nome)}">remover ${rotuloBotao}</button>
+      </div>
+    </details>`;
+}
+
 async function salvarInfoBase(elemento) {
   const bloco = elemento.closest("[data-item-base]");
   const dados = new FormData();
   dados.set("descricao", bloco.querySelector(".base-descricao").value);
   dados.set("canal_id", bloco.querySelector(".base-canal").value);
   await fetch(`/api/biblioteca/${elemento.dataset.tipo}/${encodeURIComponent(elemento.dataset.nome)}/info`, { method: "PUT", body: dados });
+  const titulo = bloco.querySelector(".base-linha-titulo");
+  if (titulo) titulo.textContent = bloco.querySelector(".base-descricao").value.trim() || elemento.dataset.nome; // o título da linha acompanha a descrição
 }
 
 async function carregarBase() {
@@ -39,46 +64,20 @@ async function carregarBase() {
 
     const audios = (dadosBase.audios_info || []).filter(passa);
     document.getElementById("base-audios-contagem").textContent = `(${audios.length})`;
-    const listaAudios = document.getElementById("base-audios-lista");
-    listaAudios.innerHTML = audios.length
-      ? audios.map((a) => `
-        <div class="base-item" data-item-base>
-          <div class="base-item-topo">
-            <audio controls src="${a.url}" style="height:32px"></audio>
-            <span class="video-meta" style="flex:1">${escaparAttr(a.nome)}</span>
-            <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-audio-base" data-nome="${escaparAttr(a.nome)}">remover</button>
-          </div>
-          ${blocoInfoBase("audios", a, canais)}
-        </div>`).join("")
+    document.getElementById("base-audios-lista").innerHTML = audios.length
+      ? audios.map((a) => linhaBase("audios", a, canais, "🎵", `<audio controls preload="none" src="${a.url}" class="base-preview-audio"></audio>`)).join("")
       : '<div class="empty">Nenhum áudio importado ainda.</div>';
 
     const imagens = (dadosBase.imagens || []).filter(passa);
     document.getElementById("base-imagens-contagem").textContent = `(${imagens.length})`;
-    const listaImagens = document.getElementById("base-imagens-grade");
-    listaImagens.innerHTML = imagens.length
-      ? imagens.map((img) => `
-        <div class="base-item base-item-imagem" data-item-base>
-          <img src="${img.url}" alt="" class="base-item-img">
-          <div class="base-item-corpo">
-            <div class="base-item-topo"><span class="video-meta" style="flex:1">${escaparAttr(img.nome)}</span>
-              <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-imagem-base" data-nome="${escaparAttr(img.nome)}">remover</button></div>
-            ${blocoInfoBase("imagens", img, canais)}
-          </div>
-        </div>`).join("")
+    document.getElementById("base-imagens-grade").innerHTML = imagens.length
+      ? imagens.map((img) => linhaBase("imagens", img, canais, `<img src="${img.url}" alt="">`, `<img src="${img.url}" alt="" class="base-preview-imagem">`)).join("")
       : '<div class="empty">Nenhuma imagem importada ainda.</div>';
 
     const videos = (dadosBase.videos || []).filter(passa);
     document.getElementById("base-videos-contagem").textContent = `(${videos.length})`;
     document.getElementById("base-videos-lista").innerHTML = videos.length
-      ? videos.map((vid) => `
-        <div class="base-item base-item-imagem" data-item-base>
-          <video src="${vid.url}" controls preload="metadata" class="base-item-video"></video>
-          <div class="base-item-corpo">
-            <div class="base-item-topo"><span class="video-meta" style="flex:1">${escaparAttr(vid.nome)}</span>
-              <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-video-base" data-nome="${escaparAttr(vid.nome)}">remover</button></div>
-            ${blocoInfoBase("videos", vid, canais)}
-          </div>
-        </div>`).join("")
+      ? videos.map((vid) => linhaBase("videos", vid, canais, "🎬", `<video src="${vid.url}" controls preload="metadata" class="base-item-video"></video>`)).join("")
       : '<div class="empty">Nenhum vídeo importado ainda.</div>';
 
     document.querySelectorAll(".base-descricao").forEach((c) => c.addEventListener("change", () => salvarInfoBase(c)));

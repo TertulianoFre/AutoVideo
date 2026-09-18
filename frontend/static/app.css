@@ -518,3 +518,21 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .base-opcao { width: 96px; display: flex; flex-direction: column; gap: 3px; }
 .base-opcao .thumb-img-opcao { width: 100%; }
 .base-legenda { font-size: 10.5px; line-height: 1.25; color: var(--text-dim); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* Base: linhas compactas (título = descrição) que abrem os detalhes */
+.base-linha { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; }
+.base-linha > summary { display: flex; align-items: center; gap: 12px; padding: 8px 12px; cursor: pointer; list-style: none; }
+.base-linha > summary::-webkit-details-marker { display: none; }
+.base-linha > summary::after { content: "▾"; color: var(--text-dim); margin-left: 4px; transition: transform .15s; }
+.base-linha:not([open]) > summary::after { transform: rotate(-90deg); }
+.base-linha-mini { width: 44px; height: 44px; border-radius: 8px; overflow: hidden; flex: none; display: flex; align-items: center; justify-content: center; background: var(--bg); font-size: 20px; }
+.base-linha-mini img { width: 100%; height: 100%; object-fit: cover; }
+.base-linha-textos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.base-linha-titulo { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.base-linha-arquivo { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.base-selo { font-size: 11px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.base-selo-usado { color: var(--accent); border-color: var(--accent); }
+.base-linha-corpo { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 4px 14px 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.base-linha-corpo .base-descricao { width: 100%; }
+.base-preview-imagem { max-width: 320px; width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.base-preview-audio { height: 36px; width: 100%; max-width: 420px; }
