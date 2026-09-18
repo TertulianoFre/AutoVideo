@@ -510,3 +510,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 
 .cena-descricao { width: 100%; margin-top: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12.5px; }
 .cena-descricao:focus { border-color: var(--accent); outline: none; }
+
+.btn-lapis-desc { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 14px; cursor: pointer; }
+.btn-lapis-desc:hover, .btn-lapis-desc.aberto, .btn-lapis-desc.ativo { color: #14130F; background: #F2C230; border-color: #F2C230; }
+.cena-descricao[hidden] { display: none; }

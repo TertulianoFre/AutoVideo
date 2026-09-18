@@ -1159,7 +1159,7 @@ def api_listar_cenas(slug: str) -> dict:
 
 
 @app.post("/api/videos/{slug}/cenas/{indice}/regenerar")
-def api_regenerar_cena(slug: str, indice: int, descricao: str = Form("")) -> dict:
+def api_regenerar_cena(slug: str, indice: int, descricao: str | None = Form(None)) -> dict:
     """Refaz só a imagem de uma cena e remonta o vídeo — não mexe em roteiro,
     narração nem nas outras cenas."""
     pasta = RAIZ_SAIDA / slug
@@ -1172,15 +1172,17 @@ def api_regenerar_cena(slug: str, indice: int, descricao: str = Form("")) -> dic
 
     _marcar_imagem_base_da_cena(caminho_meta, indice, None)
     # descrição que você escreveu pra essa imagem (vazia = volta a usar o texto da cena)
-    with _trava_metadados_cenas:
-        meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
-        mapa = meta.get("descricoes_cenas") or {}
-        if descricao.strip():
-            mapa[str(indice)] = descricao.strip()[:300]
-        else:
-            mapa.pop(str(indice), None)
-        meta["descricoes_cenas"] = mapa
-        caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    # (descricao None = o campo nem foi aberto: mantém o que já estava valendo)
+    if descricao is not None:
+        with _trava_metadados_cenas:
+            meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+            mapa = meta.get("descricoes_cenas") or {}
+            if descricao.strip():
+                mapa[str(indice)] = descricao.strip()[:300]
+            else:
+                mapa.pop(str(indice), None)
+            meta["descricoes_cenas"] = mapa
+            caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     job = jobs.criar_job_cena(titulo, slug, indice)
     return {"job_id": job.id}
 

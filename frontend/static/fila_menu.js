@@ -132,3 +132,13 @@ async function salvarTextosDasCenas(painel, slug) {
   painel.classList.remove("aberto");
   await regenerarVideo(slug, true, true);
 }
+
+// lápis pequeno ao lado de "Gerar outra imagem": abre/fecha o campo de descrição da imagem
+document.addEventListener("click", (ev) => {
+  const lapis = ev.target.closest(".btn-lapis-desc");
+  if (!lapis) return;
+  const campo = lapis.closest(".cena-card").querySelector(".cena-descricao");
+  campo.hidden = !campo.hidden;
+  lapis.classList.toggle("aberto", !campo.hidden);
+  if (!campo.hidden) campo.focus();
+});

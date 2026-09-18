@@ -614,13 +614,14 @@ function cardDeCena(slug, cena) {
         </div>
         <div class="cena-card-acoes">
           <button type="button" class="btn-regenerar btn-regenerar-cena" data-slug="${slug}" data-indice="${cena.indice}">Gerar outra imagem</button>
+          <button type="button" class="btn-lapis-desc${cena.descricao_imagem ? " ativo" : ""}" title="${cena.descricao_imagem ? "Descrição da imagem em uso (clique para ver/editar)" : "Descrever a imagem que você quer (opcional)"}">✎</button>
           <label class="btn-regenerar btn-regenerar-sutil btn-enviar-cena" title="Usar uma imagem do seu computador (vale pros dois formatos)">
             Enviar imagem
             <input type="file" class="cena-upload-input" accept="image/*" hidden data-slug="${slug}" data-indice="${cena.indice}">
           </label>
           <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem ou vídeo que você importou na aba Base">Usar da Base</button>
         </div>
-        <input type="text" class="cena-descricao" maxlength="300" value="${escaparAttr(cena.descricao_imagem || "")}" placeholder="Descreva a imagem que você quer (opcional). Ex.: polvo abrindo um caramujo, close-up. Vale para &quot;Gerar outra imagem&quot;">
+        <input type="text" class="cena-descricao" hidden maxlength="300" value="${escaparAttr(cena.descricao_imagem || "")}" placeholder="Descreva a imagem (ex.: polvo abrindo um caramujo, close-up) e clique em Gerar outra imagem">
         ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
@@ -729,7 +730,8 @@ async function regenerarCena(botao) {
   botao.textContent = "Gerando…";
 
   const corpoCena = new FormData();
-  corpoCena.set("descricao", card.querySelector(".cena-descricao")?.value || "");
+  const campoDesc = card.querySelector(".cena-descricao");
+  if (campoDesc && !campoDesc.hidden) corpoCena.set("descricao", campoDesc.value); // fechado = usa o que já valia
   const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/regenerar`, { method: "POST", body: corpoCena });
   const { job_id, erro } = await resposta.json();
   if (erro) {
