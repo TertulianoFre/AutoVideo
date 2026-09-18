@@ -28,6 +28,17 @@ function formatarDataPostagem(iso) {
 
 const ICONE_VIDEO = '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="5.5" width="10" height="9" rx="1.5"></rect><path d="M12.5 9l5-3v8l-5-3z"></path></svg>';
 
+function statusPublicacao(v) {
+  if (v.publicado) {
+    const link = v.youtube_video_id ? `<a href="https://youtu.be/${v.youtube_video_id}" target="_blank">assistir</a>` : "";
+    return `<span class="dot dot-positive"></span> publicado ${link}`;
+  }
+  if (v.publicacao_erro) {
+    return `<span class="dot dot-negative"></span> erro ao publicar: ${v.publicacao_erro}`;
+  }
+  return "";
+}
+
 function linhaDeVideo(v, comRegenerar) {
   const rotulos = [];
   if (v.sem_narracao) rotulos.push("sem narração");
@@ -39,12 +50,14 @@ function linhaDeVideo(v, comRegenerar) {
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}">Regenerar</button>`
     : "";
+  const publicacao = statusPublicacao(v);
   return `
     <div class="video-row" data-slug="${v.slug}">
       <div class="video-thumb">${thumb}</div>
       <div class="video-info">
         <div class="video-title">${v.titulo}</div>
         <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
+        ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
       </div>
       <div class="video-links">
         <a href="${v.video_16_9}" target="_blank">16:9</a>
@@ -291,4 +304,50 @@ function mostrarResultado(resultado) {
     ${tags ? `<div class="resultado-formato"><h3>Hashtags sugeridas</h3><div class="tags-list">${tags}</div></div>` : ""}`;
 }
 
+// ---------------- Conexão com o YouTube ----------------
+
+const youtubeDot = document.getElementById("youtube-dot");
+const youtubeStatusTexto = document.getElementById("youtube-status-texto");
+const btnYoutubeConectar = document.getElementById("btn-youtube-conectar");
+
+async function atualizarStatusYoutube() {
+  const resposta = await fetch("/api/youtube/status");
+  const dados = await resposta.json();
+
+  if (!dados.client_secret_presente) {
+    youtubeDot.className = "dot dot-dim";
+    youtubeStatusTexto.textContent = "client_secret.json não encontrado na raiz do projeto.";
+    btnYoutubeConectar.hidden = true;
+    return null;
+  }
+
+  btnYoutubeConectar.hidden = false;
+
+  if (dados.conectando) {
+    youtubeDot.className = "dot dot-pending";
+    youtubeStatusTexto.textContent = "Esperando você autorizar no navegador…";
+    btnYoutubeConectar.disabled = true;
+  } else if (dados.conectado) {
+    youtubeDot.className = "dot dot-positive";
+    youtubeStatusTexto.textContent = "Conectado";
+    btnYoutubeConectar.disabled = false;
+    btnYoutubeConectar.textContent = "Reconectar";
+  } else {
+    youtubeDot.className = "dot dot-negative";
+    youtubeStatusTexto.textContent = dados.erro ? `Não conectado (${dados.erro})` : "Não conectado";
+    btnYoutubeConectar.disabled = false;
+    btnYoutubeConectar.textContent = "Conectar YouTube";
+  }
+  return dados;
+}
+
+btnYoutubeConectar.addEventListener("click", async () => {
+  await fetch("/api/youtube/conectar", { method: "POST" });
+  const poller = setInterval(async () => {
+    const dados = await atualizarStatusYoutube();
+    if (dados && !dados.conectando) clearInterval(poller);
+  }, 1500);
+});
+
+atualizarStatusYoutube();
 carregarPainel();

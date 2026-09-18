@@ -1,0 +1,105 @@
+"""Login e publicação no YouTube via YouTube Data API v3.
+
+Autorização é feita uma vez por conta (abre o navegador, você loga e
+autoriza); depois fica salva localmente em dados/tokens/ e só pede de novo se
+expirar (contas em modo "teste" no Google expiram a cada 7 dias — limitação
+do Google, não do código)."""
+
+from pathlib import Path
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+RAIZ = Path(__file__).resolve().parent.parent
+CLIENT_SECRET_PATH = RAIZ / "client_secret.json"
+PASTA_TOKENS = RAIZ / "dados" / "tokens"
+
+ESCOPOS = ["https://www.googleapis.com/auth/youtube.upload"]
+CATEGORIA_PADRAO = "22"  # "Pessoas e blogs" — genérica, serve pra a maioria dos vídeos do canal
+
+
+def _caminho_token(nome_conta: str) -> Path:
+    PASTA_TOKENS.mkdir(parents=True, exist_ok=True)
+    return PASTA_TOKENS / f"token_{nome_conta}.json"
+
+
+def contas_conectadas() -> list:
+    if not PASTA_TOKENS.exists():
+        return []
+    return [p.stem.removeprefix("token_") for p in PASTA_TOKENS.glob("token_*.json")]
+
+
+def _carregar_credenciais(nome_conta: str) -> Credentials | None:
+    caminho = _caminho_token(nome_conta)
+    if not caminho.exists():
+        return None
+    try:
+        creds = Credentials.from_authorized_user_file(str(caminho), ESCOPOS)
+    except (ValueError, OSError):
+        return None
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            caminho.write_text(creds.to_json(), encoding="utf-8")
+        except Exception:
+            return None
+    return creds if creds and creds.valid else None
+
+
+def esta_conectado(nome_conta: str) -> bool:
+    return _carregar_credenciais(nome_conta) is not None
+
+
+def conectar(nome_conta: str) -> None:
+    """Abre o navegador pra autorizar essa conta. Bloqueia até você terminar
+    o login — sempre chamar isso numa thread separada, nunca na thread
+    principal do servidor."""
+    if not CLIENT_SECRET_PATH.exists():
+        raise RuntimeError(
+            "client_secret.json não encontrado na raiz do projeto. "
+            "Baixe as credenciais no Google Cloud Console primeiro."
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), ESCOPOS)
+    creds = flow.run_local_server(port=0, prompt="consent")
+    _caminho_token(nome_conta).write_text(creds.to_json(), encoding="utf-8")
+
+
+def publicar_video(
+    caminho_video: Path,
+    titulo: str,
+    descricao: str,
+    tags: list,
+    nome_conta: str,
+    privacidade: str = "private",
+    is_short: bool = False,
+) -> str:
+    """Publica o vídeo no canal da conta conectada, devolve o ID no YouTube.
+    privacidade: "private" | "unlisted" | "public" — comece com "private" ou
+    "unlisted" até confiar no fluxo automático."""
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+
+    youtube = build("youtube", "v3", credentials=creds)
+
+    titulo_final = f"{titulo} #Shorts" if is_short else titulo
+    corpo = {
+        "snippet": {
+            "title": titulo_final[:100],
+            "description": descricao[:5000],
+            "tags": tags[:500],
+            "categoryId": CATEGORIA_PADRAO,
+        },
+        "status": {"privacyStatus": privacidade, "selfDeclaredMadeForKids": False},
+    }
+
+    midia = MediaFileUpload(str(caminho_video), mimetype="video/mp4", resumable=True)
+    solicitacao = youtube.videos().insert(part="snippet,status", body=corpo, media_body=midia)
+
+    resposta = None
+    while resposta is None:
+        _progresso, resposta = solicitacao.next_chunk()
+    return resposta["id"]

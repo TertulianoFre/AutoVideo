@@ -74,8 +74,11 @@ button, input, textarea, select {
   font-size: 12px; color: var(--text-dim);
 }
 
-.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .dot-positive { background: var(--positive); }
+.dot-pending { background: var(--pending); }
+.dot-negative { background: var(--negative); }
+.dot-dim { background: var(--text-dim); }
 
 /* ---------- main ---------- */
 

@@ -5,6 +5,7 @@ Rodar: .venv\\Scripts\\uvicorn backend.main:app --reload
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 # O texto gerado por IA às vezes traz pontuação Unicode especial (hífen
@@ -19,7 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import jobs
-from engine import canal, roteiro as roteiro_mod
+from engine import agendador, canal, roteiro as roteiro_mod
+from engine import youtube as youtube_mod
 from engine.pipeline import RAIZ_SAIDA
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -28,6 +30,13 @@ FRONTEND = RAIZ / "frontend"
 RAIZ_SAIDA.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Projeto YT")
+
+# roda junto com o app inteiro: confere de tempos em tempos se algum vídeo
+# tem data de postagem vencida e publica sozinho no YouTube.
+agendador.iniciar_agendador()
+
+CONTA_YOUTUBE_PADRAO = "principal"
+_estado_conexao_youtube = {"status": "ocioso", "erro": None}  # ocioso | conectando | conectado | erro
 
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 app.mount("/videos", StaticFiles(directory=RAIZ_SAIDA), name="videos")
@@ -51,6 +60,42 @@ def api_obter_canal() -> dict:
 def api_salvar_canal(contexto: str = Form("")) -> dict:
     canal.salvar_contexto(contexto)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# conexão com o YouTube (publicação automática)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/youtube/status")
+def api_youtube_status() -> dict:
+    return {
+        "conectado": youtube_mod.esta_conectado(CONTA_YOUTUBE_PADRAO),
+        "conectando": _estado_conexao_youtube["status"] == "conectando",
+        "erro": _estado_conexao_youtube["erro"],
+        "client_secret_presente": youtube_mod.CLIENT_SECRET_PATH.exists(),
+    }
+
+
+@app.post("/api/youtube/conectar")
+def api_youtube_conectar() -> dict:
+    if _estado_conexao_youtube["status"] == "conectando":
+        return {"status": "conectando"}
+
+    _estado_conexao_youtube["status"] = "conectando"
+    _estado_conexao_youtube["erro"] = None
+
+    def rodar() -> None:
+        try:
+            youtube_mod.conectar(CONTA_YOUTUBE_PADRAO)
+            _estado_conexao_youtube["status"] = "conectado"
+        except Exception as erro:
+            _estado_conexao_youtube["status"] = "erro"
+            _estado_conexao_youtube["erro"] = str(erro)
+
+    # abre o navegador padrão do sistema e espera você autorizar — não pode
+    # rodar na thread principal, ia travar o servidor até você terminar.
+    threading.Thread(target=rodar, daemon=True).start()
+    return {"status": "conectando"}
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +238,9 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail": f"/videos/{pasta.name}/thumbnail.png" if thumb_path.exists() else None,
                 "modificado_em": pasta.stat().st_mtime,
                 "tags": tags,
+                "publicado": metadados.get("publicado", False),
+                "youtube_video_id": metadados.get("youtube_video_id"),
+                "publicacao_erro": metadados.get("publicacao_erro"),
             }
         )
     return videos

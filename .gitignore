@@ -9,6 +9,7 @@ venv/
 *credentials*.json
 client_secret*.json
 token.json
+dados/tokens/
 
 # Saída gerada (vídeos, áudio, imagens grandes)
 output/

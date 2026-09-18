@@ -8,8 +8,8 @@ Canal de YouTube com vídeos gerados por automação (texto → narração → i
 2. **Você** aprova uma sugestão ou digita seu próprio título/descrição.
 3. **Geração**: um único fluxo pra tudo — roteiro (levando em conta o contexto do canal), narração (voz de IA — mulher, homem ou criança, em vários idiomas — ou sua própria gravação), legenda sincronizada, e opcionalmente um som de fundo (chuva, música suave...) baixinho por baixo da narração. Também dá pra marcar "sem narração" e usar só o som de fundo como áudio do vídeo (ex: 30 min de chuva pra relaxar) — tudo no mesmo formulário, sem telas separadas.
 4. **Montagem** via FFmpeg: exporta em 16:9 (vídeo normal) e 9:16 (Shorts), com thumbnail automática.
-5. **Publicação**: você agenda a data e o app publica sozinho no YouTube.
-6. **Painel**: acompanha inscritos, visualizações, tempo de exibição e receita estimada do canal.
+5. **Publicação**: você agenda a data e o app publica sozinho no YouTube (16:9 como vídeo normal, 9:16 como Short) — desde que o app fique rodando e sua conta esteja conectada.
+6. **Painel**: acompanha inscritos, visualizações, tempo de exibição e receita estimada do canal (ainda não implementado — só a conexão com o YouTube e o contexto do canal por enquanto).
 
 Tudo roda localmente no Windows, sem custo de API paga.
 
@@ -48,20 +48,30 @@ Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, test
 8. **Montagem** (`engine/render.py`) — FFmpeg junta as imagens (slideshow) + áudio (+ legenda, se houver), exporta 16:9 e 9:16.
 9. **Thumbnail** (`engine/thumbnail.py`) — 1280x720, título em destaque por cima da primeira cena, estilo YouTube.
 
+### Publicação automática (`engine/youtube.py`, `engine/agendador.py`)
+
+Precisa de um `client_secret.json` na raiz do projeto (credencial OAuth "App para computador", criada no Google Cloud Console — ver checklist abaixo) e de conectar sua conta uma vez no Painel (botão "Conectar YouTube": abre o navegador, você loga e autoriza).
+
+Com isso feito, um agendador roda em segundo plano junto com o backend (`agendador.iniciar_agendador()`, confere a cada 10 min): qualquer vídeo com `data_postagem` já vencida e ainda não publicado é enviado automaticamente — o 16:9 como vídeo normal e o 9:16 como Short (dois uploads separados), com título, descrição (o roteiro) e as hashtags sugeridas. Fica como `private` por padrão até você confiar no fluxo (ajustável em `agendador.PRIVACIDADE_PADRAO`).
+
+**Uma conta só, mesmo credencial pra sempre**: você configura o Google Cloud Console uma única vez. Conectar uma conta/canal novo depois é só clicar em "Conectar" de novo — sem precisar mexer no Cloud Console outra vez, a menos que seja uma conta de Google totalmente diferente (aí precisa adicionar o e-mail dela como "usuário de teste" na tela de consentimento OAuth do mesmo projeto).
+
+**Limitação do Google, não do código**: como o app fica em modo "teste" (evita o processo de verificação do Google), a autorização expira a cada 7 dias — o Painel mostra "Não conectado" quando isso acontece, é só clicar em "Conectar" de novo.
+
 ### Limitações conhecidas
 
 - O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).
 - Checagem automática de "imagem com qualidade ruim, refazer" foi tentada com detector de rosto (OpenCV) — funciona bem em foto real, mas **não funciona em desenho/ilustração**, então só está ligada no estilo `foto`.
 - O roteiro automático às vezes escreve uma frase meio estranha/gramaticalmente torta (é um modelo pequeno e gratuito) — use o "Pré-visualizar roteiro" pra revisar antes.
 - Som de fundo (chuva/música) é sintetizado (ruído filtrado / acorde simples), não gravação real — soa genérico, ainda dá pra melhorar. Pedir "outro" som ainda não sintetiza algo customizado de verdade.
-- Hashtags/tags são só sugestão, ainda não entram sozinhas no YouTube.
+- Publicação automática depende do app ficar rodando (não é um serviço em nuvem) e da conta reconectada a cada 7 dias (limitação do modo "teste" do Google).
 
 ## Requisitos já levantados, ainda não implementados
 
 - Prévia **editável** da thumbnail.
 - Poder **pedir alterações pontuais** num vídeo já gerado (o botão "Regenerar" da Fila refaz tudo do zero).
-- **Publicação automática na data escolhida** — hoje "data de postagem" é só guardada como metadado; publicar de verdade (e deixar o programa rodando local publicando sozinho conforme os dias passam) depende da integração com a YouTube Data API + um agendador rodando junto do backend.
 - Sintetizar sons de fundo customizados de verdade (hoje só chuva e música suave são reais).
+- Painel de estatísticas de verdade (inscritos, visualizações, receita) — precisa da YouTube Analytics API, com escopos e consentimento à parte do upload.
 
 ## Stack
 
@@ -73,15 +83,23 @@ Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, test
 - Pollinations.ai (texto do roteiro, hashtags e imagens por IA, grátis, sem chave)
 - requests + deep-translator (busca de fotos e tradução de prompt)
 - opencv-python-headless (detector de rosto, usado no estilo `foto`)
-- YouTube Data API v3 (publicação agendada) + YouTube Analytics API (painel) — ainda não integrado
+- google-api-python-client + google-auth-oauthlib (publicação no YouTube) — YouTube Analytics API (painel de estatísticas) ainda não integrada
 - Git para versionar o projeto
 
 ## Status
 
-App funcionando de ponta a ponta com um fluxo único (sem telas separadas pra "narrado" vs "ambiente"): contexto do canal, pré-visualização de roteiro, narração opcional, som de fundo opcional (mixado ou sozinho), 3 estilos de imagem, thumbnail automática, legenda com destaque, progresso real, download, regenerar. Próximo: publicação de verdade no YouTube.
+App funcionando de ponta a ponta com um fluxo único (sem telas separadas pra "narrado" vs "ambiente"): contexto do canal, pré-visualização de roteiro, narração opcional, som de fundo opcional (mixado ou sozinho), 3 estilos de imagem, thumbnail automática, legenda com destaque, progresso real, download, regenerar, **e publicação automática no YouTube** (upload + agendador local). Próximo: painel de estatísticas de verdade.
+
+## Checklist do Google Cloud Console (feito uma vez, por você)
+
+1. [console.cloud.google.com](https://console.cloud.google.com/) → criar projeto
+2. "APIs e serviços" → "Biblioteca" → ativar **YouTube Data API v3**
+3. "Tela de permissão OAuth" → tipo Externo → preencher nome/e-mails → em "Usuários de teste", adicionar seu e-mail → deixar em "Teste" (sem verificação)
+4. "Credenciais" → "Criar credenciais" → "ID do cliente OAuth" → tipo **App para computador** → baixar o JSON
+5. Salvar o arquivo como `client_secret.json` na raiz do projeto
+6. No Painel do app, clicar em "Conectar YouTube" e autorizar
 
 ## Próximos passos
 
-1. Configurar projeto no Google Cloud Console + credenciais OAuth da YouTube Data API
-2. Integração da publicação agendada (usa a "data de postagem" já guardada) + um agendador local que publica sozinho conforme os dias passam + inserção automática de tags/descrição
-3. Tela do "Agente" (chat pra pedir vídeos, pesquisar tendências)
+1. Painel de estatísticas de verdade (YouTube Analytics API)
+2. Tela do "Agente" (chat pra pedir vídeos, pesquisar tendências)

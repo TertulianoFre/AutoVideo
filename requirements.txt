@@ -7,3 +7,6 @@ numpy>=2.0
 fastapi>=0.141
 uvicorn[standard]>=0.53
 python-multipart>=0.0.32
+google-api-python-client>=2.200
+google-auth-httplib2>=0.4
+google-auth-oauthlib>=1.4
