@@ -889,6 +889,7 @@ campoSemNarracao.addEventListener("change", () => {
   // sem narração, o som de fundo é o áudio inteiro do vídeo — obrigatório
   if (semNarracao) campoSomFundoAtivo.checked = true;
   campoSomFundoAtivo.disabled = semNarracao;
+  if (semNarracao) document.getElementById("secao-som").open = true;
   aplicarEstadoSomFundo();
 });
 
@@ -976,6 +977,7 @@ function formatarMmSs(segundos) {
 
 function definirNarracaoGravada(blob, duracaoSegundosConhecida) {
   narracaoGravadaBlob = blob;
+  document.getElementById("linha-voz-idioma").hidden = true;  // com áudio próprio, voz/idioma da IA não servem
   narracaoGravadaPlayer.src = URL.createObjectURL(blob);
   narracaoGravadaResultado.hidden = false;
 
@@ -997,6 +999,7 @@ function definirNarracaoGravada(blob, duracaoSegundosConhecida) {
 
 btnRemoverNarracaoGravada.addEventListener("click", () => {
   narracaoGravadaBlob = null;
+  document.getElementById("linha-voz-idioma").hidden = false;
   narracaoGravadaResultado.hidden = true;
   narracaoGravadaPlayer.removeAttribute("src");
   narracaoGravadaDuracao.textContent = "";

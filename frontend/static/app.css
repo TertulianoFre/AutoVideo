@@ -406,3 +406,14 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .barra-indeterminada[hidden] { display: none; }
 .barra-indeterminada > div { width: 35%; height: 100%; background: var(--accent); border-radius: 4px; animation: barra-vai 1.2s ease-in-out infinite; }
 @keyframes barra-vai { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+
+.secao { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.secao > summary { cursor: pointer; padding: 11px 14px; font-weight: 600; font-size: 13px; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+.secao > summary::-webkit-details-marker { display: none; }
+.secao > summary::after { content: "▾"; color: var(--text-dim); transition: transform .15s; }
+.secao:not([open]) > summary::after { transform: rotate(-90deg); }
+.secao[open] > summary { border-bottom: 1px solid var(--border); }
+.secao > :not(summary) { margin-left: 14px; margin-right: 14px; }
+.secao > *:nth-child(2) { margin-top: 14px; }
+.secao > *:last-child { margin-bottom: 14px; }
+.secao > .row-2 + .row-2, .secao > * + * { margin-top: 12px; }

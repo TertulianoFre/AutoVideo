@@ -195,6 +195,8 @@
         <div class="novo-grid">
           <form id="form-novo" class="card form">
             <div class="video-meta" id="novo-video-canal-ativo" style="margin-top:-6px"></div>
+            <details class="secao" open>
+              <summary>1. Básico</summary>
             <div class="row-2">
               <label>
                 <span>Título <em>(obrigatório)</em></span>
@@ -229,16 +231,15 @@
                 </select>
               </label>
               <label>
-                <span>Quantidade de cenas (opcional)</span>
-                <input type="number" name="num_cenas" min="1" max="40" step="1" placeholder="Automático (ex: 3 ou 4)">
+                <span>Duração alvo (minutos)</span>
+                <input type="number" name="duracao_alvo" id="campo-duracao" min="0.3" step="any" value="1">
               </label>
             </div>
 
-            <label>
-              <span>Descrição do vídeo (opcional — estilo visual, tom, público: "2D simples", "mais detalhado/realista", "infantil e colorido"...)</span>
-              <textarea name="descricao_video" rows="2" placeholder="Ex: estilo mais infantil e colorido, bem simples em 2D"></textarea>
-            </label>
+            </details>
 
+            <details class="secao" open id="secao-roteiro">
+              <summary>2. Roteiro e narração</summary>
             <label class="checkbox-row">
               <input type="checkbox" name="sem_narracao" id="campo-sem-narracao">
               <span>Vídeo sem narração (só som de fundo + imagem — ideal pra vídeos longos, tipo 15-60 min de chuva pra relaxar)</span>
@@ -273,7 +274,7 @@
                 <p class="hint">Se gravar ou enviar um áudio, o campo Roteiro acima precisa ter exatamente o texto que você leu — é o que permite gerar cenas e legenda sincronizadas (de forma aproximada, cortando/repetindo o áudio pra caber certinho). Voz e idioma abaixo ficam sem efeito nesse caso.</p>
               </div>
 
-              <div class="row-2">
+              <div class="row-2" id="linha-voz-idioma">
                 <label>
                   <span>Voz (narração por IA)</span>
                   <select name="voz">
@@ -294,6 +295,34 @@
               </div>
             </div>
 
+            </details>
+
+            <details class="secao" id="secao-imagens">
+              <summary>3. Imagens e cenas</summary>
+            <label>
+              <span>Descrição do vídeo (opcional — estilo visual, tom, público: "2D simples", "mais detalhado/realista", "infantil e colorido"...)</span>
+              <textarea name="descricao_video" rows="2" placeholder="Ex: estilo mais infantil e colorido, bem simples em 2D"></textarea>
+            </label>
+
+            <div class="row-2">
+              <label>
+                <span>Estilo de imagem</span>
+                <select name="imagem">
+                  <option value="procedural">Procedural (rápido, sem internet)</option>
+                  <option value="ia" selected>Gerada por IA (desenho 2D)</option>
+                  <option value="foto">Foto real</option>
+                </select>
+              </label>
+              <label>
+                <span>Quantidade de cenas (opcional)</span>
+                <input type="number" name="num_cenas" min="1" max="40" step="1" placeholder="Automático (ex: 3 ou 4)">
+              </label>
+            </div>
+
+            </details>
+
+            <details class="secao" id="secao-som">
+              <summary>4. Som de fundo</summary>
             <label class="checkbox-row" id="linha-som-fundo">
               <input type="checkbox" name="som_fundo_ativo" id="campo-som-fundo-ativo">
               <span>Som de fundo (baixo, por baixo da narração)</span>
@@ -327,20 +356,7 @@
               <p class="hint">Chuva, música, ondas do mar, fogueira e vento são sintetizados de verdade (localmente, grátis); em "outro", o texto descrito escolhe o mais parecido desses e ainda soma camadas extra por cima se aparecerem na descrição — pássaros, trovão, multidão, passos, sino/carrilhão, trânsito/buzina (ex: "floresta com pássaros", "tempestade com trovão", "cafeteria movimentada", "rua da cidade com trânsito") — sem nada reconhecido, cai pra chuva. Em "Base", usa um áudio que você mesmo importou (aba Base).</p>
             </div>
 
-            <div class="row-2">
-              <label>
-                <span>Estilo de imagem</span>
-                <select name="imagem">
-                  <option value="procedural">Procedural (rápido, sem internet)</option>
-                  <option value="ia" selected>Gerada por IA (desenho 2D)</option>
-                  <option value="foto">Foto real</option>
-                </select>
-              </label>
-              <label>
-                <span>Duração alvo (minutos)</span>
-                <input type="number" name="duracao_alvo" id="campo-duracao" min="0.3" step="any" value="1">
-              </label>
-            </div>
+            </details>
 
             <button type="submit" class="btn-primary">
               <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 4v12M4 10h12"></path></svg>
