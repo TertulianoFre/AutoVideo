@@ -35,11 +35,18 @@ RAIZ_SAIDA.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="Projeto YT")
 
 # roda junto com o app inteiro: confere de tempos em tempos se algum vídeo
-# tem data de postagem vencida e publica sozinho no YouTube.
+# tem data de postagem vencida e publica sozinho no YouTube (cada um na conta
+# do canal dele — engine.agendador resolve isso por vídeo).
 agendador.iniciar_agendador()
 
-CONTA_YOUTUBE_PADRAO = "principal"
-_estado_conexao_youtube = {"status": "ocioso", "erro": None}  # ocioso | conectando | conectado | erro
+# status de conexão do YouTube é por canal (dois canais podem estar
+# conectando ao mesmo tempo, em tese) — chave é o canal_id.
+_estado_conexao_youtube: dict[str, dict] = {}
+
+
+def _estado_de(canal_id: str) -> dict:
+    return _estado_conexao_youtube.setdefault(canal_id, {"status": "ocioso", "erro": None})
+
 
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 app.mount("/videos", StaticFiles(directory=RAIZ_SAIDA), name="videos")
@@ -51,49 +58,81 @@ def pagina_inicial() -> str:
 
 
 # ---------------------------------------------------------------------------
-# contexto do canal
+# canais: cada um tem nome, contexto (nicho/tom/público) e conta do YouTube
+# própria. Um fica "ativo" por vez — é o que Novo Vídeo/Agente usam; a Fila
+# mostra vídeos de todos os canais.
 # ---------------------------------------------------------------------------
 
-@app.get("/api/canal")
-def api_obter_canal() -> dict:
-    return {"contexto": canal.obter_contexto()}
+@app.get("/api/canais")
+def api_listar_canais() -> dict:
+    return {"canais": canal.listar_canais(), "ativo": canal.canal_ativo_id()}
 
 
-@app.post("/api/canal")
-def api_salvar_canal(contexto: str = Form("")) -> dict:
-    canal.salvar_contexto(contexto)
+@app.post("/api/canais")
+def api_criar_canal(nome: str = Form(...), contexto: str = Form("")) -> dict:
+    try:
+        novo = canal.criar_canal(nome, contexto)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    return {"canal": novo}
+
+
+@app.post("/api/canais/{canal_id}/ativar")
+def api_ativar_canal(canal_id: str) -> dict:
+    try:
+        canal.definir_ativo(canal_id)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=404)
     return {"ok": True}
 
 
+@app.post("/api/canais/{canal_id}/editar")
+def api_editar_canal(canal_id: str, nome: str = Form(""), contexto: str = Form("")) -> dict:
+    try:
+        atualizado = canal.atualizar_canal(canal_id, nome=nome or None, contexto=contexto)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=404)
+    return {"canal": atualizado}
+
+
 # ---------------------------------------------------------------------------
-# conexão com o YouTube (publicação automática)
+# conexão com o YouTube (publicação automática) — uma conta por canal
 # ---------------------------------------------------------------------------
 
+def _conta_do_canal(canal_id: str | None) -> str:
+    info = canal.obter_canal(canal_id or canal.canal_ativo_id())
+    return info["conta_youtube"] if info else canal.CANAL_PADRAO_ID
+
+
 @app.get("/api/youtube/status")
-def api_youtube_status() -> dict:
+def api_youtube_status(canal_id: str | None = None) -> dict:
+    conta = _conta_do_canal(canal_id)
+    estado = _estado_de(conta)
     return {
-        "conectado": youtube_mod.esta_conectado(CONTA_YOUTUBE_PADRAO),
-        "conectando": _estado_conexao_youtube["status"] == "conectando",
-        "erro": _estado_conexao_youtube["erro"],
+        "conectado": youtube_mod.esta_conectado(conta),
+        "conectando": estado["status"] == "conectando",
+        "erro": estado["erro"],
         "client_secret_presente": youtube_mod.CLIENT_SECRET_PATH.exists(),
     }
 
 
 @app.post("/api/youtube/conectar")
-def api_youtube_conectar() -> dict:
-    if _estado_conexao_youtube["status"] == "conectando":
+def api_youtube_conectar(canal_id: str | None = Form(None)) -> dict:
+    conta = _conta_do_canal(canal_id)
+    estado = _estado_de(conta)
+    if estado["status"] == "conectando":
         return {"status": "conectando"}
 
-    _estado_conexao_youtube["status"] = "conectando"
-    _estado_conexao_youtube["erro"] = None
+    estado["status"] = "conectando"
+    estado["erro"] = None
 
     def rodar() -> None:
         try:
-            youtube_mod.conectar(CONTA_YOUTUBE_PADRAO)
-            _estado_conexao_youtube["status"] = "conectado"
+            youtube_mod.conectar(conta)
+            estado["status"] = "conectado"
         except Exception as erro:
-            _estado_conexao_youtube["status"] = "erro"
-            _estado_conexao_youtube["erro"] = str(erro)
+            estado["status"] = "erro"
+            estado["erro"] = str(erro)
 
     # abre o navegador padrão do sistema e espera você autorizar — não pode
     # rodar na thread principal, ia travar o servidor até você terminar.
@@ -102,9 +141,9 @@ def api_youtube_conectar() -> dict:
 
 
 @app.get("/api/youtube/estatisticas")
-def api_youtube_estatisticas() -> JSONResponse:
+def api_youtube_estatisticas(canal_id: str | None = None) -> JSONResponse:
     try:
-        return JSONResponse(youtube_mod.obter_estatisticas_canal(CONTA_YOUTUBE_PADRAO))
+        return JSONResponse(youtube_mod.obter_estatisticas_canal(_conta_do_canal(canal_id)))
     except Exception as erro:
         # inclui HttpError da API do Google (ex: token sem o escopo readonly
         # ainda, porque foi conectado antes desse escopo existir).
@@ -117,15 +156,18 @@ def api_youtube_estatisticas() -> JSONResponse:
 
 @app.post("/api/agente/sugestoes")
 def api_agente_sugestoes() -> JSONResponse:
+    """Sempre sobre o canal ATIVO — é ele que define o contexto e a conta do
+    YouTube usados pra puxar tendências."""
+    conta = _conta_do_canal(None)
     tendencias = []
     aviso_tendencias = None
-    if youtube_mod.esta_conectado(CONTA_YOUTUBE_PADRAO):
+    if youtube_mod.esta_conectado(conta):
         try:
-            tendencias = youtube_mod.obter_tendencias(CONTA_YOUTUBE_PADRAO)
+            tendencias = youtube_mod.obter_tendencias(conta)
         except Exception as erro:
             aviso_tendencias = f"Não consegui buscar tendências ({erro}) — sugestões vão sair sem esse contexto."
     else:
-        aviso_tendencias = "Conecte o YouTube (no perfil) pra sugestões levarem em conta o que está em alta."
+        aviso_tendencias = "Conecte o YouTube (na aba Canais) pra sugestões levarem em conta o que está em alta."
 
     try:
         ideias = agente.sugerir_ideias(canal.obter_contexto(), tendencias)
@@ -188,6 +230,7 @@ def api_criar_video(
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao.strip(),
+        canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
     job = jobs.criar_job(titulo, params)
@@ -225,6 +268,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         sem_narracao=sem_narracao,
         som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
+        canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
     job = jobs.criar_job(titulo, params)
@@ -390,10 +434,15 @@ def api_listar_videos() -> list[dict]:
         tags = tags_path.read_text(encoding="utf-8") if tags_path.exists() else ""
         thumb_path = pasta / "thumbnail.png"
 
+        canal_id_video = metadados.get("canal_id") or canal.CANAL_PADRAO_ID
+        canal_info = canal.obter_canal(canal_id_video)
+
         videos.append(
             {
                 "slug": pasta.name,
                 "titulo": metadados.get("titulo") or pasta.name.replace("-", " "),
+                "canal_id": canal_id_video,
+                "canal_nome": canal_info["nome"] if canal_info else canal_id_video,
                 "sem_narracao": metadados.get("sem_narracao", False),
                 "som_fundo_tipo": metadados.get("som_fundo_tipo", ""),
                 "data_postagem": metadados.get("data_postagem"),

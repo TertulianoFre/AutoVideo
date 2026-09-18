@@ -9,12 +9,21 @@ import time
 from datetime import date
 from pathlib import Path
 
+from engine import canal as canal_mod
 from engine import youtube
 from engine.pipeline import RAIZ_SAIDA
 
 INTERVALO_SEGUNDOS = 600  # confere a cada 10 min
-CONTA_PADRAO = "principal"
 PRIVACIDADE_PADRAO = "private"  # comece privado até confiar no fluxo automático
+
+
+def _conta_youtube_do_video(metadados: dict) -> str:
+    """Cada vídeo é de um canal (metadados["canal_id"]); publica na conta do
+    YouTube própria desse canal. Vídeos de antes desse recurso existir não têm
+    canal_id salvo — caem no canal padrão, mesmo comportamento de sempre."""
+    canal_id = metadados.get("canal_id") or canal_mod.CANAL_PADRAO_ID
+    canal = canal_mod.obter_canal(canal_id)
+    return canal["conta_youtube"] if canal else canal_mod.CANAL_PADRAO_ID
 
 
 def _salvar_metadados(caminho_meta: Path, metadados: dict) -> None:
@@ -50,7 +59,7 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     _salvar_metadados(caminho_meta, metadados)
 
 
-def publicar_pendentes(nome_conta: str = CONTA_PADRAO) -> None:
+def publicar_pendentes() -> None:
     if not RAIZ_SAIDA.exists():
         return
     hoje = date.today().isoformat()
@@ -74,8 +83,9 @@ def publicar_pendentes(nome_conta: str = CONTA_PADRAO) -> None:
         if not (v16.exists() and v9.exists()):
             continue  # geração ainda não terminou
 
+        nome_conta = _conta_youtube_do_video(metadados)
         if not youtube.esta_conectado(nome_conta):
-            metadados["publicacao_erro"] = "Conta do YouTube não conectada — conecte no Painel."
+            metadados["publicacao_erro"] = f"Conta do YouTube do canal '{metadados.get('canal_id', canal_mod.CANAL_PADRAO_ID)}' não conectada — conecte na aba Canais."
             _salvar_metadados(caminho_meta, metadados)
             continue
 

@@ -1,4 +1,4 @@
-const TITULOS = { painel: "Painel", agente: "Agente", novo: "Novo vídeo", fila: "Fila" };
+const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila" };
 
 function trocarAba(nome) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === nome));
@@ -6,6 +6,7 @@ function trocarAba(nome) {
   document.getElementById("page-title").textContent = TITULOS[nome];
   if (nome === "painel") carregarPainel();
   if (nome === "fila") carregarFila();
+  if (nome === "canais") carregarCanais();
 }
 
 document.querySelectorAll(".nav-item").forEach((botao) => {
@@ -39,11 +40,14 @@ function statusPublicacao(v) {
   return "";
 }
 
+let mostrarBadgeCanal = false; // só quando existe mais de 1 canal, evita ruído pra quem usa só 1
+
 function linhaDeVideo(v, comRegenerar) {
   const rotulos = [];
   if (v.sem_narracao) rotulos.push("sem narração");
   if (v.som_fundo_tipo) rotulos.push(`som: ${v.som_fundo_tipo}`);
   const modoLabel = rotulos.length ? `· ${rotulos.join(", ")}` : "";
+  const badgeCanal = mostrarBadgeCanal && v.canal_nome ? `<span class="canal-badge">${v.canal_nome}</span>` : "";
   const thumb = v.thumbnail
     ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
     : ICONE_VIDEO;
@@ -60,7 +64,7 @@ function linhaDeVideo(v, comRegenerar) {
       <div class="video-row" data-slug="${v.slug}">
         <div class="video-thumb">${thumb}</div>
         <div class="video-info">
-          <div class="video-title">${v.titulo}</div>
+          <div class="video-title">${v.titulo} ${badgeCanal}</div>
           <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem)} ${modoLabel}</div>
           ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
         </div>
@@ -370,21 +374,123 @@ async function regenerarVideo(botao) {
   }, 1200);
 }
 
-// ---------------- Contexto do canal ----------------
+// ---------------- Canais (seletor no menu + aba de gerenciar) ----------------
 
-const formCanal = document.getElementById("form-canal");
-const canalStatus = document.getElementById("canal-status");
+const seletorCanal = document.getElementById("seletor-canal");
+const novoVideoCanalAtivo = document.getElementById("novo-video-canal-ativo");
 
-fetch("/api/canal")
-  .then((r) => r.json())
-  .then((dados) => { formCanal.querySelector("[name=contexto]").value = dados.contexto || ""; });
+async function buscarCanais() {
+  const resposta = await fetch("/api/canais");
+  return resposta.ok ? resposta.json() : { canais: [], ativo: null };
+}
 
-formCanal.addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  await fetch("/api/canal", { method: "POST", body: new FormData(formCanal) });
-  canalStatus.textContent = "Salvo — os próximos roteiros já usam esse contexto.";
-  setTimeout(() => (canalStatus.textContent = ""), 4000);
+async function popularSeletorCanal() {
+  const { canais, ativo } = await buscarCanais();
+  mostrarBadgeCanal = canais.length > 1;
+  seletorCanal.innerHTML = canais
+    .map((c) => `<option value="${c.id}"${c.id === ativo ? " selected" : ""}>${c.nome}</option>`)
+    .join("");
+  const canalAtivo = canais.find((c) => c.id === ativo);
+  if (novoVideoCanalAtivo) {
+    novoVideoCanalAtivo.textContent = canalAtivo ? `Canal: ${canalAtivo.nome}` : "";
+  }
+  return { canais, ativo };
+}
+
+seletorCanal.addEventListener("change", async () => {
+  await fetch(`/api/canais/${seletorCanal.value}/ativar`, { method: "POST" });
+  await popularSeletorCanal();
+  // perfil (YouTube) e estatísticas do Painel são sempre do canal ativo
+  atualizarStatusYoutube();
+  if (document.getElementById("tab-painel").classList.contains("active")) carregarPainel();
+  if (document.getElementById("tab-canais").classList.contains("active")) carregarCanais();
 });
+
+function linhaDeCanal(c, ativo) {
+  return `
+    <div class="canal-card" data-id="${c.id}">
+      <div class="canal-card-head">
+        <input type="text" class="canal-nome-input" value="${c.nome.replace(/"/g, "&quot;")}" maxlength="60">
+        ${c.id === ativo ? '<span class="tag-pill">ativo</span>' : `<button type="button" class="btn-secondary btn-ativar-canal" data-id="${c.id}">Definir como ativo</button>`}
+      </div>
+      <label>
+        <span>Contexto (nicho, tom, público)</span>
+        <textarea class="canal-contexto-input" rows="3">${c.contexto || ""}</textarea>
+      </label>
+      <div class="canal-card-actions">
+        <button type="button" class="btn-secondary btn-salvar-canal" data-id="${c.id}">Salvar</button>
+        <span class="video-meta canal-yt-status" data-id="${c.id}">Verificando YouTube…</span>
+      </div>
+    </div>`;
+}
+
+async function carregarCanais() {
+  const lista = document.getElementById("canais-lista");
+  const { canais, ativo } = await buscarCanais();
+  lista.innerHTML = canais.map((c) => linhaDeCanal(c, ativo)).join("");
+
+  lista.querySelectorAll(".btn-ativar-canal").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      await fetch(`/api/canais/${botao.dataset.id}/ativar`, { method: "POST" });
+      await popularSeletorCanal();
+      atualizarStatusYoutube();
+      carregarCanais();
+    });
+  });
+
+  lista.querySelectorAll(".btn-salvar-canal").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      const card = botao.closest(".canal-card");
+      const nome = card.querySelector(".canal-nome-input").value.trim();
+      const contexto = card.querySelector(".canal-contexto-input").value;
+      const dados = new FormData();
+      dados.set("nome", nome);
+      dados.set("contexto", contexto);
+      botao.disabled = true;
+      botao.textContent = "Salvando…";
+      await fetch(`/api/canais/${botao.dataset.id}/editar`, { method: "POST", body: dados });
+      botao.disabled = false;
+      botao.textContent = "Salvo!";
+      setTimeout(() => (botao.textContent = "Salvar"), 2000);
+      popularSeletorCanal();
+    });
+  });
+
+  // status do YouTube de cada canal, só leitura (conectar é sempre pelo
+  // perfil, no canal ativo — evita duplicar o fluxo de conexão em cada card)
+  canais.forEach(async (c) => {
+    const spanStatus = lista.querySelector(`.canal-yt-status[data-id="${c.id}"]`);
+    if (!spanStatus) return;
+    try {
+      const resposta = await fetch(`/api/youtube/status?canal_id=${c.id}`);
+      const dados = await resposta.json();
+      spanStatus.textContent = dados.conectado ? "YouTube: conectado" : "YouTube: não conectado";
+    } catch {
+      spanStatus.textContent = "";
+    }
+  });
+}
+
+const formNovoCanal = document.getElementById("form-novo-canal");
+const novoCanalStatus = document.getElementById("novo-canal-status");
+
+formNovoCanal.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  novoCanalStatus.textContent = "Criando…";
+  const resposta = await fetch("/api/canais", { method: "POST", body: new FormData(formNovoCanal) });
+  const dados = await resposta.json();
+  if (dados.erro) {
+    novoCanalStatus.textContent = `Deu erro: ${dados.erro}`;
+    return;
+  }
+  formNovoCanal.reset();
+  novoCanalStatus.textContent = "Canal criado!";
+  setTimeout(() => (novoCanalStatus.textContent = ""), 3000);
+  popularSeletorCanal();
+  carregarCanais();
+});
+
+popularSeletorCanal();
 
 // ---------------- Novo vídeo: sem narração + som de fundo ----------------
 

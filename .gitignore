@@ -11,6 +11,9 @@ client_secret*.json
 token.json
 dados/tokens/
 
+# Dados pessoais de uso (canais, contexto de cada um — evolui com o uso, não é template)
+dados/canais.json
+
 # Saída gerada (vídeos, áudio, imagens grandes)
 output/
 *.mp4

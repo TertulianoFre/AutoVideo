@@ -67,12 +67,17 @@ def gerar_video(
     sem_narracao: bool = False,
     som_fundo_tipo: str = "",
     som_fundo_descricao: str = "",
+    canal_id: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
     por padrão) + imagem, sem roteiro/voz/legenda — pensado pra vídeos longos.
     sem_narracao=False (padrão): vídeo narrado normal; som_fundo_tipo opcional
-    mistura um som de fundo bem baixo por baixo da narração."""
+    mistura um som de fundo bem baixo por baixo da narração.
+    canal_id: de qual canal é esse vídeo (contexto usado pro roteiro automático
+    e conta do YouTube usada na publicação); None = canal ativo no momento."""
+
+    canal_id = canal_id or canal.canal_ativo_id()
 
     def avisar(etapa: str, percentual: float) -> None:
         if progresso is not None:
@@ -92,6 +97,7 @@ def gerar_video(
         voz=voz,
         estilo_imagem=estilo_imagem,
         duracao_alvo_minutos=duracao_alvo_minutos,
+        canal_id=canal_id,
     )
 
     tags: list = []
@@ -114,7 +120,7 @@ def gerar_video(
             roteiro = roteiro_mod.gerar_roteiro(
                 titulo,
                 duracao_alvo_minutos or 1.0,
-                contexto_canal=canal.obter_contexto(),
+                contexto_canal=canal.obter_contexto(canal_id),
                 descricao_video=descricao_video,
             )
             print(f"[roteiro gerado]\n{roteiro}\n")
