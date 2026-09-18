@@ -175,6 +175,19 @@ def _tags_validas(tags: list) -> list:
     return limpas
 
 
+def definir_thumbnail(nome_conta: str, video_id: str, caminho_imagem: Path) -> None:
+    """Envia a thumbnail personalizada. O upload do vídeo não leva ela junto —
+    é uma chamada separada. Precisa que o canal esteja verificado (telefone) no
+    YouTube pra permitir thumbnails personalizadas."""
+    creds = _carregar_credenciais(nome_conta)
+    if creds is None:
+        raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
+    youtube = build("youtube", "v3", credentials=creds)
+    youtube.thumbnails().set(
+        videoId=video_id, media_body=MediaFileUpload(str(caminho_imagem), mimetype="image/png")
+    ).execute()
+
+
 def publicar_video(
     caminho_video: Path,
     titulo: str,

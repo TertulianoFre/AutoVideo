@@ -51,6 +51,17 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
         _salvar_metadados(caminho_meta, metadados)
         print(f"[agendador] 16:9 publicado: {titulo} -> https://youtu.be/{id_normal}")
 
+    thumb = pasta / "thumbnail.png"
+    if metadados.get("youtube_video_id") and thumb.exists() and not metadados.get("thumbnail_enviada"):
+        try:
+            youtube.definir_thumbnail(nome_conta, metadados["youtube_video_id"], thumb)
+            metadados["thumbnail_enviada"] = True
+            print(f"[agendador] thumbnail enviada: {titulo}")
+        except Exception as erro:
+            # não trava a publicação: a causa comum é canal sem verificação por telefone
+            print(f"[agendador] thumbnail não enviada ({titulo}): {erro}")
+        _salvar_metadados(caminho_meta, metadados)
+
     if v9.exists() and not metadados.get("youtube_short_id"):
         id_short = youtube.publicar_video(v9, titulo, descricao, tags, nome_conta, privacidade, is_short=True)
         metadados["youtube_short_id"] = id_short
