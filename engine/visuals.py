@@ -349,6 +349,9 @@ _PALAVRAS_GENERICAS = {
 }
 
 
+_trava_ia = __import__("threading").Lock()
+
+
 def _assunto_do_video(contexto: str, pasta: Path) -> str:
     """Assunto principal do vídeo em inglês (1-2 palavras, ex: "octopus"). Uma
     chamada por vídeo, guardada em assunto_foto.txt — o serviço gratuito de IA
@@ -390,7 +393,8 @@ def _termos_de_busca(cena: str, contexto: str, pasta: Path) -> tuple:
     assunto = _assunto_do_video(contexto, pasta)
     chaves = ""
     try:
-        texto = chamar_pollinations(
+        with _trava_ia:
+          texto = chamar_pollinations(
             [
                 {"role": "system", "content": f"Responda SÓ com 1 a 3 palavras-chave em inglês, simples e comuns, pra buscar num banco de fotos uma imagem que ilustre o trecho. O assunto do vídeo é \"{assunto}\"; a foto deve ser sobre ele. Sem pontuação."},
                 {"role": "user", "content": cena},

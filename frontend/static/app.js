@@ -91,6 +91,7 @@ function linhaDeVideo(v, comRegenerar) {
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
        ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
+       ${!publicado && !v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-roteiro" data-slug="${v.slug}" title="Corrigir o texto do roteiro e gerar o vídeo de novo com ele">editar roteiro</button>` : ""}
        ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar texto, cor, efeito e posição das thumbnails (normal e Shorts)">editar thumbnail</button>` : ""}
        ${v.tem_cenas && !publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
@@ -115,6 +116,7 @@ function linhaDeVideo(v, comRegenerar) {
       </div>
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
+      ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="roteiro-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
 
@@ -191,7 +193,10 @@ function aplicarFiltrosFila() {
     ? filtrados.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
 
-  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb)").forEach((botao) => {
+  lista.querySelectorAll(".btn-editar-roteiro").forEach((botao) => {
+    botao.addEventListener("click", () => alternarPainelRoteiro(botao));
+  });
+  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb):not(.btn-editar-roteiro)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
   });
   lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {
@@ -552,6 +557,46 @@ async function salvarThumb(slug, painel) {
 
 // ---------------- Fila: editar uma cena específica ----------------
 
+async function alternarPainelRoteiro(botao) {
+  const slug = botao.dataset.slug;
+  const painel = document.querySelector(`.roteiro-painel[data-slug="${slug}"]`);
+  const abrindo = !painel.classList.contains("aberto");
+  painel.classList.toggle("aberto", abrindo);
+  botao.textContent = abrindo ? "esconder roteiro" : "editar roteiro";
+  if (!abrindo || painel.dataset.carregado === "true") return;
+
+  painel.innerHTML = '<div class="cenas-status">Carregando roteiro…</div>';
+  const dados = await fetch(`/api/videos/${slug}/roteiro`).then((r) => r.json());
+  if (dados.erro || dados.narracao_propria) {
+    painel.innerHTML = `<div class="cenas-status">${dados.erro || "Esse vídeo usa a narração que você gravou/enviou; o texto precisa continuar igual ao áudio."}</div>`;
+    return;
+  }
+  painel.dataset.carregado = "true";
+  painel.innerHTML = `
+    <div class="cenas-status">Corrija o texto (um parágrafo por cena, separados por linha em branco). Ao salvar, o vídeo é gerado de novo com esse roteiro: narração, legenda e cenas são refeitas, e as imagens das cenas são sorteadas outra vez (trocas manuais de imagem se perdem).</div>
+    <textarea class="roteiro-edicao" rows="12"></textarea>
+    <div class="cena-card-acoes">
+      <button type="button" class="btn-secondary btn-salvar-roteiro">Salvar e gerar de novo</button>
+      <span class="video-meta roteiro-edicao-status"></span>
+    </div>`;
+  const campo = painel.querySelector(".roteiro-edicao");
+  campo.value = dados.roteiro;
+  painel.querySelector(".btn-salvar-roteiro").addEventListener("click", async () => {
+    const status = painel.querySelector(".roteiro-edicao-status");
+    const corpo = new FormData();
+    corpo.set("roteiro", campo.value);
+    const resposta = await fetch(`/api/videos/${slug}/roteiro`, { method: "PUT", body: corpo });
+    const resultado = await resposta.json();
+    if (resultado.erro) {
+      status.textContent = `Deu erro: ${resultado.erro}`;
+      return;
+    }
+    status.textContent = "Roteiro salvo — gerando de novo…";
+    // "Regenerar" mantém o roteiro.txt (agora o editado) e refaz o resto
+    document.querySelector(`.video-row[data-slug="${slug}"] .btn-regenerar[data-manter-roteiro="true"]`).click();
+  });
+}
+
 function formatarTempo(segundos) {
   const s = Math.round(segundos || 0);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -606,8 +651,25 @@ async function alternarPainelCenas(botao) {
   painel.dataset.carregado = "true";
   const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
-    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. "Gerar outra imagem" sorteia de novo; "Enviar imagem" usa uma sua. Roteiro, narração e as outras cenas continuam intactos.</div>
-    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>`;
+    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. "Gerar outra imagem" sorteia de novo; "Enviar imagem" usa uma sua. Roteiro, narração e as outras cenas continuam intactos. Cada troca vale na hora e várias podem rodar ao mesmo tempo.</div>
+    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>
+    <div class="cenas-rodape">
+      <button type="button" class="btn-secondary btn-concluir-cenas">Concluir e fechar</button>
+      <span class="video-meta cenas-rodape-status"></span>
+    </div>`;
+
+  painel.querySelector(".btn-concluir-cenas").addEventListener("click", () => {
+    const status = painel.querySelector(".cenas-rodape-status");
+    if (painel.querySelector(".cena-card button:disabled")) {
+      status.textContent = "Ainda tem cena sendo gerada — espere terminar.";
+      return;
+    }
+    // nada a "salvar": cada troca já foi aplicada ao vídeo. Aqui só fecha e atualiza a linha.
+    painel.dataset.carregado = "";
+    painel.classList.remove("aberto");
+    botao.textContent = "cenas";
+    carregarFila();
+  });
 
   painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
     b.addEventListener("click", () => regenerarCena(b));

@@ -5,6 +5,7 @@ Um único fluxo pra tudo: vídeo narrado normal, com ou sem som de fundo
 som de fundo + imagem, pra vídeos longos de relaxar/dormir)."""
 
 import json
+import threading
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -315,6 +316,17 @@ def gerar_video(
     return ResultadoGeracao(pasta, audio_path, videos.get("16:9"), videos.get("9:16"), duracao_real, roteiro_final, tags, caminho_thumb)
 
 
+_travas_de_video: dict = {}
+_travas_lock = threading.Lock()
+
+
+def _trava_do_video(slug: str) -> "threading.Lock":
+    """Várias cenas do mesmo vídeo podem gerar a imagem ao mesmo tempo, mas a
+    remontagem do mp4 é uma de cada vez (senão duas escrevem o mesmo arquivo)."""
+    with _travas_lock:
+        return _travas_de_video.setdefault(slug, threading.Lock())
+
+
 def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None, imagem_propria: Path | None = None) -> dict:
     """Refaz só a imagem de UMA cena (a IA sorteia de novo) e remonta o vídeo
     final com as imagens das outras cenas intactas — não mexe em roteiro,
@@ -377,19 +389,21 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
 
         passo += 1
         avisar(f"Remontando o vídeo ({formato})", 10 + 80 * passo / total_passos)
-        imagens_com_duracao = []
-        for i, cena in enumerate(cenas):
-            img = pasta / f"cena{i:02d}_{sufixo}.png"
-            if not img.exists():
-                raise RuntimeError(f"Imagem da cena {i} sumiu do disco — regenere o vídeo inteiro uma vez.")
-            imagens_com_duracao.append((img, cena["duracao_segundos"]))
+        with _trava_do_video(slug):
+            # lê as imagens só depois de pegar a vez: inclui as trocas que outras cenas terminaram nesse meio-tempo
+            imagens_com_duracao = []
+            for i, cena in enumerate(cenas):
+                img = pasta / f"cena{i:02d}_{sufixo}.png"
+                if not img.exists():
+                    raise RuntimeError(f"Imagem da cena {i} sumiu do disco — regenere o vídeo inteiro uma vez.")
+                imagens_com_duracao.append((img, cena["duracao_segundos"]))
 
-        legenda_path = pasta / f"legenda_{sufixo}.ass"
-        legenda_path = legenda_path if (not sem_narracao and legenda_path.exists()) else None
+            legenda_path = pasta / f"legenda_{sufixo}.ass"
+            legenda_path = legenda_path if (not sem_narracao and legenda_path.exists()) else None
 
-        caminho_video = pasta / f"video_{sufixo}.mp4"
-        render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video)
-        nomes_video[formato] = caminho_video.name
+            caminho_video = pasta / f"video_{sufixo}.mp4"
+            render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video)
+            nomes_video[formato] = caminho_video.name
 
     if indice == 0:
         avisar("Atualizando a thumbnail", 95)

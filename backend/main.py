@@ -618,6 +618,36 @@ def api_criar_video(
     return {"job_id": job.id}
 
 
+@app.get("/api/videos/{slug}/roteiro")
+def api_ler_roteiro(slug: str) -> dict:
+    pasta = RAIZ_SAIDA / slug
+    caminho = pasta / "roteiro.txt"
+    if "/" in slug or "\\" in slug or not (pasta / "metadata.json").exists() or not caminho.exists():
+        return JSONResponse({"erro": "roteiro não encontrado"}, status_code=404)
+    metadados = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
+    return {"roteiro": caminho.read_text(encoding="utf-8"), "narracao_propria": bool(metadados.get("narracao_customizada")), "publicado": bool(metadados.get("publicado"))}
+
+
+@app.put("/api/videos/{slug}/roteiro")
+def api_salvar_roteiro(slug: str, roteiro: str = Form(...)) -> dict:
+    """Guarda o roteiro editado. Não regenera nada sozinho: o "Regenerar" (que mantém o roteiro) é que
+    refaz narração, legenda e cenas a partir dele."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if metadados.get("publicado"):
+        return JSONResponse({"erro": "esse vídeo já foi publicado — mudar o roteiro não altera o que está no YouTube"}, status_code=409)
+    if metadados.get("narracao_customizada"):
+        return JSONResponse({"erro": "esse vídeo usa a narração que você gravou/enviou — o texto tem que continuar igual ao áudio"}, status_code=409)
+    roteiro = roteiro.strip()
+    if len(roteiro) < 20:
+        return JSONResponse({"erro": "roteiro curto demais"}, status_code=400)
+    (pasta / "roteiro.txt").write_text(roteiro, encoding="utf-8")
+    return {"ok": True}
+
+
 @app.post("/api/videos/{slug}/regenerar")
 def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
     """Gera tudo de novo — narração, imagens, montagem. Por padrão mantém o
@@ -980,16 +1010,20 @@ def api_regenerar_cena(slug: str, indice: int) -> dict:
     return {"job_id": job.id}
 
 
+_trava_metadados_cenas = threading.Lock()
+
+
 def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | None) -> None:
     """Registra (ou limpa, com None) qual imagem da Base está numa cena — é o que faz a Base mostrar "usado em"."""
-    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    mapa = meta.get("imagens_base_cenas") or {}
-    if nome:
-        mapa[str(indice)] = nome
-    else:
-        mapa.pop(str(indice), None)
-    meta["imagens_base_cenas"] = mapa
-    caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    with _trava_metadados_cenas:
+        meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+        mapa = meta.get("imagens_base_cenas") or {}
+        if nome:
+            mapa[str(indice)] = nome
+        else:
+            mapa.pop(str(indice), None)
+        meta["imagens_base_cenas"] = mapa
+        caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 @app.post("/api/videos/{slug}/cenas/{indice}/imagem-base")

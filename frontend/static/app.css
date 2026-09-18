@@ -444,3 +444,8 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .roteiro-cena { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12.5px; line-height: 1.45; }
 .roteiro-cenas-ok { font-size: 12px; color: var(--text-dim); }
 .roteiro-cenas-aviso { font-size: 12px; color: var(--accent); }
+.roteiro-painel { display: none; padding: 4px 2px 14px; }
+.roteiro-painel.aberto { display: block; }
+.roteiro-edicao { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; line-height: 1.5; margin: 8px 0; }
+
+.cenas-rodape { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
