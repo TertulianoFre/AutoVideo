@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from engine import canal as canal_mod
+from engine import thumbnail as thumbnail_mod
 from engine import youtube
 from engine.pipeline import RAIZ_SAIDA
 
@@ -28,6 +29,27 @@ def _conta_youtube_do_video(metadados: dict) -> str:
 
 def _salvar_metadados(caminho_meta: Path, metadados: dict) -> None:
     caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _thumbnail_shorts(pasta: Path, metadados: dict) -> Path | None:
+    """Versão vertical (1080x1920) da thumbnail, com o mesmo texto/cor/posição
+    editados pra do vídeo normal, em cima da cena vertical."""
+    base = pasta / "cena00_9x16.png"
+    if not base.exists():
+        return None
+    px = metadados.get("thumbnail_tamanho_px")
+    x, y = metadados.get("thumbnail_pos_x"), metadados.get("thumbnail_pos_y")
+    livre = (x, y) if isinstance(x, (int, float)) and isinstance(y, (int, float)) else None
+    return thumbnail_mod.gerar_thumbnail(
+        base,
+        metadados.get("thumbnail_texto") or metadados.get("titulo", pasta.name),
+        pasta / "thumbnail_shorts.png",
+        thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", "")),
+        metadados.get("thumbnail_posicao", "baixo-centro"),
+        int(px) if isinstance(px, (int, float)) and px else 80,
+        livre,
+        tamanho=(1080, 1920),
+    )
 
 
 def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: str) -> None:
@@ -67,6 +89,17 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
         metadados["youtube_short_id"] = id_short
         _salvar_metadados(caminho_meta, metadados)
         print(f"[agendador] short publicado: {titulo} -> https://youtu.be/{id_short}")
+
+    if metadados.get("youtube_short_id") and not metadados.get("thumbnail_short_enviada"):
+        try:
+            thumb_short = _thumbnail_shorts(pasta, metadados)
+            if thumb_short:
+                youtube.definir_thumbnail(nome_conta, metadados["youtube_short_id"], thumb_short)
+                metadados["thumbnail_short_enviada"] = True
+                print(f"[agendador] thumbnail do short enviada: {titulo}")
+        except Exception as erro:
+            print(f"[agendador] thumbnail do short não enviada ({titulo}): {erro}")
+        _salvar_metadados(caminho_meta, metadados)
 
     metadados["publicado"] = True
     metadados.pop("publicacao_erro", None)

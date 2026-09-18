@@ -58,12 +58,14 @@ def gerar_thumbnail(
     posicao: str = "baixo-centro",
     tamanho_fonte: int = 80,
     pos_livre: tuple[float, float] | None = None,
+    tamanho: tuple[int, int] = (LARGURA, ALTURA),
 ) -> Path:
     """pos_livre: (fracao_x, fracao_y) do CENTRO do bloco de texto, cada um de
     0.0 a 1.0 — posição arrastável de verdade, em vez da grade de 9 pontos.
     Quando dado, sobrepõe `posicao` (que continua sendo o padrão/fallback pra
     thumbnails antigas). Com pos_livre, o texto sempre fica centralizado no
     ponto X escolhido (arrastar não tem conceito de "alinhar à esquerda")."""
+    LARGURA, ALTURA = tamanho  # vertical (Shorts) usa outro tamanho de tela
     cor = cor_texto or COR_TEXTO
     tamanho_fonte = max(TAMANHO_FONTE_MIN, min(TAMANHO_FONTE_MAX, tamanho_fonte))
     base = Image.open(imagem_base).convert("RGB").resize((LARGURA, ALTURA), Image.LANCZOS)
