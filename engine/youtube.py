@@ -5,6 +5,7 @@ autoriza); depois fica salva localmente em dados/tokens/ e só pede de novo se
 expirar (contas em modo "teste" no Google expiram a cada 7 dias — limitação
 do Google, não do código)."""
 
+import re
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -158,6 +159,22 @@ def obter_tendencias(nome_conta: str, regiao: str = "BR", quantidade: int = 15) 
     return [item["snippet"]["title"] for item in resposta.get("items", []) if item.get("snippet")]
 
 
+def _tags_validas(tags: list) -> list:
+    """O YouTube recusa o upload inteiro se uma tag tiver caracteres inválidos
+    (< > etc.) ou o total passar de 500 caracteres — limpa antes de enviar."""
+    limpas, total = [], 0
+    for tag in tags:
+        tag = re.sub(r"<\|[^|>]*\|>", "", tag)
+        tag = re.sub(r"[<>|#]", "", tag).strip()[:60]
+        if not tag or tag.casefold() in (t.casefold() for t in limpas):
+            continue
+        if total + len(tag) + 1 > 480:
+            break
+        limpas.append(tag)
+        total += len(tag) + 1
+    return limpas
+
+
 def publicar_video(
     caminho_video: Path,
     titulo: str,
@@ -176,6 +193,7 @@ def publicar_video(
 
     youtube = build("youtube", "v3", credentials=creds)
 
+    tags = _tags_validas(tags)
     titulo_final = f"{titulo} #Shorts" if is_short else titulo
     corpo = {
         "snippet": {

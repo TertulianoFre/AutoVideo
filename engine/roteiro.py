@@ -2,6 +2,7 @@
 API de texto gratuita da Pollinations.ai (compatível com o formato da OpenAI,
 sem chave)."""
 
+import re
 import time
 
 import requests
@@ -35,7 +36,9 @@ def chamar_pollinations(mensagens: list, tentativas: int = 4) -> str:
             if resposta.ok:
                 dados = resposta.json()
                 escolhas = dados.get("choices") or []
-                texto = (escolhas[0].get("message", {}).get("content", "") if escolhas else "").strip()
+                texto = (escolhas[0].get("message", {}).get("content", "") if escolhas else "")
+                # o modelo às vezes vaza tokens especiais tipo <|endoftext|> no texto
+                texto = re.sub(r"<\|[^|>]*\|>", "", texto).strip()
                 if texto:
                     return texto
                 ultimo_erro = f"resposta sem conteúdo: {str(dados)[:200]}"
