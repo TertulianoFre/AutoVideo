@@ -175,15 +175,10 @@ let videosFilaCache = [];
 function aplicarFiltrosFila() {
   const canal = document.getElementById("filtro-canal").value;
   const status = document.getElementById("filtro-status").value;
-  const minMin = parseFloat(document.getElementById("filtro-duracao-min").value);
-  const maxMin = parseFloat(document.getElementById("filtro-duracao-max").value);
 
   const filtrados = videosFilaCache.filter((v) => {
     if (canal && v.canal_id !== canal) return false;
     if (status && v.status !== status) return false;
-    const minutos = (v.duracao_segundos || 0) / 60;
-    if (!isNaN(minMin) && minutos < minMin) return false;
-    if (!isNaN(maxMin) && minutos > maxMin) return false;
     return true;
   });
 
@@ -243,7 +238,7 @@ document.addEventListener("click", async (evento) => {
   carregarPainel();
 });
 
-["filtro-canal", "filtro-status", "filtro-duracao-min", "filtro-duracao-max"].forEach((id) => {
+["filtro-canal", "filtro-status"].forEach((id) => {
   document.getElementById(id).addEventListener("input", aplicarFiltrosFila);
 });
 
