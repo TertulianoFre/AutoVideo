@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from backend import jobs
-from engine import agendador, agente, biblioteca, canal, roteiro as roteiro_mod
+from engine import afiliados, agendador, agente, biblioteca, canal, roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import tts as tts_mod
 from engine import youtube as youtube_mod
@@ -293,6 +293,37 @@ async def api_upload_imagem_biblioteca(arquivo: UploadFile = File(...)) -> JSONR
 def api_remover_imagem_biblioteca(nome: str) -> JSONResponse:
     if not biblioteca.remover_imagem(Path(nome).name):
         return JSONResponse({"erro": "imagem não encontrada"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# afiliados: lista de produtos/links pra divulgar (ideia guardada, ainda sem
+# inserção automática nos vídeos)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/afiliados")
+def api_listar_afiliados() -> list[dict]:
+    return afiliados.listar()
+
+
+@app.post("/api/afiliados")
+def api_adicionar_afiliado(
+    nome: str = Form(...),
+    plataforma: str = Form("outro"),
+    link: str = Form(""),
+    nota: str = Form(""),
+) -> JSONResponse:
+    nome = nome.strip()
+    if not nome:
+        return JSONResponse({"erro": "dê um nome pro produto"}, status_code=400)
+    item = afiliados.adicionar(nome, plataforma, link, nota)
+    return JSONResponse(item)
+
+
+@app.delete("/api/afiliados/{item_id}")
+def api_remover_afiliado(item_id: str) -> JSONResponse:
+    if not afiliados.remover(item_id):
+        return JSONResponse({"erro": "não encontrado"}, status_code=404)
     return JSONResponse({"ok": True})
 
 
@@ -808,5 +839,50 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_pos_y": metadados.get("thumbnail_pos_y"),
                 "thumbnail_base": _thumbnail_base_url(pasta),
             }
+        )
+
+    # vídeos novos ainda sendo gerados (sem pasta/mp4 ainda) — mostra na Fila
+    # como "processando" em vez de simplesmente não aparecer até terminar.
+    # Regenerar/cena não entra aqui: a pasta e os mp4 antigos já existem, então
+    # já aparecem no loop acima com o status de sempre até o novo mp4 sobrescrever.
+    slugs_existentes = {v["slug"] for v in videos}
+    for job in jobs.listar_rodando():
+        slug_job = slug_titulo(job.titulo)
+        if slug_job in slugs_existentes:
+            continue
+        slugs_existentes.add(slug_job)
+        canal_info = canal.obter_canal(job.canal_id or canal.CANAL_PADRAO_ID)
+        videos.insert(
+            0,
+            {
+                "slug": slug_job,
+                "titulo": job.titulo,
+                "canal_id": job.canal_id or canal.CANAL_PADRAO_ID,
+                "canal_nome": canal_info["nome"] if canal_info else (job.canal_id or canal.CANAL_PADRAO_ID),
+                "sem_narracao": False,
+                "som_fundo_tipo": "",
+                "data_postagem": None,
+                "hora_postagem": None,
+                "duracao_segundos": None,
+                "status": "processando",
+                "job_etapa": job.etapa,
+                "job_progresso": job.progresso,
+                "video_16_9": None,
+                "video_9_16": None,
+                "thumbnail": None,
+                "modificado_em": time.time(),
+                "tags": "",
+                "publicado": False,
+                "youtube_video_id": None,
+                "publicacao_erro": None,
+                "tem_cenas": False,
+                "thumbnail_texto": job.titulo,
+                "thumbnail_cor": "",
+                "thumbnail_posicao": "baixo-centro",
+                "thumbnail_tamanho_px": 80,
+                "thumbnail_pos_x": None,
+                "thumbnail_pos_y": None,
+                "thumbnail_base": None,
+            },
         )
     return videos

@@ -1,4 +1,4 @@
-const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila", base: "Base" };
+const TITULOS = { painel: "Painel", canais: "Canais", agente: "Agente", novo: "Novo vídeo", fila: "Fila", base: "Base", afiliados: "Afiliados" };
 
 function trocarAba(nome) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === nome));
@@ -8,6 +8,7 @@ function trocarAba(nome) {
   if (nome === "fila") carregarFila();
   if (nome === "canais") carregarCanais();
   if (nome === "base") carregarBase();
+  if (nome === "afiliados") carregarAfiliados();
 }
 
 document.querySelectorAll(".nav-item").forEach((botao) => {
@@ -33,6 +34,7 @@ const STATUS_FILA = {
   pronto: { rotulo: "pronto para enviar", classe: "status-pronto" },
   aguardando: { rotulo: "aguardando data de publicação", classe: "status-aguardando" },
   erro: { rotulo: "erro ao publicar", classe: "status-erro" },
+  processando: { rotulo: "processando", classe: "status-processando" },
 };
 
 function statusBadge(v) {
@@ -57,6 +59,23 @@ function statusPublicacao(v) {
 let mostrarBadgeCanal = false; // só quando existe mais de 1 canal, evita ruído pra quem usa só 1
 
 function linhaDeVideo(v, comRegenerar) {
+  if (v.status === "processando") {
+    const pct = Math.round(v.job_progresso || 0);
+    return `
+      <div class="video-item">
+        <div class="video-row">
+          <div class="video-thumb">${ICONE_VIDEO}</div>
+          <div class="video-info">
+            <div class="video-title">${v.titulo}</div>
+            <div class="video-meta video-meta-status">
+              <span class="status-badge status-processando">processando</span>
+              ${v.job_etapa || ""} — ${pct}%
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   const rotulos = [];
   if (v.sem_narracao) rotulos.push("sem narração");
   if (v.som_fundo_tipo) rotulos.push(`som: ${v.som_fundo_tipo}`);
@@ -186,6 +205,8 @@ function aplicarFiltrosFila() {
   });
 }
 
+let filaAutoRefreshTimer = null;
+
 async function carregarFila() {
   videosFilaCache = await buscarVideos();
 
@@ -197,6 +218,15 @@ async function carregarFila() {
   seletorCanalFiltro.value = valorAtual;
 
   aplicarFiltrosFila();
+
+  // se tem algo em "processando", atualiza sozinho até terminar — sem isso o
+  // progresso só mudaria trocando de aba e voltando
+  clearTimeout(filaAutoRefreshTimer);
+  if (videosFilaCache.some((v) => v.status === "processando")) {
+    filaAutoRefreshTimer = setTimeout(() => {
+      if (document.getElementById("tab-fila").classList.contains("active")) carregarFila();
+    }, 2500);
+  }
 }
 
 ["filtro-canal", "filtro-status", "filtro-duracao-min", "filtro-duracao-max"].forEach((id) => {
@@ -873,25 +903,48 @@ btnPreviewRoteiro.addEventListener("click", async () => {
 let narracaoGravadaBlob = null;
 let mediaRecorderAtual = null;
 let mediaRecorderChunks = [];
+let gravacaoInicioEm = null;
+let gravacaoTimer = null;
 
 const btnGravarNarracao = document.getElementById("btn-gravar-narracao");
 const inputUploadNarracao = document.getElementById("input-upload-narracao");
 const narracaoGravadaStatus = document.getElementById("narracao-gravada-status");
+const narracaoGravadaResultado = document.getElementById("narracao-gravada-resultado");
 const narracaoGravadaPlayer = document.getElementById("narracao-gravada-player");
+const narracaoGravadaDuracao = document.getElementById("narracao-gravada-duracao");
 const btnRemoverNarracaoGravada = document.getElementById("btn-remover-narracao-gravada");
 
-function definirNarracaoGravada(blob) {
+function formatarMmSs(segundos) {
+  const s = Math.round(segundos || 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function definirNarracaoGravada(blob, duracaoSegundosConhecida) {
   narracaoGravadaBlob = blob;
   narracaoGravadaPlayer.src = URL.createObjectURL(blob);
-  narracaoGravadaPlayer.hidden = false;
-  btnRemoverNarracaoGravada.hidden = false;
+  narracaoGravadaResultado.hidden = false;
+
+  if (duracaoSegundosConhecida) {
+    narracaoGravadaDuracao.textContent = `Duração: ${formatarMmSs(duracaoSegundosConhecida)}`;
+  } else {
+    // arquivo enviado — lê a duração real do próprio arquivo (o navegador
+    // decodifica os metadados; se não conseguir, só não mostra o tempo)
+    narracaoGravadaDuracao.textContent = "";
+    const sondaAudio = new Audio();
+    sondaAudio.addEventListener("loadedmetadata", () => {
+      if (isFinite(sondaAudio.duration)) {
+        narracaoGravadaDuracao.textContent = `Duração: ${formatarMmSs(sondaAudio.duration)}`;
+      }
+    });
+    sondaAudio.src = narracaoGravadaPlayer.src;
+  }
 }
 
 btnRemoverNarracaoGravada.addEventListener("click", () => {
   narracaoGravadaBlob = null;
-  narracaoGravadaPlayer.hidden = true;
+  narracaoGravadaResultado.hidden = true;
   narracaoGravadaPlayer.removeAttribute("src");
-  btnRemoverNarracaoGravada.hidden = true;
+  narracaoGravadaDuracao.textContent = "";
   narracaoGravadaStatus.textContent = "";
   inputUploadNarracao.value = "";
 });
@@ -920,14 +973,20 @@ btnGravarNarracao.addEventListener("click", async () => {
       if (evento.data.size > 0) mediaRecorderChunks.push(evento.data);
     });
     mediaRecorderAtual.addEventListener("stop", () => {
-      definirNarracaoGravada(new Blob(mediaRecorderChunks, { type: "audio/webm" }));
+      clearInterval(gravacaoTimer);
+      const duracaoSegundos = (Date.now() - gravacaoInicioEm) / 1000;
+      definirNarracaoGravada(new Blob(mediaRecorderChunks, { type: "audio/webm" }), duracaoSegundos);
       narracaoGravadaStatus.textContent = "Gravação pronta.";
       btnGravarNarracao.textContent = "🎤 Gravar";
       stream.getTracks().forEach((faixa) => faixa.stop());
     });
     mediaRecorderAtual.start();
+    gravacaoInicioEm = Date.now();
     btnGravarNarracao.textContent = "⏹ Parar gravação";
-    narracaoGravadaStatus.textContent = "Gravando…";
+    narracaoGravadaStatus.textContent = "Gravando… 0:00";
+    gravacaoTimer = setInterval(() => {
+      narracaoGravadaStatus.textContent = `Gravando… ${formatarMmSs((Date.now() - gravacaoInicioEm) / 1000)}`;
+    }, 1000);
   } catch {
     narracaoGravadaStatus.textContent = "Não consegui acessar o microfone — confira a permissão do navegador.";
   }
@@ -1286,6 +1345,53 @@ document.getElementById("input-upload-imagem-base").addEventListener("change", a
   } finally {
     evento.target.value = "";
   }
+});
+
+// ---------------- Afiliados (lista manual, ideia guardada) ----------------
+
+const ROTULO_PLATAFORMA = { tiktok_shop: "TikTok Shop", shopee: "Shopee", outro: "Outra" };
+
+async function carregarAfiliados() {
+  const lista = document.getElementById("afiliados-lista");
+  try {
+    const itens = await fetch("/api/afiliados").then((r) => r.json());
+    lista.innerHTML = itens.length
+      ? itens
+          .map(
+            (item) => `
+        <div class="video-item">
+          <div class="video-row">
+            <div class="video-info">
+              <div class="video-title" style="text-transform:none">${item.nome} <span class="canal-badge">${ROTULO_PLATAFORMA[item.plataforma] || item.plataforma}</span></div>
+              <div class="video-meta">${item.link ? `<a href="${item.link}" target="_blank" rel="noopener">${item.link}</a>` : "sem link ainda"}${item.nota ? ` · ${item.nota}` : ""}</div>
+            </div>
+            <div class="video-links">
+              <button type="button" class="btn-regenerar btn-regenerar-sutil btn-remover-afiliado" data-id="${item.id}">remover</button>
+            </div>
+          </div>
+        </div>`
+          )
+          .join("")
+      : '<div class="empty">Nenhum produto anotado ainda.</div>';
+
+    lista.querySelectorAll(".btn-remover-afiliado").forEach((botao) => {
+      botao.addEventListener("click", async () => {
+        await fetch(`/api/afiliados/${botao.dataset.id}`, { method: "DELETE" });
+        carregarAfiliados();
+      });
+    });
+  } catch {
+    lista.innerHTML = '<div class="empty">Deu erro carregando a lista.</div>';
+  }
+}
+
+document.getElementById("form-novo-afiliado").addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const form = evento.target;
+  const dados = new FormData(form);
+  await fetch("/api/afiliados", { method: "POST", body: dados });
+  form.reset();
+  carregarAfiliados();
 });
 
 atualizarStatusYoutube();

@@ -48,6 +48,10 @@
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6.5l7-4 7 4-7 4-7-4z"></path><path d="M3 6.5v7l7 4 7-4v-7"></path></svg>
         Base
       </button>
+      <button class="nav-item" data-tab="afiliados">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="7.3"></circle><path d="M7 12.5l6-5M8 8h.01M12 12h.01"></path></svg>
+        Afiliados
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -206,23 +210,26 @@
                 <textarea name="roteiro" id="campo-roteiro" rows="4" placeholder="Cole aqui o roteiro pronto, ou clique em &quot;Pré-visualizar roteiro&quot; pra deixar o motor escrever e você revisar antes"></textarea>
               </label>
               <div class="preview-row">
-                <button type="button" class="btn-secondary" id="btn-preview-roteiro">Pré-visualizar roteiro</button>
+                <button type="button" class="btn-secondary btn-compacto" id="btn-preview-roteiro">Pré-visualizar roteiro</button>
                 <span id="preview-roteiro-status" class="video-meta"></span>
               </div>
 
               <div class="narracao-gravada" id="bloco-narracao-gravada">
                 <span class="narracao-gravada-titulo">Narração gravada por você (opcional — em branco usa narração por IA)</span>
                 <div class="narracao-gravada-controles">
-                  <button type="button" class="btn-secondary" id="btn-gravar-narracao">🎤 Gravar</button>
-                  <label class="btn-secondary" style="cursor:pointer">
+                  <button type="button" class="btn-secondary btn-compacto" id="btn-gravar-narracao">🎤 Gravar</button>
+                  <label class="btn-secondary btn-compacto" style="cursor:pointer">
                     <input type="file" id="input-upload-narracao" accept="audio/*" hidden>
                     Enviar arquivo
                   </label>
                   <span id="narracao-gravada-status" class="video-meta"></span>
                 </div>
-                <audio id="narracao-gravada-player" controls hidden></audio>
-                <button type="button" class="btn-regenerar btn-regenerar-sutil" id="btn-remover-narracao-gravada" hidden style="width:fit-content">remover gravação</button>
-                <p class="hint">Se gravar ou enviar um áudio, o campo Roteiro acima precisa ter exatamente o texto que você leu — é o que permite gerar cenas e legenda sincronizadas (de forma aproximada). Voz e idioma abaixo ficam sem efeito nesse caso.</p>
+                <div class="narracao-gravada-resultado" id="narracao-gravada-resultado" hidden>
+                  <audio id="narracao-gravada-player" controls></audio>
+                  <span id="narracao-gravada-duracao" class="video-meta"></span>
+                  <button type="button" class="btn-regenerar btn-regenerar-sutil" id="btn-remover-narracao-gravada">🗑 remover e regravar</button>
+                </div>
+                <p class="hint">Se gravar ou enviar um áudio, o campo Roteiro acima precisa ter exatamente o texto que você leu — é o que permite gerar cenas e legenda sincronizadas (de forma aproximada, cortando/repetindo o áudio pra caber certinho). Voz e idioma abaixo ficam sem efeito nesse caso.</p>
               </div>
 
               <div class="row-2">
@@ -332,6 +339,7 @@
               <span>Status</span>
               <select id="filtro-status">
                 <option value="">Todos</option>
+                <option value="processando">Processando</option>
                 <option value="publicado">Publicado</option>
                 <option value="pronto">Pronto para enviar</option>
                 <option value="aguardando">Aguardando data</option>
@@ -379,6 +387,48 @@
           </label>
           <span id="base-imagem-status" class="video-meta" style="margin-left:10px"></span>
           <div id="base-imagens-grade" class="thumb-imagens-grade" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <!-- ============ AFILIADOS ============ -->
+      <section id="tab-afiliados" class="tab">
+        <div class="card">
+          <div class="card-head">Afiliados (ideia guardada — ainda não automático)</div>
+          <p class="hint" style="margin:0 0 14px">
+            Espaço pra anotar produtos de afiliado (TikTok Shop, Shopee, etc.) que você quer divulgar nos vídeos e ganhar comissão nas vendas. Por enquanto é só uma lista manual — nenhum vídeo insere esses links sozinho ainda, isso fica pra uma próxima etapa.
+          </p>
+          <form id="form-novo-afiliado" class="form" style="gap:10px">
+            <div class="row-2">
+              <label>
+                <span>Nome do produto</span>
+                <input type="text" name="nome" required placeholder="Ex: Fone de ouvido bluetooth X">
+              </label>
+              <label>
+                <span>Plataforma</span>
+                <select name="plataforma">
+                  <option value="tiktok_shop">TikTok Shop</option>
+                  <option value="shopee">Shopee</option>
+                  <option value="outro">Outra</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>Link de afiliado</span>
+              <input type="text" name="link" placeholder="Cole aqui o link de afiliado do produto">
+            </label>
+            <label>
+              <span>Nota (opcional)</span>
+              <input type="text" name="nota" placeholder="Ex: usar no vídeo sobre fones de ouvido">
+            </label>
+            <button type="submit" class="btn-primary" style="align-self:flex-start">Adicionar</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Produtos anotados</div>
+          <div id="afiliados-lista" class="video-list">
+            <div class="empty">Nenhum produto anotado ainda.</div>
+          </div>
         </div>
       </section>
 

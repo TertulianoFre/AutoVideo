@@ -13,6 +13,7 @@ dados/tokens/
 
 # Dados pessoais de uso (canais, contexto de cada um — evolui com o uso, não é template)
 dados/canais.json
+dados/afiliados.json
 
 # Biblioteca de mídia importada por você (áudios/imagens reutilizáveis entre vídeos)
 dados/biblioteca/

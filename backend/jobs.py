@@ -22,6 +22,7 @@ class Job:
     criado_em: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     resultado: dict | None = None
     erro: str | None = None
+    canal_id: str | None = None  # só pra job de vídeo novo — usado pra mostrar "processando" na Fila
 
 
 def _rodar(job: Job, params: dict) -> None:
@@ -49,12 +50,19 @@ def _rodar(job: Job, params: dict) -> None:
 
 
 def criar_job(titulo: str, params: dict) -> Job:
-    job = Job(id=str(uuid.uuid4()), titulo=titulo)
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"))
     with _lock:
         _jobs[job.id] = job
 
     threading.Thread(target=_rodar, args=(job, params), daemon=True).start()
     return job
+
+
+def listar_rodando() -> list[Job]:
+    """Jobs de vídeo novo ainda em andamento — usado pra mostrar "processando"
+    na Fila antes do vídeo existir de verdade em disco."""
+    with _lock:
+        return [j for j in _jobs.values() if j.status == "rodando"]
 
 
 def _rodar_cena(job: Job, slug: str, indice: int) -> None:
