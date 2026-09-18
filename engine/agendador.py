@@ -22,6 +22,9 @@ def _salvar_metadados(caminho_meta: Path, metadados: dict) -> None:
 
 
 def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: str) -> None:
+    """Publica os dois formatos. Salva o ID de cada um assim que sobe — se o
+    16:9 subir e o Short falhar (ou vice-versa), o próximo ciclo só tenta de
+    novo o que faltou, nunca sobe o mesmo vídeo duas vezes."""
     v16, v9 = pasta / "video_16x9.mp4", pasta / "video_9x16.mp4"
     titulo = metadados.get("titulo", pasta.name)
 
@@ -30,15 +33,21 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     roteiro_path = pasta / "roteiro.txt"
     descricao = roteiro_path.read_text(encoding="utf-8") if roteiro_path.exists() else titulo
 
-    id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, PRIVACIDADE_PADRAO, is_short=False)
-    id_short = youtube.publicar_video(v9, titulo, descricao, tags, nome_conta, PRIVACIDADE_PADRAO, is_short=True)
+    if not metadados.get("youtube_video_id"):
+        id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, PRIVACIDADE_PADRAO, is_short=False)
+        metadados["youtube_video_id"] = id_normal
+        _salvar_metadados(caminho_meta, metadados)
+        print(f"[agendador] 16:9 publicado: {titulo} -> https://youtu.be/{id_normal}")
+
+    if not metadados.get("youtube_short_id"):
+        id_short = youtube.publicar_video(v9, titulo, descricao, tags, nome_conta, PRIVACIDADE_PADRAO, is_short=True)
+        metadados["youtube_short_id"] = id_short
+        _salvar_metadados(caminho_meta, metadados)
+        print(f"[agendador] short publicado: {titulo} -> https://youtu.be/{id_short}")
 
     metadados["publicado"] = True
-    metadados["youtube_video_id"] = id_normal
-    metadados["youtube_short_id"] = id_short
     metadados.pop("publicacao_erro", None)
     _salvar_metadados(caminho_meta, metadados)
-    print(f"[agendador] publicado: {titulo} -> https://youtu.be/{id_normal}")
 
 
 def publicar_pendentes(nome_conta: str = CONTA_PADRAO) -> None:
