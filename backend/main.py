@@ -614,7 +614,7 @@ def _rerenderizar_thumbnail(pasta: Path, base: Path, metadados: dict) -> None:
     texto = metadados.get("thumbnail_texto") or metadados.get("titulo", pasta.name)
     cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
     posicao = metadados.get("thumbnail_posicao", "baixo-centro")
-    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados))
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados), efeito=metadados.get("thumbnail_efeito", "nenhum"))
 
 
 @app.post("/api/videos/{slug}/thumbnail/regenerar")
@@ -642,6 +642,65 @@ def api_regenerar_thumbnail(slug: str) -> dict:
     atual.write_text(escolhida.name, encoding="utf-8")
 
     return {"thumbnail": f"/videos/{slug}/thumbnail.png?v={int(time.time())}", "thumbnail_base": _thumbnail_base_url(pasta)}
+
+
+@app.get("/api/videos/{slug}/thumbnail-shorts/fundo")
+def api_fundo_thumbnail_shorts(slug: str) -> dict:
+    """Garante que o fundo procedural vertical existe (o editor precisa dele pra pré-visualizar)."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    fundo = pasta / "thumbnail_shorts_fundo.png"
+    if not fundo.exists():
+        from engine import visuals as visuals_mod
+        visuals_mod.gerar_fundo_procedural(*thumbnail_mod.TAMANHO_SHORTS, fundo, semente=f"{metadados.get('titulo', slug)}{metadados.get('thumbnail_short_semente', '')}")
+    return {"procedural": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(fundo.stat().st_mtime)}",
+            "cena": f"/videos/{slug}/cena00_9x16.png" if (pasta / "cena00_9x16.png").exists() else None}
+
+
+@app.post("/api/videos/{slug}/thumbnail-shorts/editar")
+def api_editar_thumbnail_shorts(
+    slug: str,
+    texto: str = Form(...),
+    cor: str = Form(""),
+    tamanho_px: int = Form(120),
+    pos_x: float = Form(0.5),
+    pos_y: float = Form(0.5),
+    efeito: str = Form("youtuber"),
+    fundo: str = Form("procedural"),
+    novo_fundo: bool = Form(False),
+) -> dict:
+    """Salva e renderiza a thumbnail vertical (1080x1920) do Short. O que estiver
+    salvo aqui é o que o agendador envia ao YouTube."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    texto = texto.strip()
+    if not texto:
+        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["thumbnail_short"] = {
+        "texto": texto,
+        "cor": cor.strip().lstrip("#") if thumbnail_mod.cor_de_hex(cor) else "",
+        "tamanho_px": max(thumbnail_mod.TAMANHO_FONTE_MIN, min(thumbnail_mod.TAMANHO_FONTE_MAX, tamanho_px)),
+        "pos_x": min(max(pos_x, 0.0), 1.0),
+        "pos_y": min(max(pos_y, 0.0), 1.0),
+        "efeito": efeito if efeito in thumbnail_mod.EFEITOS else "youtuber",
+        "fundo": fundo if fundo in ("procedural", "cena") else "procedural",
+    }
+    if novo_fundo:
+        (pasta / "thumbnail_shorts_fundo.png").unlink(missing_ok=True)
+        metadados["thumbnail_short_semente"] = int(time.time())
+    thumbnail_mod.gerar_shorts(pasta, metadados)
+    metadados.pop("thumbnail_short_enviada", None) if not metadados.get("publicado") else None
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "thumbnail": f"/videos/{slug}/thumbnail_shorts.png?v={int(time.time())}",
+        "fundo": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(time.time())}" if fundo == "procedural" else f"/videos/{slug}/cena00_9x16.png?v={int(time.time())}",
+    }
 
 
 @app.get("/api/videos/{slug}/thumbnail/imagens")
@@ -752,6 +811,7 @@ def api_editar_thumbnail(
     tamanho_px: int = Form(80),
     pos_x: float | None = Form(None),
     pos_y: float | None = Form(None),
+    efeito: str = Form("nenhum"),
 ) -> dict:
     """Troca o texto, a cor, o tamanho (em pixels, controle deslizante) e a
     posição da thumbnail (grade de 9 pontos OU arrastar livre — se pos_x/pos_y
@@ -775,9 +835,10 @@ def api_editar_thumbnail(
     posicao = posicao if posicao in thumbnail_mod.POSICOES else "baixo-centro"
     tamanho_px = max(thumbnail_mod.TAMANHO_FONTE_MIN, min(thumbnail_mod.TAMANHO_FONTE_MAX, tamanho_px))
     pos_livre = (pos_x, pos_y) if pos_x is not None and pos_y is not None else None
-    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb, posicao, tamanho_px, pos_livre)
+    thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor_rgb, posicao, tamanho_px, pos_livre, efeito=efeito if efeito in thumbnail_mod.EFEITOS else "nenhum")
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["thumbnail_efeito"] = efeito if efeito in thumbnail_mod.EFEITOS else "nenhum"
     metadados["thumbnail_texto"] = texto
     metadados["thumbnail_cor"] = cor.strip().lstrip("#") if cor_rgb else ""
     metadados["thumbnail_posicao"] = posicao
@@ -908,6 +969,10 @@ def api_listar_videos() -> list[dict]:
                 "thumbnail_pos_x": metadados.get("thumbnail_pos_x"),
                 "thumbnail_pos_y": metadados.get("thumbnail_pos_y"),
                 "thumbnail_base": _thumbnail_base_url(pasta),
+                "thumbnail_efeito": metadados.get("thumbnail_efeito", "nenhum"),
+                "thumbnail_short": thumbnail_mod.config_shorts(metadados, pasta.name) if (pasta / "video_9x16.mp4").exists() or metadados.get("formatos") != "normal" else None,
+                "thumbnail_short_url": f"/videos/{pasta.name}/thumbnail_shorts.png?v={int((pasta / 'thumbnail_shorts.png').stat().st_mtime)}" if (pasta / "thumbnail_shorts.png").exists() else None,
+                "thumbnail_short_fundo_url": f"/videos/{pasta.name}/thumbnail_shorts_fundo.png" if (pasta / "thumbnail_shorts_fundo.png").exists() else None,
             }
         )
 

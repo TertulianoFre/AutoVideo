@@ -81,16 +81,16 @@ function linhaDeVideo(v, comRegenerar) {
   if (v.som_fundo_tipo) rotulos.push(`som: ${v.som_fundo_tipo}`);
   if (v.duracao_segundos) rotulos.push(formatarDuracao(v.duracao_segundos));
   const modoLabel = rotulos.length ? `· ${rotulos.join(", ")}` : "";
-  const badgeCanal = mostrarBadgeCanal && v.canal_nome ? `<span class="canal-badge">${v.canal_nome}</span>` : "";
+  const badgeCanal = v.canal_nome ? `<span class="canal-badge">${v.canal_nome}</span>` : "";
   const thumb = v.thumbnail
     ? `<img src="${v.thumbnail}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
     : ICONE_VIDEO;
+  const publicado = v.status === "publicado";
   const botaoRegenerar = comRegenerar
     ? `<button type="button" class="btn-regenerar" data-slug="${v.slug}" data-manter-roteiro="true">Regenerar</button>
        ${!v.sem_narracao ? `<button type="button" class="btn-regenerar btn-regenerar-sutil" data-slug="${v.slug}" data-manter-roteiro="false" title="Escreve um roteiro novo também">roteiro novo</button>` : ""}
-       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-nova-thumb" data-slug="${v.slug}" title="Sorteia outra imagem de cena pra thumbnail">nova thumbnail</button>
-       <button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar o texto e a cor da thumbnail">editar thumbnail</button>
-       ${v.tem_cenas ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
+       ${!publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-editar-thumb" data-slug="${v.slug}" title="Mudar texto, cor, efeito e posição das thumbnails (normal e Shorts)">editar thumbnail</button>` : ""}
+       ${v.tem_cenas && !publicado ? `<button type="button" class="btn-regenerar btn-regenerar-sutil btn-ver-cenas" data-slug="${v.slug}" title="Editar cenas específicas sem refazer o vídeo inteiro">cenas</button>` : ""}`
     : "";
   const publicacao = statusPublicacao(v);
   const badgeStatus = v.status === "pronto" || v.status === "aguardando" ? statusBadge(v) : "";
@@ -111,8 +111,8 @@ function linhaDeVideo(v, comRegenerar) {
           <button type="button" class="btn-excluir-video" data-slug="${v.slug}" data-titulo="${(v.titulo || "").replace(/"/g, "&quot;")}" title="Cancelar e apagar esse vídeo da fila (não será publicado)">✕</button>
         </div>
       </div>
-      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}"></div>` : ""}
-      ${comRegenerar && v.tem_cenas ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
+      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
+      ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
     </div>`;
 }
 
@@ -187,11 +187,8 @@ function aplicarFiltrosFila() {
     ? filtrados.map((v) => linhaDeVideo(v, true)).join("")
     : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
 
-  lista.querySelectorAll(".btn-regenerar:not(.btn-nova-thumb):not(.btn-ver-cenas):not(.btn-editar-thumb)").forEach((botao) => {
+  lista.querySelectorAll(".btn-regenerar:not(.btn-ver-cenas):not(.btn-editar-thumb)").forEach((botao) => {
     botao.addEventListener("click", () => regenerarVideo(botao));
-  });
-  lista.querySelectorAll(".btn-nova-thumb").forEach((botao) => {
-    botao.addEventListener("click", () => regenerarThumbnail(botao));
   });
   lista.querySelectorAll(".btn-ver-cenas").forEach((botao) => {
     botao.addEventListener("click", () => alternarPainelCenas(botao));
@@ -270,9 +267,9 @@ const TAMANHO_FONTE_MIN = 24;
 const TAMANHO_FONTE_MAX = 190;
 const LARGURA_CANVAS_THUMB = 1280; // mesmo LARGURA de engine/thumbnail.py — pra escalar o preview
 
-function escalaPreview(areaPreview) {
+function escalaPreview(areaPreview, larguraCanvas = LARGURA_CANVAS_THUMB) {
   const largura = areaPreview.getBoundingClientRect().width;
-  return largura ? largura / LARGURA_CANVAS_THUMB : 460 / LARGURA_CANVAS_THUMB;
+  return largura ? largura / larguraCanvas : 460 / larguraCanvas;
 }
 
 function alternarPainelThumb(botao) {
@@ -314,6 +311,7 @@ function alternarPainelThumb(botao) {
     <div class="thumb-form">
       <input type="text" class="thumb-texto" value="${textoAtual}" maxlength="80" placeholder="Texto que aparece na thumbnail">
       <div class="cor-swatches">${swatches}</div>
+      ${seletorEfeito(painel.dataset.efeito || "nenhum")}
       <button type="button" class="btn-secondary btn-salvar-thumb">Salvar</button>
       <span class="video-meta thumb-status"></span>
     </div>
@@ -396,6 +394,9 @@ function alternarPainelThumb(botao) {
     });
   });
 
+  aplicarEfeitoPreview(rotuloArrastavel, painel.dataset.efeito || "nenhum");
+  painel.querySelector(".thumb-efeito").addEventListener("change", (ev) => aplicarEfeitoPreview(rotuloArrastavel, ev.target.value));
+
   const campoTexto = painel.querySelector(".thumb-texto");
   campoTexto.addEventListener("input", () => {
     if (rotuloArrastavel) rotuloArrastavel.textContent = campoTexto.value;
@@ -409,6 +410,7 @@ function alternarPainelThumb(botao) {
   });
 
   carregarImagensThumb(slug, painel);
+  if (painel.dataset.short) montarEditorShorts(slug, painel);
 
   painel.querySelector(".thumb-upload-input").addEventListener("change", (ev) => {
     const arquivo = ev.target.files[0];
@@ -511,6 +513,7 @@ async function salvarThumb(slug, painel) {
   dados.set("cor", cor);
   dados.set("posicao", posicao);
   dados.set("tamanho_px", tamanhoPx);
+  dados.set("efeito", painel.querySelector(".thumb-efeito").value);
   if (modoLivre) {
     dados.set("pos_x", painel.dataset.posX);
     dados.set("pos_y", painel.dataset.posY);
@@ -530,6 +533,7 @@ async function salvarThumb(slug, painel) {
     painel.dataset.cor = cor;
     painel.dataset.posicao = posicao;
     painel.dataset.tamanhoPx = tamanhoPx;
+    painel.dataset.efeito = painel.querySelector(".thumb-efeito").value;
     if (!modoLivre) {
       painel.dataset.posX = "";
       painel.dataset.posY = "";
@@ -629,22 +633,6 @@ async function regenerarCena(botao) {
       alert(`Deu erro: ${job.erro}`);
     }
   }, 1200);
-}
-
-async function regenerarThumbnail(botao) {
-  const slug = botao.dataset.slug;
-  const linha = botao.closest(".video-row");
-  const imagem = linha.querySelector(".video-thumb img");
-  botao.disabled = true;
-
-  const resposta = await fetch(`/api/videos/${slug}/thumbnail/regenerar`, { method: "POST" });
-  const dados = await resposta.json();
-  botao.disabled = false;
-  if (dados.erro) {
-    alert(dados.erro);
-    return;
-  }
-  if (imagem) imagem.src = dados.thumbnail;
 }
 
 async function regenerarVideo(botao) {

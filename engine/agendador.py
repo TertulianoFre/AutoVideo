@@ -32,24 +32,8 @@ def _salvar_metadados(caminho_meta: Path, metadados: dict) -> None:
 
 
 def _thumbnail_shorts(pasta: Path, metadados: dict) -> Path | None:
-    """Versão vertical (1080x1920) da thumbnail, com o mesmo texto/cor/posição
-    editados pra do vídeo normal, em cima da cena vertical."""
-    base = pasta / "cena00_9x16.png"
-    if not base.exists():
-        return None
-    px = metadados.get("thumbnail_tamanho_px")
-    x, y = metadados.get("thumbnail_pos_x"), metadados.get("thumbnail_pos_y")
-    livre = (x, y) if isinstance(x, (int, float)) and isinstance(y, (int, float)) else None
-    return thumbnail_mod.gerar_thumbnail(
-        base,
-        metadados.get("thumbnail_texto") or metadados.get("titulo", pasta.name),
-        pasta / "thumbnail_shorts.png",
-        thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", "")),
-        metadados.get("thumbnail_posicao", "baixo-centro"),
-        int(px) if isinstance(px, (int, float)) and px else 80,
-        livre,
-        tamanho=(1080, 1920),
-    )
+    """Thumbnail vertical (1080x1920), com o que foi salvo no editor do Short."""
+    return thumbnail_mod.gerar_shorts(pasta, metadados)
 
 
 def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: str) -> None:
