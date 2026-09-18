@@ -65,19 +65,20 @@ def listar_rodando() -> list[Job]:
         return [j for j in _jobs.values() if j.status == "rodando"]
 
 
-def _rodar_cena(job: Job, slug: str, indice: int) -> None:
+def _rodar_cena(job: Job, slug: str, indice: int, imagem_propria=None) -> None:
     def progresso_cb(etapa: str, percentual: float) -> None:
         job.etapa = etapa
         job.progresso = round(percentual, 1)
 
     try:
-        resultado = regenerar_cena(slug, indice, progresso=progresso_cb)
+        resultado = regenerar_cena(slug, indice, progresso=progresso_cb, imagem_propria=imagem_propria)
         marca = int(time.time())
         job.resultado = {
             "slug": slug,
             "video_16_9": f"/videos/{slug}/{resultado['video_16_9']}?v={marca}" if resultado["video_16_9"] else None,
             "video_9_16": f"/videos/{slug}/{resultado['video_9_16']}?v={marca}" if resultado["video_9_16"] else None,
             "cena_imagem": f"/videos/{slug}/cena{indice:02d}_16x9.png?v={marca}",
+            "cena_imagem_9x16": f"/videos/{slug}/cena{indice:02d}_9x16.png?v={marca}",
             "thumbnail": f"/videos/{slug}/thumbnail.png?v={marca}" if resultado["thumbnail_atualizada"] else None,
         }
         job.status = "pronto"
@@ -88,12 +89,12 @@ def _rodar_cena(job: Job, slug: str, indice: int) -> None:
         job.erro = str(erro)
 
 
-def criar_job_cena(titulo: str, slug: str, indice: int) -> Job:
+def criar_job_cena(titulo: str, slug: str, indice: int, imagem_propria=None) -> Job:
     job = Job(id=str(uuid.uuid4()), titulo=titulo)
     with _lock:
         _jobs[job.id] = job
 
-    threading.Thread(target=_rodar_cena, args=(job, slug, indice), daemon=True).start()
+    threading.Thread(target=_rodar_cena, args=(job, slug, indice, imagem_propria), daemon=True).start()
     return job
 
 

@@ -90,6 +90,7 @@ def gerar_video(
     privacidade: str = "public",
     formatos: str = "ambos",
     canal_id: str | None = None,
+    num_cenas: int | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -120,6 +121,7 @@ def gerar_video(
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
         formatos=formatos,
+        num_cenas=num_cenas,
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -223,13 +225,13 @@ def gerar_video(
 
     # --- cenas/imagens: com narração, uma cena por frase; sem narração, imagens em intervalo fixo ---
     if sem_narracao:
-        n_imagens = max(1, round(duracao_real / SEGUNDOS_POR_IMAGEM_SEM_NARRACAO))
+        n_imagens = num_cenas or max(1, round(duracao_real / SEGUNDOS_POR_IMAGEM_SEM_NARRACAO))
         duracao_por_imagem = duracao_real / n_imagens
         contexto_cena = f"{titulo}. {descricao_video}".strip(". ") or titulo
         lista_cenas = [(contexto_cena, duracao_por_imagem) for _ in range(n_imagens)]
     else:
         avisar("Dividindo o roteiro em cenas", 18)
-        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final)
+        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
     # guardado pra dar pra regenerar uma cena específica depois (regenerar_cena),
@@ -293,7 +295,7 @@ def gerar_video(
     return ResultadoGeracao(pasta, audio_path, videos.get("16:9"), videos.get("9:16"), duracao_real, roteiro_final, tags, caminho_thumb)
 
 
-def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None) -> dict:
+def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], None] | None = None, imagem_propria: Path | None = None) -> dict:
     """Refaz só a imagem de UMA cena (a IA sorteia de novo) e remonta o vídeo
     final com as imagens das outras cenas intactas — não mexe em roteiro,
     narração nem legenda. Só funciona em vídeos gerados depois desse recurso
@@ -339,15 +341,19 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
         caminho_imagem = pasta / f"cena{indice:02d}_{sufixo}.png"
 
         passo += 1
-        avisar(f"Gerando nova imagem da cena ({formato})", 10 + 80 * passo / total_passos)
-        try:
-            visuals.gerar_fundo(
-                estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
-                cena=texto_cena, estilo_extra=descricao_video,
-            )
-        except RuntimeError as erro:
-            print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")
-            visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=f"{texto_cena}-{passo}")
+        avisar(f"{'Aplicando sua imagem' if imagem_propria else 'Gerando nova imagem'} da cena ({formato})", 10 + 80 * passo / total_passos)
+        if imagem_propria:
+            # imagem enviada por você: só recorta pro formato (sem distorcer), sem chamar a IA
+            visuals._cobrir(Image.open(imagem_propria).convert("RGB"), estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
+        else:
+            try:
+                visuals.gerar_fundo(
+                    estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
+                    cena=texto_cena, estilo_extra=descricao_video,
+                )
+            except RuntimeError as erro:
+                print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")
+                visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], caminho_imagem, semente=f"{texto_cena}-{passo}")
 
         passo += 1
         avisar(f"Remontando o vídeo ({formato})", 10 + 80 * passo / total_passos)
@@ -384,6 +390,8 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
         thumbnail_mod.gerar_thumbnail(base_thumb, texto_thumb, pasta / "thumbnail.png", cor_thumb, posicao_thumb, tamanho_thumb, pos_livre_thumb)
         thumbnail_atualizada = True
 
+    if imagem_propria:
+        imagem_propria.unlink(missing_ok=True)
     avisar("Pronto", 100)
     return {
         "video_16_9": nomes_video.get("16:9"),

@@ -378,3 +378,17 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
   width: 28px; height: 28px; cursor: pointer; font-size: 13px; line-height: 1; flex-shrink: 0;
 }
 .btn-excluir-video:hover { color: var(--negative); border-color: var(--negative); }
+
+/* cenas como storyboard: uma linha por cena, na ordem do vídeo */
+.cenas-grid { grid-template-columns: 1fr; }
+.cena-card { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; padding: 10px; }
+.cena-card-imagens { display: flex; gap: 8px; align-items: flex-start; }
+.cena-img, .cena-img-vazia { border-radius: 6px; object-fit: cover; background: var(--bg); border: 1px solid var(--border); }
+.cena-img-16, .cena-img-vazia { width: 200px; aspect-ratio: 16 / 9; }
+.cena-img-9 { width: 72px; aspect-ratio: 9 / 16; }
+.cena-img-vazia { display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+.cena-card .cena-card-body { flex: 1; min-width: 220px; padding: 0; }
+.cena-card-tempo { margin-left: 8px; color: var(--accent); }
+.cena-card-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.cena-card .btn-regenerar { width: auto; }
+.btn-enviar-cena { cursor: pointer; }

@@ -21,7 +21,33 @@ class Cena:
         return (self.fim - self.inicio).total_seconds()
 
 
-def dividir_em_cenas(submaker, roteiro: str, duracao_minima: timedelta = DURACAO_MINIMA_CENA) -> list:
+def dividir_em_cenas(submaker, roteiro: str, duracao_minima: timedelta = DURACAO_MINIMA_CENA, num_cenas: int | None = None) -> list:
+    """num_cenas: quantidade desejada. Agrupa frases inteiras em `num_cenas`
+    blocos de duração parecida (se o roteiro tiver menos frases que isso, sai
+    uma cena por frase). Sem ele, corta por frase respeitando duracao_minima."""
+    if num_cenas and num_cenas > 0:
+        return _dividir_em_n(submaker, roteiro, num_cenas)
+    return _dividir_por_minimo(submaker, roteiro, duracao_minima)
+
+
+def _dividir_em_n(submaker, roteiro: str, n: int) -> list:
+    frases = _dividir_por_minimo(submaker, roteiro, timedelta(0))
+    if len(frases) <= n:
+        return frases
+    inicio, fim = frases[0].inicio, frases[-1].fim
+    total = (fim - inicio).total_seconds() or 1.0
+    grupos: list[list] = [[] for _ in range(n)]
+    for frase in frases:
+        meio = ((frase.inicio + (frase.fim - frase.inicio) / 2) - inicio).total_seconds()
+        grupos[min(n - 1, int(meio / total * n))].append(frase)
+    return [
+        Cena(" ".join(f.texto for f in grupo), grupo[0].inicio, grupo[-1].fim)
+        for grupo in grupos
+        if grupo
+    ]
+
+
+def _dividir_por_minimo(submaker, roteiro: str, duracao_minima: timedelta) -> list:
     """Agrupa as palavras em cenas, cortando ao final de frases (. ? !), mas nunca
     deixando uma cena curta demais (nesse caso funde com a cena seguinte)."""
     cues = submaker.cues

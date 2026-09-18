@@ -406,6 +406,7 @@ def api_criar_video(
     som_fundo_biblioteca: str = Form(""),
     privacidade: str = Form("public"),
     formatos: str = Form("ambos"),
+    num_cenas: int | None = Form(None),
     confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
@@ -457,6 +458,7 @@ def api_criar_video(
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
         formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
+        num_cenas=num_cenas if num_cenas and 1 <= num_cenas <= 40 else None,
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -500,6 +502,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         narracao_customizada=metadados.get("narracao_customizada", False),
         privacidade=metadados.get("privacidade", "public"),
         formatos=metadados.get("formatos", "ambos"),
+        num_cenas=metadados.get("num_cenas"),
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
@@ -870,17 +873,25 @@ def api_listar_cenas(slug: str) -> dict:
             status_code=409,
         )
 
+    def _url(i: int, sufixo: str) -> str | None:
+        caminho = pasta / f"cena{i:02d}_{sufixo}.png"
+        return f"/videos/{slug}/cena{i:02d}_{sufixo}.png?v={int(caminho.stat().st_mtime)}" if caminho.exists() else None
+
     resultado = []
+    acumulado = 0.0
     for i, cena in enumerate(cenas):
-        caminho_imagem = pasta / f"cena{i:02d}_16x9.png"
+        duracao = cena.get("duracao_segundos", 0) or 0
         resultado.append(
             {
                 "indice": i,
                 "texto": cena.get("texto", ""),
-                "duracao_segundos": cena.get("duracao_segundos", 0),
-                "imagem": f"/videos/{slug}/cena{i:02d}_16x9.png?v={int(caminho_imagem.stat().st_mtime)}" if caminho_imagem.exists() else None,
+                "duracao_segundos": duracao,
+                "inicio_segundos": round(acumulado, 1),
+                "imagem": _url(i, "16x9"),
+                "imagem_vertical": _url(i, "9x16"),
             }
         )
+        acumulado += duracao
     return {"cenas": resultado}
 
 
@@ -897,6 +908,35 @@ def api_regenerar_cena(slug: str, indice: int) -> dict:
     titulo = metadados.get("titulo", slug)
 
     job = jobs.criar_job_cena(titulo, slug, indice)
+    return {"job_id": job.id}
+
+
+@app.post("/api/videos/{slug}/cenas/{indice}/imagem")
+async def api_enviar_imagem_cena(slug: str, indice: int, arquivo: UploadFile = File(...)) -> dict:
+    """Troca a imagem de uma cena por uma sua (recortada pros dois formatos) e
+    remonta o vídeo — sem chamar a IA."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    cenas = metadados.get("cenas") or []
+    if not (0 <= indice < len(cenas)):
+        return JSONResponse({"erro": "cena não existe"}, status_code=404)
+
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAX_UPLOAD_BYTES:
+        return JSONResponse({"erro": "arquivo maior que 20MB"}, status_code=400)
+    try:
+        imagem = Image.open(io.BytesIO(conteudo))
+        imagem.load()
+        imagem = imagem.convert("RGB")
+    except Exception:
+        return JSONResponse({"erro": "não consegui abrir esse arquivo como imagem"}, status_code=400)
+
+    temporaria = pasta / f"cena{indice:02d}_upload.png"
+    imagem.save(temporaria, "PNG")
+    job = jobs.criar_job_cena(metadados.get("titulo", slug), slug, indice, imagem_propria=temporaria)
     return {"job_id": job.id}
 
 

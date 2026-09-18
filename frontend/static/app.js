@@ -548,17 +548,31 @@ async function salvarThumb(slug, painel) {
 
 // ---------------- Fila: editar uma cena específica ----------------
 
+function formatarTempo(segundos) {
+  const s = Math.round(segundos || 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 function cardDeCena(slug, cena) {
-  const imagem = cena.imagem
-    ? `<img class="cena-card-img" src="${cena.imagem}" alt="">`
-    : `<div class="cena-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${ICONE_VIDEO}</div>`;
+  const semImagem = `<div class="cena-img-vazia">${ICONE_VIDEO}</div>`;
+  const img16 = cena.imagem ? `<img class="cena-img cena-img-16" src="${cena.imagem}" alt="">` : semImagem;
+  const img9 = cena.imagem_vertical ? `<img class="cena-img cena-img-9" src="${cena.imagem_vertical}" alt="">` : "";
+  const fim = (cena.inicio_segundos || 0) + (cena.duracao_segundos || 0);
   return `
     <div class="cena-card" data-indice="${cena.indice}">
-      ${imagem}
+      <div class="cena-card-imagens">${img16}${img9}</div>
       <div class="cena-card-body">
-        <div class="cena-card-indice">Cena ${cena.indice + 1}</div>
+        <div class="cena-card-indice">Cena ${cena.indice + 1}
+          <span class="cena-card-tempo">${formatarTempo(cena.inicio_segundos)}–${formatarTempo(fim)} · ${Math.round(cena.duracao_segundos || 0)}s</span>
+        </div>
         <p class="cena-card-texto">${cena.texto || ""}</p>
-        <button type="button" class="btn-regenerar btn-regenerar-cena" data-slug="${slug}" data-indice="${cena.indice}">Regenerar essa cena</button>
+        <div class="cena-card-acoes">
+          <button type="button" class="btn-regenerar btn-regenerar-cena" data-slug="${slug}" data-indice="${cena.indice}">Gerar outra imagem</button>
+          <label class="btn-regenerar btn-regenerar-sutil btn-enviar-cena" title="Usar uma imagem do seu computador (vale pros dois formatos)">
+            Enviar imagem
+            <input type="file" class="cena-upload-input" accept="image/*" hidden data-slug="${slug}" data-indice="${cena.indice}">
+          </label>
+        </div>
       </div>
     </div>`;
 }
@@ -583,56 +597,87 @@ async function alternarPainelCenas(botao) {
   }
 
   painel.dataset.carregado = "true";
+  const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
-    <div class="cenas-status">Regenerar uma cena só refaz a imagem dela (a IA sorteia de novo) e remonta o vídeo — roteiro, narração e as outras cenas continuam intactos.</div>
+    <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (${formatarTempo(total)} no total), cada uma com o trecho do roteiro que ela cobre. "Gerar outra imagem" sorteia de novo; "Enviar imagem" usa uma sua. Roteiro, narração e as outras cenas continuam intactos.</div>
     <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c)).join("")}</div>`;
 
   painel.querySelectorAll(".btn-regenerar-cena").forEach((b) => {
     b.addEventListener("click", () => regenerarCena(b));
   });
+  painel.querySelectorAll(".cena-upload-input").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.files[0]) enviarImagemCena(input);
+    });
+  });
 }
 
-async function regenerarCena(botao) {
+function acompanharJobCena(jobId, card, botao, rotuloBotao) {
   const slug = botao.dataset.slug;
-  const indice = botao.dataset.indice;
-  const card = botao.closest(".cena-card");
-  const imagem = card.querySelector(".cena-card-img");
-  const rotulo = botao.textContent;
-  botao.disabled = true;
-  botao.textContent = "Gerando…";
-
-  const resposta = await fetch(`/api/videos/${slug}/cenas/${indice}/regenerar`, { method: "POST" });
-  const { job_id, erro } = await resposta.json();
-  if (erro) {
-    botao.disabled = false;
-    botao.textContent = rotulo;
-    alert(erro);
-    return;
-  }
-
+  const botoes = card.querySelectorAll("button");
   const intervalo = setInterval(async () => {
-    const r = await fetch(`/api/jobs/${job_id}`);
+    const r = await fetch(`/api/jobs/${jobId}`);
     const job = await r.json();
     botao.textContent = `${Math.round(job.progresso)}% — ${job.etapa}`;
     if (job.status === "pronto") {
       clearInterval(intervalo);
-      botao.disabled = false;
-      botao.textContent = "Regenerar essa cena";
-      if (imagem && imagem.tagName === "IMG") imagem.src = job.resultado.cena_imagem;
-      // atualiza só a miniatura da linha (se essa era a cena 0) sem recarregar
-      // a fila inteira — assim o painel de cenas continua aberto pra você
-      // poder corrigir mais de uma em sequência.
+      botoes.forEach((b) => (b.disabled = false));
+      botao.textContent = rotuloBotao;
+      const i16 = card.querySelector(".cena-img-16");
+      const i9 = card.querySelector(".cena-img-9");
+      if (i16) i16.src = job.resultado.cena_imagem;
+      if (i9) i9.src = job.resultado.cena_imagem_9x16;
+      // atualiza só a miniatura da linha (se essa era a cena 0), sem recarregar
+      // a fila — o painel de cenas continua aberto pra corrigir mais de uma
       if (job.resultado.thumbnail) {
         const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
         if (thumbImg) thumbImg.src = job.resultado.thumbnail;
       }
     } else if (job.status === "erro") {
       clearInterval(intervalo);
-      botao.disabled = false;
-      botao.textContent = rotulo;
+      botoes.forEach((b) => (b.disabled = false));
+      botao.textContent = rotuloBotao;
       alert(`Deu erro: ${job.erro}`);
     }
   }, 1200);
+}
+
+async function regenerarCena(botao) {
+  const card = botao.closest(".cena-card");
+  const rotulo = botao.textContent;
+  card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  botao.textContent = "Gerando…";
+
+  const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/regenerar`, { method: "POST" });
+  const { job_id, erro } = await resposta.json();
+  if (erro) {
+    card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    botao.textContent = rotulo;
+    alert(erro);
+    return;
+  }
+  acompanharJobCena(job_id, card, botao, rotulo);
+}
+
+async function enviarImagemCena(input) {
+  const card = input.closest(".cena-card");
+  const botao = card.querySelector(".btn-regenerar-cena");
+  const rotulo = botao.textContent;
+  card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  botao.textContent = "Enviando…";
+
+  const dados = new FormData();
+  dados.set("arquivo", input.files[0]);
+  input.value = "";
+  const resposta = await fetch(`/api/videos/${input.dataset.slug}/cenas/${input.dataset.indice}/imagem`, { method: "POST", body: dados });
+  const { job_id, erro } = await resposta.json();
+  if (erro) {
+    card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    botao.textContent = rotulo;
+    alert(erro);
+    return;
+  }
+  acompanharJobCena(job_id, card, botao, rotulo);
 }
 
 async function regenerarVideo(botao) {
