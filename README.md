@@ -71,13 +71,13 @@ Aba própria: clique em "Sugerir ideias" e ele combina o contexto do canal (`dad
 - O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).
 - Checagem automática de "imagem com qualidade ruim, refazer" foi tentada com detector de rosto (OpenCV) — funciona bem em foto real, mas **não funciona em desenho/ilustração**, então só está ligada no estilo `foto`.
 - O roteiro automático às vezes escreve uma frase meio estranha/gramaticalmente torta (é um modelo pequeno e gratuito) — use o "Pré-visualizar roteiro" pra revisar antes.
-- Som de fundo (chuva/música) é sintetizado (ruído filtrado / acorde simples), não gravação real — soa genérico, ainda dá pra melhorar. Pedir "outro" som ainda não sintetiza algo customizado de verdade.
+- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar. Pedir "outro" com descrição livre casa por palavra-chave com o mais parecido desses 5; ainda não sintetiza um som totalmente novo (ex: "floresta com pássaros" de verdade).
 - Publicação automática depende do app ficar rodando (não é um serviço em nuvem) e da conta reconectada a cada 7 dias (limitação do modo "teste" do Google).
 
 ## Requisitos já levantados, ainda não implementados
 
 - Prévia **editável** da thumbnail de verdade (hoje só troca a imagem-base por outra cena — "nova thumbnail" na Fila — não dá pra desenhar/ajustar).
-- Sintetizar sons de fundo customizados de verdade (hoje só chuva e música suave são reais).
+- Sintetizar **qualquer** som de fundo descrito de verdade (hoje são 5 tipos reais fixos — chuva, música, ondas, fogueira, vento — e "outro" só casa por palavra-chave com o mais parecido desses).
 - **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
 - Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
 
@@ -109,5 +109,5 @@ App funcionando de ponta a ponta: Agente sugerindo ideias, contexto do canal, pr
 
 ## Próximos passos
 
-1. Sons de fundo customizados de verdade (hoje só chuva/música suave)
-2. Suporte a mais de um canal/conta ao mesmo tempo (hoje é hardcoded pra uma conta "principal")
+1. Suporte a mais de um canal/conta ao mesmo tempo (hoje é hardcoded pra uma conta "principal")
+2. Sintetizar sons de fundo verdadeiramente customizados a partir de qualquer descrição (hoje são 5 tipos fixos)
