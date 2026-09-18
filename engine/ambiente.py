@@ -218,10 +218,75 @@ def _camada_multidao(duracao_segundos: float, taxa_amostragem: int, rng: np.rand
     return soma / 5
 
 
+def _camada_passos(duracao_segundos: float, taxa_amostragem: int, rng: np.random.Generator) -> np.ndarray:
+    """Passos: thumps graves e curtos num ritmo de caminhada (com leve jitter
+    de tempo e de volume pra não soar mecânico), tipo alguém andando por perto."""
+    n = max(1, int(duracao_segundos * taxa_amostragem))
+    camada = np.zeros(n, dtype=np.float32)
+    duracao_passo = max(1, int(0.12 * taxa_amostragem))
+    intervalo_base = 0.55  # ritmo médio de passos, em segundos
+
+    t = 0.0
+    while t < duracao_segundos:
+        inicio = int(t * taxa_amostragem)
+        if inicio + duracao_passo >= n:
+            break
+        ruido = rng.normal(0, 1, duracao_passo).astype(np.float32)
+        grave = _filtro_media_movel(ruido, 35)
+        decaimento = np.exp(-np.linspace(0, 8, duracao_passo)).astype(np.float32)
+        camada[inicio:inicio + duracao_passo] += grave * decaimento * rng.uniform(0.5, 1.0)
+        t += intervalo_base + rng.uniform(-0.08, 0.08)
+    return camada
+
+
+def _camada_sino(duracao_segundos: float, taxa_amostragem: int, rng: np.random.Generator) -> np.ndarray:
+    """Sino/carrilhão: tons agudos ressonantes, esparsos e aleatórios, com
+    decaimento longo — tipo um sininho de vento ou sino de templo ao longe."""
+    n = max(1, int(duracao_segundos * taxa_amostragem))
+    camada = np.zeros(n, dtype=np.float32)
+    n_toques = max(1, int(duracao_segundos / 14))
+    frequencias = [523.25, 659.25, 783.99, 987.77]  # C5-E5-G5-B5, soam "de sino"
+    for _ in range(n_toques):
+        duracao_toque = max(1, int(rng.uniform(1.5, 3.0) * taxa_amostragem))
+        inicio = rng.integers(0, max(1, n - duracao_toque))
+        freq = rng.choice(frequencias)
+        t_local = np.linspace(0, duracao_toque / taxa_amostragem, duracao_toque, dtype=np.float32)
+        tom = np.sin(2 * np.pi * freq * t_local) + 0.5 * np.sin(2 * np.pi * freq * 2 * t_local)
+        decaimento = np.exp(-np.linspace(0, 4.0, duracao_toque)).astype(np.float32)
+        camada[inicio:inicio + duracao_toque] += tom.astype(np.float32) * decaimento * rng.uniform(0.2, 0.4)
+    return camada
+
+
+def _camada_transito(duracao_segundos: float, taxa_amostragem: int, rng: np.random.Generator) -> np.ndarray:
+    """Trânsito/cidade: rumor grave e constante de motores ao longe (ruído bem
+    filtrado, diferente da voz humana da multidão) + buzinas ocasionais curtas."""
+    n = max(1, int(duracao_segundos * taxa_amostragem))
+    ruido = rng.normal(0, 1, n).astype(np.float32)
+    rumor = _filtro_media_movel(ruido, 55) * 0.6
+
+    buzinas = np.zeros(n, dtype=np.float32)
+    n_buzinas = max(1, int(duracao_segundos / 20))
+    duracao_buzina = max(1, int(0.5 * taxa_amostragem))
+    for _ in range(n_buzinas):
+        if n - duracao_buzina <= 0:
+            break
+        inicio = rng.integers(0, n - duracao_buzina)
+        t_local = np.linspace(0, duracao_buzina / taxa_amostragem, duracao_buzina, dtype=np.float32)
+        freq = rng.uniform(340, 420)
+        tom = np.sin(2 * np.pi * freq * t_local).astype(np.float32)
+        envelope = (np.sin(np.linspace(0, np.pi, duracao_buzina)).astype(np.float32)) ** 2
+        buzinas[inicio:inicio + duracao_buzina] += tom * envelope * rng.uniform(0.15, 0.3)
+
+    return rumor + buzinas
+
+
 _CAMADA_GERADORES = {
     "passaros": (_camada_passaros, 0.5),
     "trovao": (_camada_trovao, 0.6),
     "multidao": (_camada_multidao, 0.45),
+    "passos": (_camada_passos, 0.5),
+    "sino": (_camada_sino, 0.5),
+    "transito": (_camada_transito, 0.5),
 }
 
 _PALAVRAS_CHAVE_POR_TIPO = {
@@ -235,6 +300,9 @@ _PALAVRAS_CHAVE_POR_CAMADA = {
     "passaros": ["pássaro", "passaro", "pássaros", "passaros", "passarinho", "passarinhos", "aves", "canto de pássaro", "canto de passaro"],
     "trovao": ["trovão", "trovao", "trovões", "trovoes", "tempestade", "relâmpago", "relampago"],
     "multidao": ["multidão", "multidao", "cafeteria", "restaurante", "café", "cafe", "bar", "conversando", "pessoas falando"],
+    "passos": ["passos", "passo", "andando", "caminhando", "pisadas", "caminhada"],
+    "sino": ["sino", "sinos", "sininho", "carrilhão", "carrilhao", "templo", "meditação", "meditacao"],
+    "transito": ["trânsito", "transito", "carros", "cidade", "rua movimentada", "buzina", "buzinas", "tráfego", "trafego", "engarrafamento"],
 }
 
 
