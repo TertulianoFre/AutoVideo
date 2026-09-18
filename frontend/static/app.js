@@ -1032,8 +1032,13 @@ form.addEventListener("submit", async (ev) => {
   if (narracaoGravadaBlob) {
     dados.set("narracao_audio", narracaoGravadaBlob, narracaoGravadaBlob.name || "narracao.webm");
   }
-  const resposta = await fetch("/api/videos", { method: "POST", body: dados });
-  const resultado = await resposta.json();
+  let resposta = await fetch("/api/videos", { method: "POST", body: dados });
+  let resultado = await resposta.json();
+  if (resultado.duplicado && confirm(resultado.erro)) {
+    dados.set("confirmar_duplicado", "true");
+    resposta = await fetch("/api/videos", { method: "POST", body: dados });
+    resultado = await resposta.json();
+  }
 
   if (resultado.erro) {
     progressoCard.hidden = true;

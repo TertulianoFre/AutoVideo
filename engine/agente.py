@@ -16,7 +16,7 @@ PROMPT_SISTEMA = (
 )
 
 
-def sugerir_ideias(contexto_canal: str = "", tendencias: list = None, quantidade: int = 6) -> list:
+def sugerir_ideias(contexto_canal: str = "", tendencias: list = None, quantidade: int = 6, titulos_existentes: list = None) -> list:
     partes = [f"Sugira {quantidade} ideias de título de vídeo."]
     if contexto_canal:
         partes.append(f"Nicho/tom do canal: {contexto_canal}")
@@ -24,6 +24,12 @@ def sugerir_ideias(contexto_canal: str = "", tendencias: list = None, quantidade
         partes.append("Sem nicho definido — pode ser curiosidades/fatos interessantes em geral.")
     if tendencias:
         partes.append("Títulos em alta no YouTube agora (só de referência, não copiar):\n" + "\n".join(tendencias[:15]))
+
+    if titulos_existentes:
+        partes.append(
+            "Vídeos que o canal JÁ tem (não repita nem sugira o mesmo assunto/ângulo, nem continuação óbvia):\n"
+            + "\n".join(titulos_existentes[:60])
+        )
 
     mensagens = [
         {"role": "system", "content": PROMPT_SISTEMA},

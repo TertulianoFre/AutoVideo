@@ -192,7 +192,7 @@ def api_agente_sugestoes() -> JSONResponse:
         aviso_tendencias = "Conecte o YouTube (na aba Canais) pra sugestões levarem em conta o que está em alta."
 
     try:
-        ideias = agente.sugerir_ideias(canal.obter_contexto(), tendencias)
+        ideias = agente.sugerir_ideias(canal.obter_contexto(), tendencias, titulos_existentes=[v["titulo"] for v in api_listar_videos()])
     except RuntimeError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=502)
 
@@ -372,6 +372,23 @@ def api_preview_roteiro(
 # geração de vídeo
 # ---------------------------------------------------------------------------
 
+def _palavras(titulo: str) -> set:
+    return set(re.findall(r"\w+", titulo.casefold()))
+
+
+def _titulo_parecido(titulo: str) -> str | None:
+    """Título de um vídeo existente que seja igual (mesma pasta) ou muito
+    parecido (>= 70% das palavras em comum), pra avisar antes de repetir."""
+    novo = _palavras(titulo)
+    for v in api_listar_videos():
+        if v["slug"] == slug_titulo(titulo):
+            return v["titulo"]
+        velho = _palavras(v["titulo"])
+        if novo and velho and len(novo & velho) / len(novo | velho) >= 0.7:
+            return v["titulo"]
+    return None
+
+
 @app.post("/api/videos")
 def api_criar_video(
     titulo: str = Form(...),
@@ -389,11 +406,20 @@ def api_criar_video(
     som_fundo_biblioteca: str = Form(""),
     privacidade: str = Form("public"),
     formatos: str = Form("ambos"),
+    confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
     if privacidade not in ("private", "unlisted", "public"):
         privacidade = "public"
+
+    if not confirmar_duplicado:
+        parecido = _titulo_parecido(titulo)
+        if parecido:
+            return JSONResponse(
+                {"erro": f'Já existe um vídeo igual ou muito parecido: "{parecido}". Gerar mesmo assim? (título igual sobrescreve o anterior)', "duplicado": True},
+                status_code=409,
+            )
     roteiro_limpo = roteiro.strip()
     narracao_customizada = False
 
