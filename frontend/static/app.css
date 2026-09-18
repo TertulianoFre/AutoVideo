@@ -514,3 +514,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .btn-lapis-desc { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 14px; cursor: pointer; }
 .btn-lapis-desc:hover, .btn-lapis-desc.aberto, .btn-lapis-desc.ativo { color: #14130F; background: #F2C230; border-color: #F2C230; }
 .cena-descricao[hidden] { display: none; }
+
+.base-opcao { width: 96px; display: flex; flex-direction: column; gap: 3px; }
+.base-opcao .thumb-img-opcao { width: 100%; }
+.base-legenda { font-size: 10.5px; line-height: 1.25; color: var(--text-dim); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

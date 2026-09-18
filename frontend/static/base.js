@@ -116,7 +116,8 @@ async function montarSeletorBaseNovoVideo() {
     grade.innerHTML = imagens.length
       ? imagens.map((img) => {
           const ordem = selecionadasBase.indexOf(img.nome);
-          return `<button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-nome="${escaparAttr(img.nome)}" title="${escaparAttr(img.nome)}${img.usado_em.length ? " — já usada em: " + escaparAttr(img.usado_em.join(", ")) : ""}"><img src="${img.url}" alt="">${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button>`;
+          const dica = `${img.nome}${img.descricao ? " — " + img.descricao : ""}${img.usado_em.length ? " — já usada em: " + img.usado_em.join(", ") : ""}`;
+          return `<div class="base-opcao"><button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-nome="${escaparAttr(img.nome)}" title="${escaparAttr(dica)}"><img src="${img.url}" alt="">${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button><span class="base-legenda" title="${escaparAttr(img.descricao || img.nome)}">${escaparAttr(img.descricao || img.nome)}</span></div>`;
         }).join("")
       : '<span class="video-meta">Nenhuma imagem na Base ainda — importe na aba Base.</span>';
     grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {

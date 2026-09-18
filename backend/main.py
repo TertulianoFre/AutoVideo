@@ -989,8 +989,10 @@ def api_listar_imagens_thumbnail(slug: str) -> dict:
     ]
     # imagens importadas na Base também podem virar fundo de thumbnail —
     # identificadas com o prefixo "biblioteca:" pra distinguir de cenas locais
+    descricoes = (_meta_biblioteca().get("imagens") or {})
     imagens += [
-        {"nome": f"biblioteca:{nome}", "url": f"/biblioteca/imagens/{nome}", "atual": f"biblioteca-{nome}" == atual}
+        {"nome": f"biblioteca:{nome}", "url": f"/biblioteca/imagens/{nome}", "atual": f"biblioteca-{nome}" == atual,
+         "descricao": (descricoes.get(nome) or {}).get("descricao", "")}
         for nome in biblioteca.listar_imagens()
     ]
     return {"imagens": imagens}

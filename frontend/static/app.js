@@ -469,7 +469,7 @@ async function carregarImagensThumb(slug, painel) {
       return;
     }
     grade.innerHTML = dados.imagens
-      .map((img) => `<button type="button" class="thumb-img-opcao${img.atual ? " selecionada" : ""}" data-nome="${img.nome}" title="${img.nome}"><img src="${img.url}" alt=""></button>`)
+      .map((img) => `<button type="button" class="thumb-img-opcao${img.atual ? " selecionada" : ""}" data-nome="${img.nome}" title="${img.nome}${img.descricao ? " — " + img.descricao : ""}"><img src="${img.url}" alt=""></button>`)
       .join("");
     grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
       op.addEventListener("click", () => escolherImagemThumb(slug, painel, op));
@@ -760,9 +760,9 @@ async function alternarEscolhaBaseCena(botao) {
   }
   grade.innerHTML = itens
     .map((it) => {
-      const dica = `${it.nome}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
+      const dica = `${it.nome}${it.descricao ? " — " + it.descricao : ""}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
       const midia = it.tipo === "video" ? `<video src="${it.url}#t=0.5" muted preload="metadata"></video><span class="base-ordem">vídeo</span>` : `<img src="${it.url}" alt="">`;
-      return `<button type="button" class="thumb-img-opcao" data-nome="${escaparAttr(it.nome)}" data-tipo="${it.tipo}" title="${escaparAttr(dica)}">${midia}</button>`;
+      return `<div class="base-opcao"><button type="button" class="thumb-img-opcao" data-nome="${escaparAttr(it.nome)}" data-tipo="${it.tipo}" title="${escaparAttr(dica)}">${midia}</button><span class="base-legenda" title="${escaparAttr(it.descricao || it.nome)}">${escaparAttr(it.descricao || it.nome)}</span></div>`;
     })
     .join("");
   grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
@@ -957,19 +957,31 @@ function aplicarEstadoSomFundo() {
   campoSomFundoBiblioteca.disabled = !ativo || campoSomFundoTipo.value !== "biblioteca";
 }
 
+let descricoesAudiosBase = {};
+
+function mostrarDescricaoDoAudioBase() {
+  const alvo = document.getElementById("som-base-descricao");
+  const desc = descricoesAudiosBase[campoSomFundoBiblioteca.value];
+  alvo.textContent = desc ? `Descrição: ${desc}` : campoSomFundoBiblioteca.value ? "Esse áudio não tem descrição (dá pra escrever na aba Base)." : "";
+}
+
 async function popularSelectAudiosBiblioteca() {
   try {
     const dados = await fetch("/api/biblioteca").then((r) => r.json());
-    const nomes = dados.audios_nomes || [];
+    const audios = dados.audios_info || [];
+    descricoesAudiosBase = Object.fromEntries(audios.map((a) => [a.nome, a.descricao || ""]));
     const valorAtual = campoSomFundoBiblioteca.value;
-    campoSomFundoBiblioteca.innerHTML = nomes.length
-      ? nomes.map((nome) => `<option value="${nome}">${nome}</option>`).join("")
+    campoSomFundoBiblioteca.innerHTML = audios.length
+      ? audios.map((a) => `<option value="${escaparAttr(a.nome)}">${escaparAttr(a.nome)}${a.descricao ? " — " + escaparAttr(a.descricao) : ""}</option>`).join("")
       : '<option value="">Nenhum importado ainda — vá na aba Base</option>';
-    if (nomes.includes(valorAtual)) campoSomFundoBiblioteca.value = valorAtual;
+    if (audios.some((a) => a.nome === valorAtual)) campoSomFundoBiblioteca.value = valorAtual;
+    mostrarDescricaoDoAudioBase();
   } catch {
     // silencioso — se falhar, o select só fica com a opção padrão
   }
 }
+
+campoSomFundoBiblioteca.addEventListener("change", mostrarDescricaoDoAudioBase);
 
 campoSemNarracao.addEventListener("change", () => {
   const semNarracao = campoSemNarracao.checked;
