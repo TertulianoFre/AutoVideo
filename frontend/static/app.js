@@ -1011,6 +1011,35 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   }
 });
 
+// ---------------- Novo vídeo: como o roteiro vira cenas (ajuste antes de gerar) ----------------
+
+const PALAVRAS_POR_MINUTO_FRONT = 150;
+
+function atualizarCenasDoRoteiro() {
+  const caixa = document.getElementById("roteiro-cenas");
+  const nCenas = parseInt(document.querySelector("[name=num_cenas]").value, 10);
+  const paragrafos = campoRoteiro.value.split("\n").map((p) => p.trim()).filter(Boolean);
+  if (!nCenas || nCenas < 2 || !paragrafos.length) {
+    caixa.hidden = true;
+    return;
+  }
+  caixa.hidden = false;
+  const aviso = paragrafos.length === nCenas
+    ? `<div class="roteiro-cenas-ok">Cada parágrafo vira uma cena. Edite o texto acima à vontade.</div>`
+    : `<div class="roteiro-cenas-aviso">O roteiro tem ${paragrafos.length} parágrafo(s) e você pediu ${nCenas} cenas — pra cada parágrafo virar uma cena, separe o texto em exatamente ${nCenas} parágrafos (uma linha em branco entre eles). Do jeito que está, as cenas serão divididas por tempo.</div>`;
+  caixa.innerHTML = aviso + paragrafos.map((p, i) => {
+    const palavras = p.split(/\s+/).length;
+    return `<div class="roteiro-cena"><b>Cena ${i + 1}</b> <span class="video-meta">${palavras} palavras · ~${Math.round(palavras / PALAVRAS_POR_MINUTO_FRONT * 60)}s</span><div>${p.replace(/</g, "&lt;")}</div></div>`;
+  }).join("");
+}
+
+campoRoteiro.addEventListener("input", atualizarCenasDoRoteiro);
+document.querySelector("[name=num_cenas]").addEventListener("input", atualizarCenasDoRoteiro);
+btnPreviewRoteiro.addEventListener("click", () => setTimeout(function esperar() {
+  if (btnPreviewRoteiro.disabled) return setTimeout(esperar, 500);
+  atualizarCenasDoRoteiro();
+}, 500));
+
 // ---------------- Novo vídeo: narração gravada por você ----------------
 
 let narracaoGravadaBlob = null;
@@ -1130,6 +1159,7 @@ document.getElementById("btn-limpar-novo").addEventListener("click", () => {
   campoDuracao.value = 1;
   previewRoteiroStatus.textContent = "";
   btnPreviewRoteiro.textContent = "Pré-visualizar roteiro";
+  atualizarCenasDoRoteiro();
   resultadoCard.hidden = true;
   erroCard.hidden = true;
   window.scrollTo(0, 0);
