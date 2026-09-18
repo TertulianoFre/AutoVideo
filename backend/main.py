@@ -368,12 +368,12 @@ def api_criar_video(
     som_fundo_tipo: str = Form(""),
     som_fundo_descricao: str = Form(""),
     som_fundo_biblioteca: str = Form(""),
-    privacidade: str = Form("private"),
+    privacidade: str = Form("public"),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
     if privacidade not in ("private", "unlisted", "public"):
-        privacidade = "private"
+        privacidade = "public"
     roteiro_limpo = roteiro.strip()
     narracao_customizada = False
 
@@ -451,7 +451,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True)) -> dict:
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
         som_fundo_biblioteca=metadados.get("som_fundo_biblioteca", ""),
         narracao_customizada=metadados.get("narracao_customizada", False),
-        privacidade=metadados.get("privacidade", "private"),
+        privacidade=metadados.get("privacidade", "public"),
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 

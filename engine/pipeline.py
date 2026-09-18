@@ -73,7 +73,7 @@ def gerar_video(
     som_fundo_descricao: str = "",
     som_fundo_biblioteca: str = "",
     narracao_customizada: bool = False,
-    privacidade: str = "private",
+    privacidade: str = "public",
     canal_id: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:

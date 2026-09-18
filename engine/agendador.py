@@ -14,7 +14,7 @@ from engine import youtube
 from engine.pipeline import RAIZ_SAIDA
 
 INTERVALO_SEGUNDOS = 600  # confere a cada 10 min
-PRIVACIDADE_PADRAO = "private"  # comece privado até confiar no fluxo automático
+PRIVACIDADE_PADRAO = "public"  # fallback só pra vídeo antigo, gerado antes desse campo existir
 
 
 def _conta_youtube_do_video(metadados: dict) -> str:
