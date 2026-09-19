@@ -449,6 +449,7 @@ def gerar_video(
                     cena=texto_cena,
                     estilo_extra=descricao_video,
                     contexto=titulo,
+                    duracao=duracao_cena,
                 )
             except RuntimeError as erro:
                 # Fonte externa (foto/ia) falhou (rede, serviço fora do ar) — não
@@ -843,7 +844,7 @@ def editar_estrutura(
                 visuals._cobrir(Image.open(biblioteca.caminho_imagem_valida(midia_nome)).convert("RGB"), estilo["largura"], estilo["altura"]).save(png, "PNG")
             else:
                 try:
-                    visuals.gerar_fundo(m.get("estilo_imagem", "procedural"), estilo["largura"], estilo["altura"], png, cena=descricao_imagem.strip() or texto, estilo_extra=m.get("descricao_video", ""), contexto=titulo)
+                    visuals.gerar_fundo(m.get("estilo_imagem", "procedural"), estilo["largura"], estilo["altura"], png, cena=descricao_imagem.strip() or texto, estilo_extra=m.get("descricao_video", ""), contexto=titulo, duracao=novos[0].get("dur_cena", dur_nova))
                 except RuntimeError:
                     visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], png, semente=texto)
         if "16:9" not in formatos_ativos:
@@ -997,6 +998,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
                 visuals.gerar_fundo(
                     estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
                     cena=texto_cena, estilo_extra=descricao_video, contexto=metadados.get("titulo", slug),
+                    duracao=(cenas[indice].get("duracao_segundos", 0) if indice < len(cenas) else 0),
                 )
             except RuntimeError as erro:
                 print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")

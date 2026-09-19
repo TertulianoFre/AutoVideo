@@ -8,7 +8,7 @@ from pathlib import Path
 
 ARQUIVO = Path(__file__).resolve().parent.parent / "dados" / "tempos.json"
 SEGUNDOS_POR_CENA_MEDIA = 13  # duração típica de uma cena (5 cenas em ~1 min)
-SEGUNDOS_POR_IMAGEM = {"ia": 14.0, "foto": 12.0, "procedural": 1.5}
+SEGUNDOS_POR_IMAGEM = {"ia": 14.0, "foto": 12.0, "video": 20.0, "procedural": 1.5}
 
 
 def _fator(estilo: str = "ia") -> float:

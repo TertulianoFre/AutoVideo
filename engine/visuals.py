@@ -343,6 +343,116 @@ def _buscar_pexels(termo_busca: str, orientacao: str, excluir: set | None = None
     return None
 
 
+def _chave_do_env(nome: str) -> str:
+    chave = os.environ.get(nome, "").strip()
+    if chave:
+        return chave
+    arquivo = Path(__file__).resolve().parent.parent / ".env"
+    if arquivo.exists():
+        for linha in arquivo.read_text(encoding="utf-8").splitlines():
+            n, _, valor = linha.partition("=")
+            if n.strip() == nome:
+                return valor.strip().strip('"').strip("'")
+    return ""
+
+
+def _buscar_pixabay(termo_busca: str, orientacao: str, excluir: set | None = None) -> tuple | None:
+    """Pixabay (foto): licença livre (uso comercial, sem crédito obrigatório). Devolve (bytes, url)."""
+    import random
+
+    chave = _chave_do_env("PIXABAY_API_KEY")
+    if not chave:
+        return None
+    excluir = excluir or set()
+    try:
+        resposta = requests.get(
+            "https://pixabay.com/api/",
+            params={"key": chave, "q": termo_busca, "image_type": "photo", "orientation": "vertical" if orientacao == "portrait" else "horizontal", "per_page": 15, "safesearch": "true"},
+            timeout=15,
+        )
+        if not resposta.ok:
+            return None
+        fotos = [f for f in (resposta.json().get("hits") or []) if f.get("largeImageURL") and f["largeImageURL"] not in excluir]
+        random.shuffle(fotos)
+        for foto in fotos[:3]:
+            imagem_resp = requests.get(foto["largeImageURL"], timeout=20)
+            if imagem_resp.ok:
+                return imagem_resp.content, foto["largeImageURL"]
+    except requests.RequestException:
+        return None
+    return None
+
+
+def _links_de_video(termo_busca: str, orientacao: str) -> list:
+    """Vídeos de banco livres (Pexels e Pixabay): lista de (url_do_mp4, duracao_s)."""
+    achados = []
+    chave_px = _chave_pexels()
+    if chave_px:
+        try:
+            r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": chave_px},
+                             params={"query": termo_busca, "per_page": 12, "orientation": orientacao}, timeout=15)
+            for v in (r.json().get("videos") or []) if r.ok else []:
+                arquivos = [f for f in v.get("video_files", []) if f.get("file_type") == "video/mp4" and 700 <= (f.get("width") or 0) <= 1930]
+                if arquivos:
+                    melhor = min(arquivos, key=lambda f: abs((f["width"] or 0) - 1280))  # ~720p: bom o bastante e leve de baixar
+                    achados.append((melhor["link"], float(v.get("duration") or 0)))
+        except (requests.RequestException, ValueError, KeyError):
+            pass
+    chave_pb = _chave_do_env("PIXABAY_API_KEY")
+    if chave_pb:
+        try:
+            r = requests.get("https://pixabay.com/api/videos/", params={"key": chave_pb, "q": termo_busca, "per_page": 12, "safesearch": "true"}, timeout=15)
+            for v in (r.json().get("hits") or []) if r.ok else []:
+                tamanhos = v.get("videos") or {}
+                escolhido = tamanhos.get("medium") or tamanhos.get("small") or tamanhos.get("large")
+                if escolhido and escolhido.get("url"):
+                    achados.append((escolhido["url"], float(v.get("duration") or 0)))
+        except (requests.RequestException, ValueError, KeyError):
+            pass
+    return achados
+
+
+def gerar_fundo_video(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "", duracao: float = 0) -> Path:
+    """Vídeo real de banco livre (Pexels/Pixabay) como fundo da cena: baixa um clipe do assunto, recorta no formato e
+    guarda ao lado da imagem (cenaNN_*.mp4). Clipe mais longo que a cena é cortado no fim dela; mais curto se repete.
+    Sem vídeo achado, cai numa foto do mesmo assunto."""
+    import random
+    import tempfile
+
+    from engine import render
+
+    orientacao = "portrait" if altura > largura else "landscape"
+    usadas = {a.read_text(encoding="utf-8").strip() for a in caminho.parent.glob("cena*.fonte")}
+    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent)
+    for termo in termos:
+        candidatos = [c for c in _links_de_video(termo, orientacao) if c[0] not in usadas]
+        # prefere clipes que cobrem a cena inteira; depois embaralha para variar
+        random.shuffle(candidatos)
+        candidatos.sort(key=lambda c: 0 if not duracao or c[1] >= duracao else 1)
+        for url, _ in candidatos[:3]:
+            try:
+                with requests.get(url, stream=True, timeout=30) as resposta:
+                    if not resposta.ok:
+                        continue
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                        baixado = 0
+                        for pedaco in resposta.iter_content(1 << 20):
+                            baixado += len(pedaco)
+                            if baixado > 80 << 20:
+                                break
+                            tmp.write(pedaco)
+                        caminho_tmp = Path(tmp.name)
+                render.preparar_clip(caminho_tmp, largura, altura, caminho.with_suffix(".mp4"), caminho, max_segundos=int(duracao or 10) + 2)
+                caminho_tmp.unlink(missing_ok=True)
+                caminho.with_suffix(".fonte").write_text(url, encoding="utf-8")
+                return caminho
+            except (requests.RequestException, RuntimeError):
+                continue
+    print(f"[aviso] nenhum vídeo livre achado para '{assunto or termo_busca}': usando foto")
+    caminho.with_suffix(".mp4").unlink(missing_ok=True)
+    return gerar_fundo_foto(largura, altura, caminho, termo_busca, contexto)
+
+
 _PALAVRAS_GENERICAS = {
     "curiosidades", "curiosidade", "sobre", "porque", "por", "que", "como", "quando", "quais", "qual", "mais",
     "historia", "história", "fatos", "coisas", "incríveis", "incriveis", "melhores", "maiores", "nunca", "sempre",
@@ -439,6 +549,9 @@ def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str,
         pexels = _buscar_pexels(termo, orientacao, usadas)
         if pexels:
             candidatos.append(pexels)
+        pixabay = _buscar_pixabay(termo, orientacao, usadas)
+        if pixabay:
+            candidatos.append(pixabay)
         if candidatos:
             break
     import random
@@ -538,7 +651,9 @@ def gerar_fundo_ia(
 # dispatcher
 # ---------------------------------------------------------------------------
 
-def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "", contexto: str = "") -> Path:
+def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "", contexto: str = "", duracao: float = 0) -> Path:
+    if estilo == "video":
+        return gerar_fundo_video(largura, altura, caminho, termo_busca=cena, contexto=contexto, duracao=duracao)
     if estilo == "foto":
         return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena, contexto=contexto)
     if estilo == "ia":
