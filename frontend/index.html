@@ -328,20 +328,20 @@
                 <input type="number" name="num_cenas" min="1" max="40" step="1" placeholder="Automático (ex: 3 ou 4)">
               </label>
             </div>
-            <div>
-              <span class="video-meta">Imagens da sua Base pras cenas (opcional — clique na ordem desejada: a 1ª vai na cena 1, a 2ª na cena 2... as outras cenas usam o estilo acima)</span>
+            <div class="midias-base-bloco">
+              <span class="video-meta">Imagens e vídeos da sua Base para as cenas (opcional). Clique na ordem em que devem aparecer: o 1º vai na cena 1, o 2º na cena 2... Se escolher a mesma quantidade de cenas, nenhuma imagem é gerada por IA.</span>
               <div id="novo-base-grade" class="cena-base-grade" style="margin-top:8px"></div>
               <input type="hidden" name="imagens_base" id="campo-imagens-base">
-            </div>
-            <div class="video-base-geral">
-              <label>
-                <span>Vídeo da Base como fundo do vídeo inteiro (opcional — a narração fala por cima dele)</span>
-                <select name="video_base_geral" id="campo-video-base-geral"><option value="">Nenhum</option></select>
+              <label hidden>
+                <span>Cenas sem mídia escolhida</span>
+                <select name="base_restante" id="campo-base-restante">
+                  <option value="estilo">Gerar com o estilo de imagem acima</option>
+                  <option value="repetir">Repetir as da Base em ciclo (vídeo todo da Base)</option>
+                </select>
               </label>
-              <span class="video-meta" id="video-base-info"></span>
-              <button type="button" class="btn-secondary btn-compacto" id="btn-roteiro-do-video" hidden>Gerar roteiro para este vídeo</button>
+              <span class="video-meta" id="midias-base-info"></span>
+              <button type="button" class="btn-secondary btn-compacto" id="btn-roteiro-das-midias" hidden title="A IA escreve um parágrafo para cada mídia, seguindo a descrição dela na Base">Gerar roteiro com base nessas mídias</button>
             </div>
-
             </details>
 
             <details class="secao" id="secao-legenda">

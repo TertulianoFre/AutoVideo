@@ -1085,7 +1085,8 @@ btnPreviewRoteiro.addEventListener("click", async () => {
   const dados = new FormData();
   dados.set("titulo", titulo);
   dados.set("duracao_alvo", campoDuracao.value || "1");
-  dados.set("descricao_video", typeof descricaoParaRoteiro === "function" ? descricaoParaRoteiro() : (campoDescricaoVideo.value || ""));
+  dados.set("descricao_video", campoDescricaoVideo.value || "");
+  if (typeof midiasEscolhidas === "function" && midiasEscolhidas().length) dados.set("midias", midiasEscolhidas().join("|")); // o roteiro é escrito seguindo cada mídia escolhida
   const nCenas = document.querySelector("[name=num_cenas]").value;
   if (nCenas) dados.set("num_cenas", nCenas);
 

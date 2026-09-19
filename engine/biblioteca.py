@@ -4,6 +4,7 @@ thumbnails, por exemplo). Fica salvo em dados/biblioteca/, fora da pasta de
 qualquer vídeo específico, pra poder ser usada em qualquer vídeo novo."""
 
 import io
+import json
 import re
 import subprocess
 import tempfile
@@ -183,25 +184,6 @@ def preparar_audio_para_video(nome: str, duracao_segundos: float, destino: Path)
     return destino
 
 
-_cache_duracao: dict = {}
-
-
-def duracao_video(nome: str) -> float:
-    """Duração (s) de um vídeo da Base, com cache por data de modificação."""
-    caminho = caminho_video_valido(nome)
-    if caminho is None:
-        return 0.0
-    chave = (nome, caminho.stat().st_mtime)
-    if chave not in _cache_duracao:
-        from engine.ferramentas import caminho_ffprobe
-        r = subprocess.run([caminho_ffprobe(), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(caminho)], capture_output=True, text=True)
-        try:
-            _cache_duracao[chave] = round(float(r.stdout.strip()), 1)
-        except ValueError:
-            _cache_duracao[chave] = 0.0
-    return _cache_duracao[chave]
-
-
 # ---------------------------------------------------------------------------
 # cenas padrão: cenas prontas (narração + imagem/vídeo opcional) pra encaixar em qualquer vídeo
 # (ex: "se inscreva no canal e deixe o seu like"). A narração é sintetizada com a voz do vídeo
@@ -243,6 +225,13 @@ def _imagem_inscreva_se() -> str:
     pequena = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 74) if Path("C:/Windows/Fonts/arialbd.ttf").exists() else fonte
     d.text((largura // 2, 790), "e deixe o seu LIKE", font=pequena, fill=(60, 60, 60), anchor="mm")
     fundo.save(destino, "PNG")
+    try:
+        meta_arq = RAIZ / "meta.json"
+        meta = json.loads(meta_arq.read_text(encoding="utf-8")) if meta_arq.exists() else {}
+        meta.setdefault("imagens", {}).setdefault(destino.name, {"descricao": "Botão vermelho de INSCREVA-SE com convite para deixar o like", "canal_id": ""})
+        meta_arq.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except (OSError, ValueError):
+        pass
     return destino.name
 
 

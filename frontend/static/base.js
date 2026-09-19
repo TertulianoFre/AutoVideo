@@ -100,44 +100,49 @@ async function carregarBase() {
 
 document.getElementById("base-filtro-canal").addEventListener("change", carregarBase);
 
-// ---- Novo vídeo: escolher imagens da Base pras primeiras cenas (a ordem do clique é a ordem das cenas) ----
-let selecionadasBase = [];
+// ---- Novo vídeo: escolher imagens e vídeos da Base pras cenas (a ordem do clique é a ordem das cenas) ----
+let selecionadasBase = []; // "imagem:nome" | "video:nome"
 
 async function montarSeletorBaseNovoVideo() {
   const grade = document.getElementById("novo-base-grade");
   if (!grade) return;
   const dados = await fetch("/api/biblioteca").then((r) => r.json());
-  const imagens = dados.imagens || [];
-  selecionadasBase = selecionadasBase.filter((n) => imagens.some((i) => i.nome === n));
+  const itens = [
+    ...(dados.imagens || []).map((i) => ({ ...i, tipo: "imagem" })),
+    ...(dados.videos || []).map((v) => ({ ...v, tipo: "video" })),
+  ];
+  selecionadasBase = selecionadasBase.filter((e) => itens.some((i) => `${i.tipo}:${i.nome}` === e));
   const campo = document.getElementById("campo-imagens-base");
-  if (typeof preencherVideosBaseNovoVideo === "function") preencherVideosBaseNovoVideo(dados.videos || []);
 
   const desenhar = () => {
     campo.value = selecionadasBase.join("|");
-    grade.innerHTML = imagens.length
-      ? imagens.map((img) => {
-          const ordem = selecionadasBase.indexOf(img.nome);
-          const dica = `${img.nome}${img.descricao ? " — " + img.descricao : ""}${img.usado_em.length ? " — já usada em: " + img.usado_em.join(", ") : ""}`;
-          return `<div class="base-opcao"><button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-nome="${escaparAttr(img.nome)}" title="${escaparAttr(dica)}"><img src="${img.url}" alt="">${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button><span class="base-legenda" title="${escaparAttr(img.descricao || img.nome)}">${escaparAttr(img.descricao || img.nome)}</span></div>`;
+    grade.innerHTML = itens.length
+      ? itens.map((it) => {
+          const chave = `${it.tipo}:${it.nome}`;
+          const ordem = selecionadasBase.indexOf(chave);
+          const dica = `${it.nome}${it.descricao ? " — " + it.descricao : ""}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
+          const midia = it.tipo === "video" ? `<video src="${it.url}#t=0.5" muted preload="metadata"></video>` : `<img src="${it.url}" alt="">`;
+          return `<div class="base-opcao"><button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-chave="${escaparAttr(chave)}" title="${escaparAttr(dica)}">${midia}${it.tipo === "video" ? '<span class="base-tipo">vídeo</span>' : ""}${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button><span class="base-legenda" title="${escaparAttr(it.descricao || it.nome)}">${escaparAttr(it.descricao || it.nome)}</span></div>`;
         }).join("")
-      : '<span class="video-meta">Nenhuma imagem na Base ainda — importe na aba Base.</span>';
+      : '<span class="video-meta">Nada na Base ainda — importe imagens ou vídeos na aba Base.</span>';
     grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
       op.addEventListener("click", () => {
-        const nome = op.dataset.nome;
-        if (selecionadasBase.includes(nome)) {
-          selecionadasBase = selecionadasBase.filter((n) => n !== nome);
+        const chave = op.dataset.chave;
+        if (selecionadasBase.includes(chave)) {
+          selecionadasBase = selecionadasBase.filter((e) => e !== chave);
         } else {
-          const usos = imagens.find((i) => i.nome === nome)?.usado_em || [];
-          if (usos.length && !confirm(`Essa imagem já foi usada em: ${usos.join(", ")}. Usar de novo?`)) return;
-          selecionadasBase.push(nome);
+          const usos = itens.find((i) => `${i.tipo}:${i.nome}` === chave)?.usado_em || [];
+          if (usos.length && !confirm(`Isso já foi usado em: ${usos.join(", ")}. Usar de novo?`)) return;
+          selecionadasBase.push(chave);
         }
         desenhar();
+        if (typeof window.aoMudarMidiasBase === "function") window.aoMudarMidiasBase();
       });
     });
   };
   desenhar();
+  if (typeof window.aoMudarMidiasBase === "function") window.aoMudarMidiasBase();
 }
-
 
 document.getElementById("input-upload-video-base").addEventListener("change", async (evento) => {
   const arquivo = evento.target.files[0];

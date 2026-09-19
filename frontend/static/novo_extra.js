@@ -94,56 +94,49 @@ function redesenharLegendaNovo() {
   formNovo[nome].addEventListener("input", redesenharLegendaNovo);
 });
 document.getElementById("secao-legenda").addEventListener("toggle", () => requestAnimationFrame(redesenharLegendaNovo));
-document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { redesenharLegendaNovo(); agendarEstimativa(); }, 50));
+document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { delete campoNumCenas.dataset.auto; redesenharLegendaNovo(); agendarEstimativa(); window.aoMudarMidiasBase(); }, 50));
 
 
-// ---------------- vídeo da Base como fundo do vídeo inteiro + roteiro do tamanho dele ----------------
+// ---------------- mídias da Base escolhidas para as cenas (imagens E vídeos) ----------------
 
-let videosBase = [];
-const campoVideoBase = document.getElementById("campo-video-base-geral");
+const campoNumCenas = formNovo.num_cenas;
+const campoBaseRestante = document.getElementById("campo-base-restante");
 
-function videoBaseEscolhido() {
-  return videosBase.find((v) => v.nome === campoVideoBase.value) || null;
+function midiasEscolhidas() {
+  return typeof selecionadasBase !== "undefined" ? selecionadasBase : [];
 }
 
-function preencherVideosBaseNovoVideo(videos) {
-  videosBase = videos;
-  const atual = campoVideoBase.value;
-  campoVideoBase.innerHTML = '<option value="">Nenhum</option>' + videos.map((v) => `<option value="${escaparAttr(v.nome)}">${escaparAttr(v.descricao || v.nome)} (${Math.round(v.duracao_segundos)} s)</option>`).join("");
-  campoVideoBase.value = videos.some((v) => v.nome === atual) ? atual : "";
-}
-
-function descricaoParaRoteiro() {
-  const base = formNovo.descricao_video.value.trim();
-  const v = videoBaseEscolhido();
-  if (!v) return base;
-  return `${base} O roteiro será narrado sobre um vídeo importado, "${v.descricao || v.nome}" (${Math.round(v.duracao_segundos)} segundos). Escreva a narração acompanhando o que esse vídeo provavelmente mostra, sem citar o nome do arquivo.`.trim();
-}
-
-campoVideoBase.addEventListener("change", () => {
-  const v = videoBaseEscolhido();
-  const info = document.getElementById("video-base-info");
-  const botao = document.getElementById("btn-roteiro-do-video");
-  if (v) {
-    formNovo.duracao_alvo.value = Math.max(0.3, Math.round((v.duracao_segundos / 60) * 100) / 100); // o roteiro tem o tempo do vídeo
-    formNovo.num_cenas.value = "";
-    formNovo.num_cenas.disabled = true; // o vídeo inteiro é uma cena só
-    const s = Math.round(v.duracao_segundos);
-    info.textContent = `Vídeo de ${s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`}: a duração alvo foi ajustada para esse tempo. O vídeo vira uma cena só; se a narração for mais longa ele repete em loop.`;
-    botao.hidden = false;
-  } else {
-    formNovo.num_cenas.disabled = false;
-    info.textContent = "";
-    botao.hidden = true;
+// chamada por base.js sempre que a seleção muda (e ao mexer na quantidade de cenas)
+window.aoMudarMidiasBase = () => {
+  const k = midiasEscolhidas().length;
+  campoBaseRestante.closest("label").hidden = k === 0;
+  document.getElementById("btn-roteiro-das-midias").hidden = k === 0;
+  if (k > 0 && (!campoNumCenas.value || campoNumCenas.dataset.auto === "1")) {
+    campoNumCenas.value = k; // uma cena por mídia escolhida (você pode mudar)
+    campoNumCenas.dataset.auto = "1";
+  } else if (k === 0 && campoNumCenas.dataset.auto === "1") {
+    campoNumCenas.value = "";
+    delete campoNumCenas.dataset.auto;
   }
+  const n = parseInt(campoNumCenas.value, 10) || 0;
+  const info = document.getElementById("midias-base-info");
+  if (!k) info.textContent = "";
+  else if (n === k) info.textContent = `${k} mídia(s) = ${k} cena(s): nenhuma imagem será gerada por IA.`;
+  else if (n > k) info.textContent = `${k} de ${n} cenas usam a Base; ${campoBaseRestante.value === "repetir" ? "as demais repetem as escolhidas em ciclo (nada gerado por IA)" : "as demais são geradas pelo estilo de imagem acima"}.`;
+  else info.textContent = `Você escolheu ${k} mídias mas pediu ${n} cena(s): só as ${n} primeiras entram.`;
+  if (typeof atualizarCenasDoRoteiro === "function") atualizarCenasDoRoteiro();
   agendarEstimativa();
-});
+};
 
-document.getElementById("btn-roteiro-do-video").addEventListener("click", () => {
-  document.getElementById("btn-preview-roteiro").click(); // usa o mesmo fluxo da prévia (com barra de progresso)
+campoNumCenas.addEventListener("input", () => {
+  delete campoNumCenas.dataset.auto; // você mexeu: a quantidade deixa de acompanhar a seleção
+  window.aoMudarMidiasBase();
 });
+campoBaseRestante.addEventListener("change", window.aoMudarMidiasBase);
 
-// ---------------- ouvir amostra da voz ----------------
+document.getElementById("btn-roteiro-das-midias").addEventListener("click", () => {
+  document.getElementById("btn-preview-roteiro").click(); // mesmo fluxo da prévia (barra de progresso); as mídias vão junto
+});
 
 let audioAmostra = null;
 

@@ -31,6 +31,7 @@ from engine import afiliados, agendador, agente, biblioteca, canal, roteiro as r
 from engine import thumbnail as thumbnail_mod
 from engine import tts as tts_mod
 from engine import estimativa as estimativa_mod
+from engine import midias as midias_mod
 from engine import pipeline as pipeline_mod
 from engine import render as render_mod
 from engine import subtitles as subtitles_mod
@@ -449,7 +450,7 @@ def api_listar_biblioteca() -> dict:
         "audios_nomes": biblioteca.listar_audios(),
         "audios_info": [info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()],
         "imagens": [info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()],
-        "videos": [{**info("videos", n, f"/biblioteca/videos/{n}"), "duracao_segundos": biblioteca.duracao_video(n)} for n in biblioteca.listar_videos()],
+        "videos": [info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()],
         "canais": [{"id": c["id"], "nome": c["nome"]} for c in canal.listar_canais()],
     }
 
@@ -614,6 +615,7 @@ def api_preview_roteiro(
     duracao_alvo: float | None = Form(None),
     descricao_video: str = Form(""),
     num_cenas: int | None = Form(None),
+    midias: str = Form(""),
 ) -> JSONResponse:
     try:
         roteiro = roteiro_mod.gerar_roteiro(
@@ -622,6 +624,7 @@ def api_preview_roteiro(
             contexto_canal=canal.obter_contexto(),
             descricao_video=descricao_video.strip(),
             num_cenas=num_cenas if num_cenas and 1 < num_cenas <= 40 else None,
+            cenas_midia=midias_mod.descricoes_para_roteiro([m for m in midias.split("|") if m.strip()]) or None,
         )
         return JSONResponse({"roteiro": roteiro})
     except RuntimeError as erro:
@@ -668,6 +671,7 @@ def api_criar_video(
     formatos: str = Form("ambos"),
     num_cenas: int | None = Form(None),
     imagens_base: str = Form(""),
+    base_restante: str = Form("estilo"),
     transicao: str = Form("fade"),
     legenda_modo: str = Form("karaoke"),
     legenda_tamanho: str = Form("m"),
@@ -675,7 +679,6 @@ def api_criar_video(
     legenda_cor: str = Form(""),
     legenda_caixa: bool = Form(False),
     legenda_fundo: str = Form(""),
-    video_base_geral: str = Form(""),
     confirmar_duplicado: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
@@ -729,9 +732,9 @@ def api_criar_video(
         formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
         num_cenas=num_cenas if num_cenas and 1 <= num_cenas <= 40 else None,
         imagens_base=[n for n in imagens_base.split("|") if n.strip()],
+        base_restante=base_restante if base_restante in ("estilo", "repetir") else "estilo",
         transicao=transicao if transicao in render_mod.TRANSICOES else "fade",
         legenda=_config_legenda(legenda_modo, legenda_tamanho, legenda_posicao, legenda_cor, legenda_caixa, legenda_fundo),
-        video_base_geral=video_base_geral if biblioteca.caminho_video_valido(video_base_geral) else None,
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
     )
 
@@ -851,9 +854,9 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         formatos=metadados.get("formatos", "ambos"),
         num_cenas=metadados.get("num_cenas"),
         imagens_base=metadados.get("imagens_base") or [],
+        base_restante=metadados.get("base_restante", "estilo"),
         transicao=metadados.get("transicao", "fade"),
         legenda=metadados.get("legenda") or None,
-        video_base_geral=metadados.get("video_base_geral") or None,
         reaproveitar_imagens=reaproveitar_imagens,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )

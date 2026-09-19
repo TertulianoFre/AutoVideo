@@ -90,6 +90,7 @@ def gerar_roteiro(
     descricao_video: str = "",
     tentativas: int = 3,
     num_cenas: int | None = None,
+    cenas_midia: list | None = None,
 ) -> str:
     palavras_alvo = round(duracao_alvo_minutos * PALAVRAS_POR_MINUTO)
 
@@ -99,7 +100,18 @@ def gerar_roteiro(
     if descricao_video:
         partes.append(f"Instruções específicas pra esse vídeo: {descricao_video}")
 
-    if num_cenas and num_cenas > 1:
+    if cenas_midia:
+        # o vídeo terá uma imagem/vídeo escolhido por você em cada cena: cada parágrafo narra o que aparece nela
+        n_total = max(num_cenas or 0, len(cenas_midia))
+        lista = "\n".join(f"Cena {i + 1}: {d}" for i, d in enumerate(cenas_midia))
+        extra = "" if n_total == len(cenas_midia) else f" As cenas {len(cenas_midia) + 1} a {n_total} não têm imagem definida: continue o assunto naturalmente."
+        partes.append(
+            f"O vídeo terá {n_total} cenas, cada uma com uma imagem/vídeo já escolhido, nesta ordem:\n{lista}\n"
+            f"Escreva EXATAMENTE {n_total} parágrafos, separados por uma linha em branco: o parágrafo N narra o que aparece na cena N "
+            f"(use o que está descrito, sem inventar detalhes visuais que contradigam) e liga naturalmente com o anterior.{extra}"
+        )
+        num_cenas = n_total
+    elif num_cenas and num_cenas > 1:
         partes.append(
             f"ESTRUTURA OBRIGATÓRIA: escreva EXATAMENTE {num_cenas} parágrafos, separados por uma linha em branco. "
             "Cada parágrafo é um assunto/cena distinto (se o vídeo for de curiosidades, uma curiosidade por parágrafo), "
@@ -112,7 +124,7 @@ def gerar_roteiro(
     ]
     rascunho = chamar_pollinations(mensagens, tentativas)
     rascunho = _ajustar_tamanho(mensagens, rascunho, palavras_alvo, tentativas, num_cenas)
-    if num_cenas and num_cenas > 1:
+    if (num_cenas and num_cenas > 1) or cenas_midia:
         return rascunho  # a revisão junta parágrafos; aqui a estrutura em blocos é o que importa
     return _revisar_roteiro(rascunho)
 

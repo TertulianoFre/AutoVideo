@@ -13,7 +13,7 @@ from typing import Callable
 
 from PIL import Image
 
-from engine import ambiente, biblioteca, canal, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
+from engine import ambiente, biblioteca, canal, midias, render, roteiro as roteiro_mod, scenes, subtitles, thumbnail as thumbnail_mod, tts, visuals
 from engine.roteiro import PALAVRAS_POR_MINUTO
 
 RAIZ_SAIDA = Path(__file__).resolve().parent.parent / "output"
@@ -93,10 +93,10 @@ def gerar_video(
     canal_id: str | None = None,
     num_cenas: int | None = None,
     imagens_base: list | None = None,
+    base_restante: str = "estilo",
     transicao: str = "fade",
     legenda: dict | None = None,
     reaproveitar_imagens: bool = False,
-    video_base_geral: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -129,10 +129,10 @@ def gerar_video(
         formatos=formatos,
         num_cenas=num_cenas,
         imagens_base=imagens_base or [],
+        base_restante=base_restante,
         transicao=transicao,
         legenda=legenda or {},
         aprovado=False,  # só publica depois de você confirmar na Fila
-        video_base_geral=video_base_geral or "",
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,
@@ -173,6 +173,7 @@ def gerar_video(
                 contexto_canal=canal.obter_contexto(canal_id),
                 descricao_video=descricao_video,
                 num_cenas=num_cenas,
+                cenas_midia=midias.descricoes_para_roteiro(imagens_base),
             )
             print(f"[roteiro gerado]\n{roteiro}\n")
         roteiro_final = roteiro
@@ -253,7 +254,7 @@ def gerar_video(
         lista_cenas = [(contexto_cena, duracao_por_imagem) for _ in range(n_imagens)]
     else:
         avisar("Dividindo o roteiro em cenas", 18)
-        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=1 if video_base_geral else num_cenas)
+        cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
     if submaker is not None:
@@ -279,12 +280,13 @@ def gerar_video(
                 cenas_mantidas.add(i)
 
     # imagens da Base escolhidas de antemão: a 1ª vai na cena 1, a 2ª na cena 2...
-    imagens_base_validas = []
-    for nome_base in imagens_base or []:
-        origem_base = biblioteca.caminho_imagem_valida(nome_base)
-        if origem_base is not None:
-            imagens_base_validas.append(origem_base.name)
-    imagens_base_validas = imagens_base_validas[: len(lista_cenas)]
+    escolhidas = midias.analisar_entradas(imagens_base)  # [("imagem"|"video", nome)] na ordem das cenas
+    midia_por_cena = {}
+    if escolhidas and not reaproveitar_imagens:
+        if base_restante == "repetir":  # vídeo todo da Base: as escolhidas se repetem em ciclo
+            midia_por_cena = {i: escolhidas[i % len(escolhidas)] for i in range(len(lista_cenas))}
+        else:
+            midia_por_cena = {i: m for i, m in enumerate(escolhidas[: len(lista_cenas)])}
 
     # guardado pra dar pra regenerar uma cena específica depois (regenerar_cena),
     # sem precisar refazer roteiro/narração/outras cenas
@@ -294,11 +296,12 @@ def gerar_video(
         narracao_arquivo=(narracao_path.name if not sem_narracao else ""),
         audio_natural=audio_path.name,
         videos_base_cenas=(
-            {k: v for k, v in (meta_antiga_videos or {}).items() if int(k) in cenas_mantidas} if reaproveitar_imagens else {}
+            {k: v for k, v in (meta_antiga_videos or {}).items() if int(k) in cenas_mantidas}
+            if reaproveitar_imagens else {str(i): n for i, (tp, n) in midia_por_cena.items() if tp == "video"}
         ),
         imagens_base_cenas=(
             {k: v for k, v in mapa_base_antigo.items() if int(k) in cenas_mantidas}
-            if reaproveitar_imagens else {str(i): n for i, n in enumerate(imagens_base_validas)}
+            if reaproveitar_imagens else {str(i): n for i, (tp, n) in midia_por_cena.items() if tp == "imagem"}
         ),
         audio_arquivo=audio_path.name,
         duracao_segundos=round(duracao_real, 1),
@@ -318,17 +321,6 @@ def gerar_video(
         imagens_com_duracao = []
         for i, (texto_cena, duracao_cena) in enumerate(lista_cenas):
             caminho_imagem = pasta / f"cena{i:02d}_{sufixo}.png"
-            if video_base_geral and i == 0:
-                # o vídeo da Base é o fundo do vídeo inteiro (uma cena só): recortado no formato e repetido se a narração for mais longa
-                origem_v = biblioteca.caminho_video_valido(video_base_geral)
-                if origem_v is None:
-                    raise ValueError(f'O vídeo "{video_base_geral}" não está mais na Base.')
-                render.preparar_clip(origem_v, estilo["largura"], estilo["altura"], caminho_imagem.with_suffix(".mp4"), caminho_imagem, max_segundos=int(duracao_real) + 5)
-                _salvar_metadados(pasta, videos_base_cenas={"0": video_base_geral})
-                imagens_com_duracao.append((caminho_imagem, duracao_cena))
-                imagens_feitas += 1
-                avisar(f"Preparando o vídeo da Base ({formato})", 20 + 65 * imagens_feitas / total_imagens)
-                continue
             if i not in cenas_mantidas:
                 caminho_imagem.with_suffix(".mp4").unlink(missing_ok=True)  # sobra de um vídeo antigo nessa cena
             if i in cenas_mantidas and caminho_imagem.exists():
@@ -336,9 +328,13 @@ def gerar_video(
                 imagens_feitas += 1
                 avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
                 continue
-            if not reaproveitar_imagens and i < len(imagens_base_validas):
-                base_img = Image.open(biblioteca.caminho_imagem_valida(imagens_base_validas[i])).convert("RGB")
-                visuals._cobrir(base_img, estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
+            if i in midia_por_cena:
+                tipo_m, nome_m = midia_por_cena[i]
+                if tipo_m == "video":  # vídeo da Base nessa cena: recortado no formato, em loop se a cena for mais longa
+                    render.preparar_clip(biblioteca.caminho_video_valido(nome_m), estilo["largura"], estilo["altura"], caminho_imagem.with_suffix(".mp4"), caminho_imagem, max_segundos=int(duracao_cena) + 5)
+                else:
+                    base_img = Image.open(biblioteca.caminho_imagem_valida(nome_m)).convert("RGB")
+                    visuals._cobrir(base_img, estilo["largura"], estilo["altura"]).save(caminho_imagem, "PNG")
                 imagens_com_duracao.append((caminho_imagem, duracao_cena))
                 imagens_feitas += 1
                 avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
@@ -602,7 +598,8 @@ def editar_estrutura(
             corte = f"atrim=start={inicios[i]:.3f}" + (f":end={inicios[i + 1]:.3f}" if i < len(cenas) - 1 else "") + ","
         filtros.append(f"{fonte}{corte}asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo[p{k}]")
     filtros.append("".join(f"[p{k}]" for k in range(len(ordem))) + f"concat=n={len(ordem)}:v=0:a=1[saida]")
-    nova_narracao = pasta / "narracao_editada.mp3"
+    # o arquivo de saída nunca pode ser o de entrada (o ffmpeg não edita no lugar): alterna entre dois nomes
+    nova_narracao = pasta / ("narracao_editada_b.mp3" if narracao.name == "narracao_editada.mp3" else "narracao_editada.mp3")
     r = subprocess.run(
         [caminho_ffmpeg(), "-y", *entradas, "-filter_complex", ";".join(filtros), "-map", "[saida]", "-c:a", "libmp3lame", "-q:a", "3", str(nova_narracao)],
         capture_output=True, text=True,
@@ -700,6 +697,8 @@ def editar_estrutura(
     caminho_meta.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
     for peca in novos:
         peca["arquivo"].unlink(missing_ok=True)
+    if narracao.name.startswith("narracao_editada") and narracao != nova_narracao:
+        narracao.unlink(missing_ok=True)  # a versão anterior da narração editada
 
     return aplicar_duracoes(slug, {}, progresso=lambda etapa, pct: avisar(etapa, 70 + 0.3 * pct))
 
