@@ -17,9 +17,9 @@ ENV = Path(__file__).resolve().parent.parent / ".env"
 
 # nome -> (url, modelo padrão, variável da chave, onde criar a chave grátis)
 PROVEDORES = {
-    "groq": ("https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile", "GROQ_API_KEY", "console.groq.com"),
-    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-2.0-flash", "GEMINI_API_KEY", "aistudio.google.com/apikey"),
-    "cerebras": ("https://api.cerebras.ai/v1/chat/completions", "llama-3.3-70b", "CEREBRAS_API_KEY", "cloud.cerebras.ai"),
+    "groq": ("https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-120b", "GROQ_API_KEY", "console.groq.com"),
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-flash-latest", "GEMINI_API_KEY", "aistudio.google.com/apikey"),
+    "cerebras": ("https://api.cerebras.ai/v1/chat/completions", "gpt-oss-120b", "CEREBRAS_API_KEY", "cloud.cerebras.ai"),
     "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "meta-llama/llama-3.3-70b-instruct:free", "OPENROUTER_API_KEY", "openrouter.ai/keys"),
 }
 OLLAMA_URL = "http://localhost:11434/v1/chat/completions"
@@ -143,7 +143,8 @@ def chamar_ia(mensagens: list, tentativas: int = 4) -> str:
             _descanso[nome] = time.time() + min(max(espera, 20), 300)
             erros.append(f"{nome}: limite atingido")
         except (requests.RequestException, RuntimeError, ValueError) as e:
-            _descanso[nome] = time.time() + 30
+            sem_acesso = str(e).startswith(("HTTP 401", "HTTP 402", "HTTP 403"))  # chave sem permissão/crédito: não insiste toda hora
+            _descanso[nome] = time.time() + (3600 if sem_acesso else 30)
             erros.append(f"{nome}: {str(e)[:120]}")
     raise RuntimeError("Nenhum provedor de IA respondeu (" + "; ".join(erros) + ")")
 
@@ -167,8 +168,8 @@ def _pollinations(mensagens: list, tentativas: int) -> str:
 # ---------------------------------------------------------------------------
 
 MODELOS_VISAO = {
-    "gemini": "gemini-2.0-flash",
-    "groq": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "gemini": "gemini-flash-latest",
+    "groq": "qwen/qwen3.8-27b",
     "openrouter": "meta-llama/llama-3.2-11b-vision-instruct:free",
 }
 
