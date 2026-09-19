@@ -283,10 +283,15 @@ def _gravar_cenas_padrao(cenas: list) -> None:
     ARQUIVO_CENAS_PADRAO.write_text(json.dumps(cenas, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, midia_nome: str, canal_id: str = "", posicao_padrao: str = "fim") -> dict:
+def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, midia_nome: str, canal_id: str = "", posicao_padrao: str = "fim", usar_audio_video: bool = False) -> dict:
     nome, texto = nome.strip()[:80], texto.strip()[:600]
-    if not nome or len(texto) < 3:
-        raise ValueError("dê um nome e o texto da narração dessa cena")
+    usar_audio_video = bool(usar_audio_video) and midia_tipo == "video"
+    if not nome:
+        raise ValueError("dê um nome para essa cena")
+    if usar_audio_video:
+        texto = ""
+    elif len(texto) < 3:
+        raise ValueError("escreva o texto da narração dessa cena")
     if midia_tipo == "imagem" and caminho_imagem_valida(midia_nome) is None:
         raise ValueError("imagem não encontrada na Base")
     if midia_tipo == "video" and caminho_video_valido(midia_nome) is None:
@@ -298,7 +303,7 @@ def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, 
     if item is None:
         item = {"id": uuid.uuid4().hex[:10], "canal_id": canal_id}  # nova: fica no canal ativo
         cenas.append(item)
-    item.update(nome=nome, texto=texto, midia_tipo=midia_tipo, midia_nome=midia_nome, posicao_padrao="inicio" if posicao_padrao == "inicio" else "fim")
+    item.update(nome=nome, texto=texto, midia_tipo=midia_tipo, midia_nome=midia_nome, posicao_padrao="inicio" if posicao_padrao == "inicio" else "fim", usar_audio_video=usar_audio_video)
     _gravar_cenas_padrao(cenas)
     return item
 

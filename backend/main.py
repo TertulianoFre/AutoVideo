@@ -501,7 +501,7 @@ def api_listar_biblioteca(canal: str = "") -> dict:
         "audios_nomes": [a["nome"] for a in audios],
         "audios_info": audios,
         "imagens": [i for i in (info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()) if do_canal(i)],
-        "videos": [i for i in (info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()) if do_canal(i)],
+        "videos": [{**i, "duracao_segundos": biblioteca.duracao_de(biblioteca.PASTA_VIDEOS / i["nome"])} for i in (info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()) if do_canal(i)],
         "canais": [{"id": c["id"], "nome": c["nome"]} for c in canais_mod.listar_canais()],
         "canal_ativo": canais_mod.canal_ativo_id(),
     }
@@ -1333,6 +1333,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "imagem_base": (metadados.get("imagens_base_cenas") or {}).get(str(i)),
                 "video_base": (metadados.get("videos_base_cenas") or {}).get(str(i)),
                 "descricao_imagem": (metadados.get("descricoes_cenas") or {}).get(str(i), ""),
+                "audio_do_video": bool(cena.get("audio_do_video")),
             }
         )
         acumulado += duracao
@@ -1393,7 +1394,7 @@ def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | Non
 def api_estrutura_das_cenas(
     slug: str, operacao: str = Form(...), indice: int | None = Form(None), posicao: int | None = Form(None),
     texto: str = Form(""), descricao_imagem: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
-    edicoes: str = Form(""),
+    edicoes: str = Form(""), audio_do_video: bool = Form(False),
 ) -> dict:
     """Adiciona uma cena (narração nova + imagem/vídeo), remove uma ou troca o texto de várias — sem regenerar
     o vídeo inteiro. Roda como job (leva um tempo)."""
@@ -1414,7 +1415,7 @@ def api_estrutura_das_cenas(
     job = jobs.criar_job_funcao(
         metadados.get("titulo", slug),
         lambda cb: _resultado_videos(slug, pipeline_mod.editar_estrutura(
-            slug, operacao, indice, posicao, texto, descricao_imagem, midia_tipo, midia_nome, mapa_edicoes, progresso=cb)),
+            slug, operacao, indice, posicao, texto, descricao_imagem, midia_tipo, midia_nome, mapa_edicoes, progresso=cb, audio_do_video=audio_do_video)),
         estimativa=90.0 if operacao == "adicionar" else 60.0,
     )
     return {"job_id": job.id}
@@ -1422,16 +1423,20 @@ def api_estrutura_das_cenas(
 
 @app.get("/api/cenas-padrao")
 def api_listar_cenas_padrao(canal: str = "") -> dict:
-    return {"cenas": [c for c in biblioteca.listar_cenas_padrao() if not canal or c.get("canal_id", "") in ("", canal)]}
+    cenas = [dict(c) for c in biblioteca.listar_cenas_padrao() if not canal or c.get("canal_id", "") in ("", canal)]
+    for c in cenas:
+        video = biblioteca.caminho_video_valido(c.get("midia_nome", "")) if c.get("midia_tipo") == "video" else None
+        c["duracao_segundos"] = biblioteca.duracao_de(video) if video else 0
+    return {"cenas": cenas}
 
 
 @app.post("/api/cenas-padrao")
 def api_salvar_cena_padrao(
     id: str = Form(""), nome: str = Form(""), texto: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
-    posicao_padrao: str = Form("fim"),
+    posicao_padrao: str = Form("fim"), usar_audio_video: bool = Form(False),
 ) -> JSONResponse:
     try:
-        return JSONResponse(biblioteca.salvar_cena_padrao(id or None, nome, texto, midia_tipo, midia_nome, canais_mod.canal_ativo_id(), posicao_padrao))
+        return JSONResponse(biblioteca.salvar_cena_padrao(id or None, nome, texto, midia_tipo, midia_nome, canais_mod.canal_ativo_id(), posicao_padrao, usar_audio_video))
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=400)
 

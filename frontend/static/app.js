@@ -611,6 +611,10 @@ function formatarTempo(segundos) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function botaoInserirCena(posicao) {
+  return `<button type="button" class="cena-inserir" data-posicao="${posicao}" title="Adicionar uma cena aqui" aria-label="Adicionar uma cena aqui">+</button>`;
+}
+
 function cardDeCena(slug, cena, tempoEditavel) {
   const semImagem = `<div class="cena-img-vazia">${ICONE_VIDEO}</div>`;
   const img16 = cena.imagem ? `<img class="cena-img cena-img-16" src="${cena.imagem}" alt="">` : semImagem;
@@ -631,13 +635,13 @@ function cardDeCena(slug, cena, tempoEditavel) {
        </label>`
     : "";
   return `
-    <div class="cena-card" data-indice="${cena.indice}">
+    <div class="cena-card${cena.audio_do_video ? " cena-audio-video" : ""}" data-indice="${cena.indice}" data-duracao="${cena.duracao_segundos || 0}">
       <div class="cena-card-imagens">${img16}${img9}</div>
       <div class="cena-card-body">
         <div class="cena-card-indice">Cena ${cena.indice + 1}
           <span class="cena-card-tempo">${formatarTempo(cena.inicio_segundos)}–${formatarTempo(fim)} · ${Math.round(cena.duracao_segundos || 0)}s</span>
         </div>
-        <p class="cena-card-texto">${texto}</p>
+        <p class="cena-card-texto">${cena.audio_do_video ? "🎬 Vídeo com o áudio dele (sem narração) — a duração é a do vídeo" : texto}</p>
         ${tempo}
         <div class="cena-edicao" hidden>
           <textarea class="cena-edicao-texto" rows="4" data-original="${texto}">${texto}</textarea>
@@ -685,7 +689,7 @@ async function alternarPainelCenas(botao) {
   const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
     <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (<b class="cenas-total" data-original="${total}">${formatarTempo(total)}</b> no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
-    <div class="cenas-grid">${dados.cenas.map((c) => cardDeCena(slug, c, dados.tempo_editavel)).join("")}</div>
+    <div class="cenas-grid">${dados.cenas.map((c, k) => `${botaoInserirCena(k)}${cardDeCena(slug, c, dados.tempo_editavel && !c.audio_do_video)}`).join("")}${botaoInserirCena(dados.cenas.length)}</div>
     <div class="cenas-adicionar">
       <button type="button" class="btn-secondary btn-nova-cena" title="Adiciona uma cena nova, com a narração que você escrever">+ Cena</button>
       <button type="button" class="btn-secondary btn-cena-padrao" title="Adiciona uma cena pronta da Base (ex.: inscreva-se e curta)">+ Cena padrão</button>

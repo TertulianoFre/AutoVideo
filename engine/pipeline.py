@@ -498,6 +498,8 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
         c["duracao_natural"] = natural
         desejado = float(duracoes.get(str(i), duracoes.get(i, c["duracao_segundos"])))
         c["duracao_segundos"] = round(max(natural / VELOCIDADE_MAXIMA_FALA, 1.0, min(desejado, natural + 300)), 2)
+        if c.get("audio_do_video"):
+            c["duracao_segundos"] = natural  # vídeo com som próprio: não estica nem acelera
     naturais = [c["duracao_natural"] for c in cenas]
     novos = [c["duracao_segundos"] for c in cenas]
     extras = [round(d - n, 3) for d, n in zip(novos, naturais)]
@@ -565,11 +567,29 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
     return {"video_16_9": nomes.get("16:9"), "video_9_16": nomes.get("9:16")}
 
 
+def _peca_com_audio_do_video(video: Path, destino: Path) -> dict:
+    """Uma cena cujo som é o do próprio vídeo da Base (ex.: uma introdução feita no Photoshop, com música). O
+    áudio entra na narração no lugar da fala; se o vídeo não tiver som, a cena fica em silêncio."""
+    import subprocess
+
+    from engine.ferramentas import caminho_ffmpeg
+
+    duracao = biblioteca.duracao_de(video)
+    if duracao <= 0.2:
+        raise RuntimeError("Não consegui ler a duração desse vídeo.")
+    r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(video), "-vn", "-af", "apad", "-t", f"{duracao:.3f}", "-ar", "44100", "-ac", "2", str(destino)], capture_output=True, text=True)
+    if r.returncode != 0 or not destino.exists():  # vídeo sem trilha de áudio
+        r = subprocess.run([caminho_ffmpeg(), "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{duracao:.3f}", str(destino)], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"FFmpeg falhou ao pegar o áudio do vídeo:\n{r.stderr[-800:]}")
+    return {"texto": "", "arquivo": destino, "dur": tts.duracao_do_audio(destino), "cues": [], "substitui": None, "audio_do_video": True}
+
+
 @_com_trava_de_edicao
 def editar_estrutura(
     slug: str, operacao: str, indice: int | None = None, posicao: int | None = None, texto: str = "",
     descricao_imagem: str = "", midia_tipo: str = "", midia_nome: str = "", edicoes: dict | None = None,
-    progresso: Callable[[str, float], None] | None = None,
+    progresso: Callable[[str, float], None] | None = None, audio_do_video: bool = False,
 ) -> dict:
     """Muda a estrutura do vídeo SEM regenerar tudo: "adicionar" uma cena (narração nova + imagem/vídeo),
     "remover" uma (com a fala dela) ou "substituir" o texto de várias (só elas são narradas de novo; as outras
@@ -616,15 +636,24 @@ def editar_estrutura(
             raise RuntimeError("Cena inexistente ou única (o vídeo precisa de pelo menos uma cena).")
         ordem.remove(indice)
     elif operacao == "adicionar":
-        if len(texto.strip()) < 3:
-            raise RuntimeError("Escreva o texto que será narrado nessa cena.")
-        avisar("Narrando a cena nova", 8)
-        novos.append(narrar(texto.strip(), 0))
+        if audio_do_video:
+            video_da_cena = biblioteca.caminho_video_valido(midia_nome) if midia_tipo == "video" else None
+            if not video_da_cena:
+                raise RuntimeError("Escolha um vídeo da Base para usar o áudio dele.")
+            avisar("Pegando o áudio do vídeo", 8)
+            novos.append(_peca_com_audio_do_video(video_da_cena, pasta / "_nova_0.wav"))
+        else:
+            if len(texto.strip()) < 3:
+                raise RuntimeError("Escreva o texto que será narrado nessa cena.")
+            avisar("Narrando a cena nova", 8)
+            novos.append(narrar(texto.strip(), 0))
         ordem.insert(len(cenas) if posicao is None else max(0, min(int(posicao), len(cenas))), -1)
     elif operacao == "substituir":
         pedidos = {int(k): str(v).strip() for k, v in (edicoes or {}).items()}
         if not pedidos or any(not (0 <= i < len(cenas)) or len(t) < 3 for i, t in pedidos.items()):
             raise RuntimeError("Edição inválida (cena inexistente ou texto vazio).")
+        if any(cenas[i].get("audio_do_video") for i in pedidos):
+            raise RuntimeError("Essa cena usa o áudio do próprio vídeo: não tem texto para editar.")
         for n, (i, txt) in enumerate(sorted(pedidos.items())):
             avisar(f"Narrando o texto novo ({n + 1}/{len(pedidos)})", 8 + 14 * n / len(pedidos))
             peca = narrar(txt, n)
@@ -716,7 +745,7 @@ def editar_estrutura(
             avisar(f"Preparando a imagem da cena nova ({formato})", 46 + 20 * k / len(formatos_ativos))
             png = pasta / f"cena{k_nova:02d}_{suf}.png"
             if midia_tipo == "video" and biblioteca.caminho_video_valido(midia_nome):
-                render.preparar_clip(biblioteca.caminho_video_valido(midia_nome), estilo["largura"], estilo["altura"], png.with_suffix(".mp4"), png, max_segundos=int(dur_nova) + 5)
+                render.preparar_clip(biblioteca.caminho_video_valido(midia_nome), estilo["largura"], estilo["altura"], png.with_suffix(".mp4"), png, max_segundos=int(dur_nova) + (2 if audio_do_video else 5))
             elif midia_tipo == "imagem" and biblioteca.caminho_imagem_valida(midia_nome):
                 visuals._cobrir(Image.open(biblioteca.caminho_imagem_valida(midia_nome)).convert("RGB"), estilo["largura"], estilo["altura"]).save(png, "PNG")
             else:
@@ -738,10 +767,13 @@ def editar_estrutura(
     for i in ordem:
         if i < 0:
             peca = novos[-i - 1]
-            novas_cenas.append({"texto": peca["texto"], "duracao_segundos": round(peca["dur"], 3), "duracao_natural": round(peca["dur"], 3)})
+            cena_nova = {"texto": peca["texto"], "duracao_segundos": round(peca["dur"], 3), "duracao_natural": round(peca["dur"], 3)}
+            if peca.get("audio_do_video"):
+                cena_nova["audio_do_video"] = True  # duração fixa: é a do vídeo, com o som dele
+            novas_cenas.append(cena_nova)
         else:
             novas_cenas.append(cenas[i])
-    (pasta / "roteiro.txt").write_text("\n\n".join(c["texto"] for c in novas_cenas), encoding="utf-8")
+    (pasta / "roteiro.txt").write_text("\n\n".join(c["texto"] for c in novas_cenas if c["texto"]), encoding="utf-8")
     m.update(
         cenas=novas_cenas, narracao_arquivo=nova_narracao.name, num_cenas=len(novas_cenas),
         imagens_base_cenas=imagens_base, videos_base_cenas=videos_base, descricoes_cenas=descricoes, aprovado=False,

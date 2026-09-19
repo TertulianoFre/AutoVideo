@@ -170,13 +170,14 @@ async function carregarCenasPadrao(dados) {
       <details class="base-linha" data-cena-padrao="${c.id}">
         <summary>
           <span class="base-linha-mini">${miniatura}</span>
-          <span class="base-linha-textos"><span class="base-linha-titulo">${escaparAttr(c.nome)}</span><span class="base-linha-arquivo">${escaparAttr(c.texto)}</span></span>
-          <span class="base-selo">${c.posicao_padrao === "inicio" ? "começo" : "fim"}</span><span class="base-selo">${c.midia_tipo === "video" ? "com vídeo" : c.midia_tipo === "imagem" && c.midia_nome ? "com imagem" : "sem mídia"}</span>
+          <span class="base-linha-textos"><span class="base-linha-titulo">${escaparAttr(c.nome)}</span><span class="base-linha-arquivo">${escaparAttr(c.usar_audio_video ? "Vídeo com o áudio dele (sem narração por IA)" : c.texto)}</span></span>
+          <span class="base-selo">${c.posicao_padrao === "inicio" ? "começo" : "fim"}</span><span class="base-selo">${c.usar_audio_video ? "áudio do vídeo" : c.midia_tipo === "video" ? "com vídeo" : c.midia_tipo === "imagem" && c.midia_nome ? "com imagem" : "sem mídia"}</span>
         </summary>
         <div class="base-linha-corpo">
           <label style="width:100%"><span class="video-meta">Nome</span><input type="text" class="base-descricao cp-nome" value="${escaparAttr(c.nome)}" maxlength="80"></label>
-          <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao cp-texto" rows="3" maxlength="600">${escaparAttr(c.texto)}</textarea></label>
+          <label style="width:100%" class="cp-linha-texto"${c.usar_audio_video ? " hidden" : ""}><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao cp-texto" rows="3" maxlength="600">${escaparAttr(c.texto)}</textarea></label>
           <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base</span><select class="base-canal cp-midia">${opcoesMidiaBase(dados, c.midia_tipo, c.midia_nome)}</select></label>
+          <label class="checkbox-row cp-linha-audio"${c.midia_tipo === "video" ? "" : " hidden"}><input type="checkbox" class="cp-audio-video"${c.usar_audio_video ? " checked" : ""}><span>Usar o áudio do próprio vídeo (sem narração por IA; a cena dura o tempo do vídeo)</span></label>
           <label style="width:100%"><span class="video-meta">Onde entra por padrão</span><select class="base-canal cp-posicao"><option value="inicio"${c.posicao_padrao === "inicio" ? " selected" : ""}>No começo do vídeo (introdução)</option><option value="fim"${c.posicao_padrao !== "inicio" ? " selected" : ""}>No fim do vídeo</option></select></label>
           <div class="cena-card-acoes">
             <button type="button" class="btn-secondary cp-salvar" data-id="${c.id}">Salvar</button>
@@ -189,7 +190,17 @@ async function carregarCenasPadrao(dados) {
   lista.querySelectorAll(".cp-salvar").forEach((b) => b.addEventListener("click", async () => {
     const linha = b.closest("[data-cena-padrao]");
     const [tipo, nome] = linha.querySelector(".cp-midia").value.split("|");
-    if (await salvarCenaPadrao({ id: b.dataset.id, nome: linha.querySelector(".cp-nome").value, texto: linha.querySelector(".cp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: linha.querySelector(".cp-posicao").value })) carregarBase();
+    if (await salvarCenaPadrao({ id: b.dataset.id, nome: linha.querySelector(".cp-nome").value, texto: linha.querySelector(".cp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: linha.querySelector(".cp-posicao").value, usar_audio_video: tipo === "video" && linha.querySelector(".cp-audio-video").checked ? "1" : "" })) carregarBase();
+  }));
+  lista.querySelectorAll(".cp-midia").forEach((sel) => sel.addEventListener("change", () => {
+    const linha = sel.closest("[data-cena-padrao]");
+    const video = sel.value.startsWith("video|");
+    linha.querySelector(".cp-linha-audio").hidden = !video;
+    if (!video) linha.querySelector(".cp-audio-video").checked = false;
+    linha.querySelector(".cp-linha-texto").hidden = linha.querySelector(".cp-audio-video").checked;
+  }));
+  lista.querySelectorAll(".cp-audio-video").forEach((cx) => cx.addEventListener("change", () => {
+    cx.closest("[data-cena-padrao]").querySelector(".cp-linha-texto").hidden = cx.checked;
   }));
   lista.querySelectorAll(".cp-remover").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm(`Remover a cena padrão "${b.dataset.nome}"? (Os vídeos que já usam ela não mudam.)`)) return;
@@ -203,13 +214,22 @@ async function carregarCenasPadrao(dados) {
     if (form.hidden) return;
     form.innerHTML = `
       <label style="width:100%"><span class="video-meta">Nome (só pra você achar)</span><input type="text" class="base-descricao" id="ncp-nome" maxlength="80" placeholder="Ex.: Inscreva-se e curta"></label>
-      <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao" id="ncp-texto" rows="3" maxlength="600" placeholder="Ex.: Gostou do vídeo? Então se inscreva no canal e deixe o seu like!"></textarea></label>
+      <label style="width:100%" id="ncp-linha-texto"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao" id="ncp-texto" rows="3" maxlength="600" placeholder="Ex.: Gostou do vídeo? Então se inscreva no canal e deixe o seu like!"></textarea></label>
       <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base (opcional)</span><select class="base-canal" id="ncp-midia">${opcoesMidiaBase(dados, "", "")}</select></label>
+      <label class="checkbox-row" id="ncp-linha-audio" hidden><input type="checkbox" id="ncp-audio-video"><span>Usar o áudio do próprio vídeo (sem narração por IA; a cena dura o tempo do vídeo)</span></label>
       <label style="width:100%"><span class="video-meta">Onde entra por padrão</span><select class="base-canal" id="ncp-posicao"><option value="inicio">No começo do vídeo (introdução)</option><option value="fim" selected>No fim do vídeo</option></select></label>
       <div class="cena-card-acoes"><button type="button" class="btn-primary" id="ncp-salvar">Criar cena padrão</button></div>`;
+    const ajustarAudio = () => {
+      const video = document.getElementById("ncp-midia").value.startsWith("video|");
+      document.getElementById("ncp-linha-audio").hidden = !video;
+      if (!video) document.getElementById("ncp-audio-video").checked = false;
+      document.getElementById("ncp-linha-texto").hidden = document.getElementById("ncp-audio-video").checked;
+    };
+    document.getElementById("ncp-midia").onchange = ajustarAudio;
+    document.getElementById("ncp-audio-video").onchange = ajustarAudio;
     document.getElementById("ncp-salvar").onclick = async () => {
       const [tipo, nome] = document.getElementById("ncp-midia").value.split("|");
-      if (await salvarCenaPadrao({ nome: document.getElementById("ncp-nome").value, texto: document.getElementById("ncp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: document.getElementById("ncp-posicao").value })) {
+      if (await salvarCenaPadrao({ nome: document.getElementById("ncp-nome").value, texto: document.getElementById("ncp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: document.getElementById("ncp-posicao").value, usar_audio_video: tipo === "video" && document.getElementById("ncp-audio-video").checked ? "1" : "" })) {
         form.hidden = true;
         carregarBase();
       }

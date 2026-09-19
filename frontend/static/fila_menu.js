@@ -198,12 +198,32 @@ document.addEventListener("click", (ev) => {
 
 // ---------------- adicionar cena (nova ou padrão) ----------------
 
-document.addEventListener("click", async (ev) => {
+document.addEventListener("click", (ev) => {
+  const inserir = ev.target.closest(".cena-inserir");
+  if (inserir) {
+    const painel = inserir.closest(".cenas-painel");
+    const form = painel.querySelector(".form-nova-cena");
+    const posicao = inserir.dataset.posicao;
+    inserir.after(form); // o formulário abre logo abaixo do "+" clicado
+    form.hidden = false;
+    form.innerHTML = `<div class="form-nova-cena-corpo"><strong>Adicionar uma cena aqui</strong><div class="cena-card-acoes">
+      <button type="button" class="btn-secondary nc-tipo-nova">Cena nova</button>
+      <button type="button" class="btn-secondary nc-tipo-padrao">Cena padrão</button>
+      <button type="button" class="btn-secondary nc-cancelar">Cancelar</button></div></div>`;
+    form.querySelector(".nc-tipo-nova").addEventListener("click", () => abrirFormularioDeCena(painel, false, posicao));
+    form.querySelector(".nc-tipo-padrao").addEventListener("click", () => abrirFormularioDeCena(painel, true, posicao));
+    form.querySelector(".nc-cancelar").addEventListener("click", () => { form.hidden = true; form.innerHTML = ""; });
+    return;
+  }
   const botao = ev.target.closest(".btn-nova-cena, .btn-cena-padrao");
   if (!botao) return;
   const painel = botao.closest(".cenas-painel");
+  painel.querySelector(".cenas-adicionar").after(painel.querySelector(".form-nova-cena"));
+  abrirFormularioDeCena(painel, botao.classList.contains("btn-cena-padrao"), null);
+});
+
+async function abrirFormularioDeCena(painel, padrao, posicaoInicial) {
   const slug = painel.dataset.slug;
-  const padrao = botao.classList.contains("btn-cena-padrao");
   const form = painel.querySelector(".form-nova-cena");
   const n = painel.querySelectorAll(".cena-card").length;
   let presets = [];
@@ -222,7 +242,7 @@ document.addEventListener("click", async (ev) => {
     <div class="form-nova-cena-corpo">
       <strong>${padrao ? "Adicionar cena padrão" : "Adicionar cena nova"}</strong>
       ${padrao ? `<label><span>Qual cena padrão</span><select class="nc-preset">${presets.map((p, i) => `<option value="${i}">${escaparAttr(p.nome)}</option>`).join("")}</select></label>` : ""}
-      <label><span>Texto que a IA vai narrar nessa cena</span><textarea class="nc-texto" rows="3" placeholder="Ex.: Gostou? Então se inscreva no canal e deixe o seu like!"></textarea></label>
+      <label class="nc-linha-texto"><span>Texto que a IA vai narrar nessa cena</span><textarea class="nc-texto" rows="3" placeholder="Ex.: Gostou? Então se inscreva no canal e deixe o seu like!"></textarea></label>
       <div class="video-meta nc-tempo">sem texto</div>
       ${padrao ? '<div class="video-meta nc-midia"></div>' : '<label><span>Imagem da cena (opcional): descreva o que quer ver</span><input type="text" class="nc-descricao" maxlength="300" placeholder="Se deixar vazio, a imagem é feita a partir do texto"></label>'}
       <label><span>Onde entra</span><select class="nc-posicao">${posicoes}</select></label>
@@ -233,29 +253,33 @@ document.addEventListener("click", async (ev) => {
   const escolherPreset = () => {
     const p = presets[parseInt(form.querySelector(".nc-preset").value, 10)];
     texto.value = p.texto;
-    form.querySelector(".nc-posicao").value = p.posicao_padrao === "inicio" ? "0" : String(n); // introdução vai pro começo, o resto pro fim
+    if (posicaoInicial === null) form.querySelector(".nc-posicao").value = p.posicao_padrao === "inicio" ? "0" : String(n); // introdução vai pro começo, o resto pro fim
     form.querySelector(".nc-midia").textContent = p.midia_nome ? `${p.midia_tipo === "video" ? "Vídeo" : "Imagem"} da Base: ${p.midia_nome}` : "Sem imagem definida: a imagem será feita a partir do texto.";
-    atualizar();
+    form.querySelector(".nc-linha-texto").hidden = !!p.usar_audio_video;
+    if (p.usar_audio_video) form.querySelector(".nc-tempo").textContent = `Usa o áudio do próprio vídeo · a cena dura ${Math.round((p.duracao_segundos || 0) * 10) / 10} s (o tempo do vídeo)`;
+    else atualizar();
   };
   texto.addEventListener("input", atualizar);
+  if (posicaoInicial !== null) form.querySelector(".nc-posicao").value = String(posicaoInicial);
   if (padrao) {
     form.querySelector(".nc-preset").addEventListener("change", escolherPreset);
     escolherPreset();
   }
   form.querySelector(".nc-cancelar").addEventListener("click", () => { form.hidden = true; form.innerHTML = ""; });
   form.querySelector(".nc-adicionar").addEventListener("click", () => {
-    if (texto.value.trim().length < 3) { texto.focus(); return; }
-    if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
     const p = padrao ? presets[parseInt(form.querySelector(".nc-preset").value, 10)] : null;
+    const comAudioDoVideo = !!(p && p.usar_audio_video);
+    if (!comAudioDoVideo && texto.value.trim().length < 3) { texto.focus(); return; }
+    if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
     form.hidden = true;
     enviarEstruturaDeCenas(painel, slug, {
-      operacao: "adicionar", posicao: form.querySelector(".nc-posicao").value, texto: texto.value.trim(),
+      operacao: "adicionar", posicao: form.querySelector(".nc-posicao").value, texto: comAudioDoVideo ? "" : texto.value.trim(), audio_do_video: comAudioDoVideo ? "1" : "",
       descricao_imagem: padrao ? "" : form.querySelector(".nc-descricao").value,
       midia_tipo: p?.midia_tipo || "", midia_nome: p?.midia_nome || "",
     });
   });
   texto.focus();
-});
+}
 
 // ---------------- tempo de cada cena (só aumenta; as seguintes andam pra frente) ----------------
 
