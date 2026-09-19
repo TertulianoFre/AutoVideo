@@ -1013,6 +1013,65 @@ def _rerenderizar_thumbnail(pasta: Path, base: Path, metadados: dict) -> None:
     thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados), efeito=metadados.get("thumbnail_efeito", "nenhum"))
 
 
+@app.get("/api/videos/{slug}/thumbnail-shorts/fundo")
+def api_fundo_thumbnail_shorts(slug: str) -> dict:
+    """Garante que o fundo procedural vertical existe (o editor precisa dele pra pré-visualizar)."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    fundo = pasta / "thumbnail_shorts_fundo.png"
+    if not fundo.exists():
+        from engine import visuals as visuals_mod
+        visuals_mod.gerar_fundo_procedural(*thumbnail_mod.TAMANHO_SHORTS, fundo, semente=f"{metadados.get('titulo', slug)}{metadados.get('thumbnail_short_semente', '')}")
+    return {"procedural": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(fundo.stat().st_mtime)}",
+            "cena": f"/videos/{slug}/cena00_9x16.png" if (pasta / "cena00_9x16.png").exists() else None}
+
+
+@app.post("/api/videos/{slug}/thumbnail-shorts/editar")
+def api_editar_thumbnail_shorts(
+    slug: str,
+    texto: str = Form(...),
+    cor: str = Form(""),
+    tamanho_px: int = Form(120),
+    pos_x: float = Form(0.5),
+    pos_y: float = Form(0.5),
+    efeito: str = Form("youtuber"),
+    fundo: str = Form("procedural"),
+    novo_fundo: bool = Form(False),
+) -> dict:
+    """Salva e renderiza a thumbnail vertical (1080x1920) do Short. O que estiver
+    salvo aqui é o que o agendador envia ao YouTube."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    texto = texto.strip()
+    if not texto:
+        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    metadados["thumbnail_short"] = {
+        "texto": texto,
+        "cor": cor.strip().lstrip("#") if thumbnail_mod.cor_de_hex(cor) else "",
+        "tamanho_px": max(thumbnail_mod.TAMANHO_FONTE_MIN, min(thumbnail_mod.TAMANHO_FONTE_MAX, tamanho_px)),
+        "pos_x": min(max(pos_x, 0.0), 1.0),
+        "pos_y": min(max(pos_y, 0.0), 1.0),
+        "efeito": efeito if efeito in thumbnail_mod.EFEITOS else "youtuber",
+        "fundo": fundo if fundo in ("procedural", "cena") else "procedural",
+    }
+    if novo_fundo:
+        (pasta / "thumbnail_shorts_fundo.png").unlink(missing_ok=True)
+        metadados["thumbnail_short_semente"] = int(time.time())
+    thumbnail_mod.gerar_shorts(pasta, metadados)
+    metadados.pop("thumbnail_short_enviada", None) if not metadados.get("publicado") else None
+    caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "thumbnail": f"/videos/{slug}/thumbnail_shorts.png?v={int(time.time())}",
+        "fundo": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(time.time())}" if fundo == "procedural" else f"/videos/{slug}/cena00_9x16.png?v={int(time.time())}",
+    }
+
+
 @app.get("/api/videos/{slug}/thumbnail/imagens")
 def api_listar_imagens_thumbnail(slug: str) -> dict:
     """Todas as imagens de cena (+ a customizada enviada, se houver) que dá
