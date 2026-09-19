@@ -1396,6 +1396,8 @@ def api_listar_cenas(slug: str) -> dict:
                 "video_base": (metadados.get("videos_base_cenas") or {}).get(str(i)),
                 "descricao_imagem": (metadados.get("descricoes_cenas") or {}).get(str(i), ""),
                 "audio_do_video": bool(cena.get("audio_do_video")),
+                "plano_busca": ((metadados.get("plano_visual") or {}).get(str(i)) or {}).get("busca", ""),
+                "plano_descricao": ((metadados.get("plano_visual") or {}).get(str(i)) or {}).get("descricao", ""),
             }
         )
         acumulado += duracao

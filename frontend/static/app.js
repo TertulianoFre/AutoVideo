@@ -657,7 +657,8 @@ function cardDeCena(slug, cena, tempoEditavel) {
           </label>
           <button type="button" class="btn-regenerar btn-regenerar-sutil btn-base-cena" data-slug="${slug}" data-indice="${cena.indice}" title="Escolher uma imagem ou vídeo que você importou na aba Base">Usar da Base</button>
         </div>
-        <input type="text" class="cena-descricao" hidden maxlength="300" value="${escaparAttr(cena.descricao_imagem || "")}" placeholder="Descreva a imagem (ex.: polvo abrindo um caramujo, close-up) e clique em Gerar outra imagem">
+        <input type="text" class="cena-descricao" hidden maxlength="300" value="${escaparAttr(cena.descricao_imagem || cena.plano_descricao || "")}" data-plano="${escaparAttr(cena.plano_descricao || "")}" placeholder="Descreva a imagem (ex.: polvo abrindo um caramujo, close-up) e clique em Gerar outra imagem">
+        ${cena.plano_busca ? `<div class="video-meta cena-busca" title="Termos que o app usou para achar a imagem desta cena. Para mudar, use o lápis (✎), escreva o que quer ver e clique em Gerar outra imagem.">🔎 Busca da imagem: ${escaparAttr(cena.plano_busca)}${cena.descricao_imagem ? " (você trocou pela sua descrição)" : ""}</div>` : ""}
         ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
@@ -777,7 +778,10 @@ async function regenerarCena(botao) {
 
   const corpoCena = new FormData();
   const campoDesc = card.querySelector(".cena-descricao");
-  if (campoDesc && !campoDesc.hidden) corpoCena.set("descricao", campoDesc.value); // fechado = usa o que já valia
+  const lapisAtivo = card.querySelector(".btn-lapis-desc")?.classList.contains("ativo");
+  const igualAoPlano = campoDesc && campoDesc.value.trim() === (campoDesc.dataset.plano || "").trim();
+  // fechado, ou ainda igual à sugestão do roteiro (sem descrição sua) = usa o que já valia
+  if (campoDesc && !campoDesc.hidden && !(igualAoPlano && !lapisAtivo)) corpoCena.set("descricao", campoDesc.value);
   const resposta = await fetch(`/api/videos/${botao.dataset.slug}/cenas/${botao.dataset.indice}/regenerar`, { method: "POST", body: corpoCena });
   const { job_id, erro } = await resposta.json();
   if (erro) {

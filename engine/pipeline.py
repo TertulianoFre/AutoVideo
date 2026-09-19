@@ -360,6 +360,19 @@ def gerar_video(
         cenas_obj = scenes.dividir_em_cenas(submaker, roteiro_final, num_cenas=num_cenas)
         lista_cenas = [(c.texto, c.duracao_segundos) for c in cenas_obj]
 
+    # uma chamada de IA lê o roteiro todo e decide a imagem de cada cena (busca em inglês + descrição para você ver/corrigir)
+    plano_visual: dict = {}
+    if not sem_narracao and estilo_imagem in ("foto", "video", "ia"):
+        if reaproveitar_imagens:
+            try:
+                plano_visual = json.loads((pasta / "metadata.json").read_text(encoding="utf-8")).get("plano_visual") or {}
+            except (OSError, ValueError):
+                plano_visual = {}
+        else:
+            avisar("Planejando a imagem de cada cena", 19)
+            plano_visual = visuals.planejar_visuais(titulo, [t for t, _ in lista_cenas], descricao_video)
+    _salvar_metadados(pasta, plano_visual=plano_visual)
+
     if submaker is not None:
         (pasta / "cues.json").write_text(
             json.dumps([{"start": c.start.total_seconds(), "end": c.end.total_seconds(), "content": c.content} for c in submaker.cues], ensure_ascii=False),
@@ -452,6 +465,7 @@ def gerar_video(
                     estilo_extra=descricao_video,
                     contexto=titulo,
                     duracao=duracao_cena,
+                    plano=plano_visual.get(str(i)),
                 )
             except RuntimeError as erro:
                 # Fonte externa (foto/ia) falhou (rede, serviço fora do ar) — não
@@ -830,6 +844,7 @@ def editar_estrutura(
     imagens_base = remapear(m.get("imagens_base_cenas"))
     videos_base = remapear(m.get("videos_base_cenas"))
     descricoes = remapear(m.get("descricoes_cenas"))
+    plano_visual = remapear(m.get("plano_visual"))
 
     # --- imagem/vídeo da cena nova (só em "adicionar") ---
     if operacao == "adicionar":
@@ -872,7 +887,7 @@ def editar_estrutura(
     (pasta / "roteiro.txt").write_text("\n\n".join(c["texto"] for c in novas_cenas if c["texto"]), encoding="utf-8")
     m.update(
         cenas=novas_cenas, narracao_arquivo=nova_narracao.name, num_cenas=len(novas_cenas),
-        imagens_base_cenas=imagens_base, videos_base_cenas=videos_base, descricoes_cenas=descricoes, aprovado=False,
+        imagens_base_cenas=imagens_base, videos_base_cenas=videos_base, descricoes_cenas=descricoes, plano_visual=plano_visual, aprovado=False,
     )
     caminho_meta.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
     for peca in novos:
@@ -971,6 +986,8 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
     sem_narracao = metadados.get("sem_narracao", False)
     # se você descreveu a imagem que quer pra essa cena, a descrição vale no lugar do texto da narração
     texto_cena = (metadados.get("descricoes_cenas") or {}).get(str(indice)) or cenas[indice]["texto"]
+    # sem descrição sua, vale o plano visual que o roteiro gerou para essa cena (com a descrição sua, ela manda)
+    plano_da_cena = None if (metadados.get("descricoes_cenas") or {}).get(str(indice)) else (metadados.get("plano_visual") or {}).get(str(indice))
 
     formatos_ativos = _formatos_de(metadados.get("formatos", "ambos"))
     total_passos = len(formatos_ativos) * 2  # gerar imagem + remontar, por formato
@@ -1001,6 +1018,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
                     estilo_imagem, estilo["largura"], estilo["altura"], caminho_imagem,
                     cena=texto_cena, estilo_extra=descricao_video, contexto=metadados.get("titulo", slug),
                     duracao=(cenas[indice].get("duracao_segundos", 0) if indice < len(cenas) else 0),
+                    plano=plano_da_cena,
                 )
             except RuntimeError as erro:
                 print(f"[aviso] cena {indice} ({estilo_imagem}) falhou, usando procedural: {erro}")

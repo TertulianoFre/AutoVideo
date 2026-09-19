@@ -412,7 +412,7 @@ def _links_de_video(termo_busca: str, orientacao: str) -> list:
     return achados
 
 
-def gerar_fundo_video(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "", duracao: float = 0) -> Path:
+def gerar_fundo_video(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "", duracao: float = 0, plano: dict | None = None) -> Path:
     """Vídeo real de banco livre (Pexels/Pixabay) como fundo da cena: baixa um clipe do assunto, recorta no formato e
     guarda ao lado da imagem (cenaNN_*.mp4). Clipe mais longo que a cena é cortado no fim dela; mais curto se repete.
     Sem vídeo achado, cai numa foto do mesmo assunto."""
@@ -423,7 +423,7 @@ def gerar_fundo_video(largura: int, altura: int, caminho: Path, termo_busca: str
 
     orientacao = "portrait" if altura > largura else "landscape"
     usadas = {a.read_text(encoding="utf-8").strip() for a in caminho.parent.glob("cena*.fonte")}
-    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent)
+    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent, plano)
     for termo in termos:
         candidatos = [c for c in _links_de_video(termo, orientacao) if c[0] not in usadas]
         # prefere clipes que cobrem a cena inteira; depois embaralha para variar
@@ -450,7 +450,7 @@ def gerar_fundo_video(largura: int, altura: int, caminho: Path, termo_busca: str
                 continue
     print(f"[aviso] nenhum vídeo livre achado para '{assunto or termo_busca}': usando foto")
     caminho.with_suffix(".mp4").unlink(missing_ok=True)
-    return gerar_fundo_foto(largura, altura, caminho, termo_busca, contexto)
+    return gerar_fundo_foto(largura, altura, caminho, termo_busca, contexto, plano)
 
 
 _PALAVRAS_GENERICAS = {
@@ -493,7 +493,51 @@ def _assunto_do_video(contexto: str, pasta: Path) -> str:
     return " ".join(palavras[:2])
 
 
-def _termos_de_busca(cena: str, contexto: str, pasta: Path) -> tuple:
+def planejar_visuais(titulo: str, cenas: list, estilo_extra: str = "") -> dict:
+    """UMA chamada de IA lê o roteiro inteiro e decide, para cada cena, uma imagem concreta: termos de busca em
+    inglês (bancos de foto/vídeo), uma frase visual em inglês (IA de imagem) e uma descrição curta em português
+    (o que você vê e pode corrigir no lápis da cena). Devolve {"0": {"busca","visual","descricao"}, ...} ou {}."""
+    import json as _json
+
+    from engine.roteiro import chamar_pollinations
+
+    if not cenas:
+        return {}
+    numeradas = "\n".join(f"{i + 1}. {t.strip()[:420]}" for i, t in enumerate(cenas))
+    try:
+        texto = chamar_pollinations(
+            [
+                {"role": "system", "content": (
+                    "You plan the visuals of a narrated video. For EACH numbered scene, choose ONE concrete, filmable image that "
+                    "illustrates what the narration says at that moment (a place, object, animal, action, landscape). "
+                    "Answer ONLY with a JSON array with exactly one object per scene, in order, each with the keys: "
+                    '"busca": 2 to 4 ENGLISH words to search a stock photo/video site (concrete visual nouns, include the main subject of the video, no abstract words); '
+                    '"visual": ONE English sentence describing the image (subject, action, setting; no text, no close-up faces); '
+                    '"descricao": the same idea in at most 14 words in Brazilian Portuguese. '
+                    "Do not repeat the same image idea in different scenes. No markdown, no comments."
+                )},
+                {"role": "user", "content": f"Video title: {titulo}\n" + (f"Style notes: {estilo_extra}\n" if estilo_extra.strip() else "") + f"Scenes:\n{numeradas}"},
+            ],
+            2,
+        )
+        bruto = texto[texto.index("["): texto.rindex("]") + 1]
+        itens = _json.loads(bruto)
+    except (RuntimeError, ValueError):
+        return {}
+    plano = {}
+    for i, item in enumerate(itens[: len(cenas)]):
+        if not isinstance(item, dict):
+            continue
+        busca = re.sub(r"[^\w\s-]", " ", str(item.get("busca", ""))).strip()
+        busca = " ".join(busca.split()[:5])
+        visual = str(item.get("visual", "")).strip()[:300]
+        descricao = str(item.get("descricao", "")).strip()[:160]
+        if busca:
+            plano[str(i)] = {"busca": busca, "visual": visual, "descricao": descricao}
+    return plano
+
+
+def _termos_de_busca(cena: str, contexto: str, pasta: Path, plano: dict | None = None) -> tuple:
     """A frase inteira da cena nunca acha nada num banco de fotos. Toda busca
     carrega o ASSUNTO do vídeo (a foto fica na mesma área) e, se a IA responder,
     palavras-chave da cena. Devolve (lista de buscas, assunto)."""
@@ -501,6 +545,8 @@ def _termos_de_busca(cena: str, contexto: str, pasta: Path) -> tuple:
     from engine.roteiro import chamar_pollinations
 
     assunto = _assunto_do_video(contexto, pasta)
+    if plano and plano.get("busca"):  # o plano do roteiro já diz o que buscar nessa cena: sem outra chamada de IA
+        return [plano["busca"]] + ([assunto] if assunto and assunto.casefold() != plano["busca"].casefold() else []), assunto
     chaves = ""
     try:
         with _trava_ia:
@@ -522,7 +568,7 @@ def _termos_de_busca(cena: str, contexto: str, pasta: Path) -> tuple:
     return termos, assunto
 
 
-def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "") -> Path:
+def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str, contexto: str = "", plano: dict | None = None) -> Path:
     """Busca uma foto real relacionada ao tema da cena. Tenta o Openverse primeiro
     (grátis, sem chave, agrega Flickr/Wikimedia/etc.); se não achar nada, tenta o
     Pexels (grátis, precisa de PEXELS_API_KEY — https://www.pexels.com/api/).
@@ -536,7 +582,7 @@ def gerar_fundo_foto(largura: int, altura: int, caminho: Path, termo_busca: str,
     for arquivo in caminho.parent.glob("cena*.fonte"):
         usadas.add(arquivo.read_text(encoding="utf-8").strip())
 
-    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent)
+    termos, assunto = _termos_de_busca(termo_busca, contexto, caminho.parent, plano)
     candidatos = []  # (bytes, url)
     for termo in termos:
         for buscador in (_buscar_openverse, _buscar_wikimedia, _buscar_nasa):
@@ -607,10 +653,14 @@ def gerar_fundo_ia(
     semente: int | None = None,
     tentativas: int = 3,
     estilo_extra: str = "",
+    visual_pronto: str = "",
 ) -> Path:
     # Prompt curto: um texto de cena muito longo aumenta a chance de o serviço
     # gratuito (comunitário, às vezes instável) devolver erro.
-    resumo_cena = _traduzir_para_ingles(cena.strip()[:200])[:200]
+    if visual_pronto.strip():  # o plano do roteiro já descreveu a cena inteira, em inglês
+        resumo_cena = visual_pronto.strip()[:260]
+    else:
+        resumo_cena = _traduzir_para_ingles(cena.strip()[:200])[:200]
     resumo_cena = _evitar_gatilhos_de_rosto(resumo_cena)
     extra = f"{_traduzir_para_ingles(estilo_extra.strip()[:150])}, " if estilo_extra.strip() else ""
     prompt = ESTILO_PROMPT_IA.format(cena=resumo_cena, extra=extra)
@@ -651,11 +701,11 @@ def gerar_fundo_ia(
 # dispatcher
 # ---------------------------------------------------------------------------
 
-def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "", contexto: str = "", duracao: float = 0) -> Path:
+def gerar_fundo(estilo: str, largura: int, altura: int, caminho: Path, cena: str, estilo_extra: str = "", contexto: str = "", duracao: float = 0, plano: dict | None = None) -> Path:
     if estilo == "video":
-        return gerar_fundo_video(largura, altura, caminho, termo_busca=cena, contexto=contexto, duracao=duracao)
+        return gerar_fundo_video(largura, altura, caminho, termo_busca=cena, contexto=contexto, duracao=duracao, plano=plano)
     if estilo == "foto":
-        return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena, contexto=contexto)
+        return gerar_fundo_foto(largura, altura, caminho, termo_busca=cena, contexto=contexto, plano=plano)
     if estilo == "ia":
-        return gerar_fundo_ia(largura, altura, caminho, cena=cena, estilo_extra=estilo_extra)
+        return gerar_fundo_ia(largura, altura, caminho, cena=cena, estilo_extra=estilo_extra, visual_pronto=(plano or {}).get("visual", ""))
     return gerar_fundo_procedural(largura, altura, caminho, semente=cena)

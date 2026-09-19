@@ -77,6 +77,74 @@ def _texto_karaoke(grupo: list) -> str:
     return "".join(partes).strip()
 
 
+# palavras que não fecham uma linha de legenda ("... de fevereiro de 1907, num" / "passeio ..."): a linha
+# ficaria pendurada esperando o resto da frase
+_PALAVRAS_FRACAS = {
+    "a", "o", "as", "os", "um", "uma", "uns", "umas", "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas",
+    "num", "numa", "nuns", "numas", "ao", "aos", "à", "às", "e", "ou", "mas", "que", "com", "sem", "por", "para", "pra",
+    "pelo", "pela", "pelos", "pelas", "se", "como", "sob", "até", "entre", "sobre", "já", "não", "seu", "sua", "seus",
+    "suas", "meu", "minha", "esse", "essa", "este", "esta", "aquele", "aquela", "muito", "mais", "quando", "onde",
+}
+
+
+def _limpo(texto: str) -> str:
+    return texto.strip().strip("\"'“”‘’()[]«»")
+
+
+def _fim_de_frase(texto: str) -> bool:
+    return _limpo(texto).endswith((".", "!", "?", "…", ";", ":"))
+
+
+def _termina_com_virgula(texto: str) -> bool:
+    return _limpo(texto).endswith(",")
+
+
+def _palavra_fraca(texto: str) -> bool:
+    limpo = _limpo(texto)
+    return limpo.casefold() in _PALAVRAS_FRACAS and not limpo.endswith((",", ".", "!", "?", "…", ";", ":"))
+
+
+def _agrupar_palavras(pares: list, maximo: int) -> list:
+    """Divide as palavras em linhas de legenda de até `maximo` palavras respeitando a fala: fim de frase sempre
+    fecha a linha, as linhas de uma frase ficam do mesmo tamanho (nada de 6 palavras + 1 sobrando), a quebra
+    prefere cair depois de uma vírgula e nenhuma linha termina em artigo/preposição."""
+    import math
+
+    frases, atual = [], []
+    for par in pares:
+        atual.append(par)
+        if _fim_de_frase(par[1]):
+            frases.append(atual)
+            atual = []
+    if atual:
+        frases.append(atual)
+
+    grupos = []
+    for frase in frases:
+        n = len(frase)
+        if n <= maximo:
+            grupos.append(frase)
+            continue
+        partes = math.ceil(n / maximo)
+        ideal = n / partes
+        inicio = 0
+        for j in range(1, partes):
+            alvo = round(ideal * j)
+            melhor = None
+            for b in range(max(inicio + 2, alvo - 2), min(n - 2, alvo + 2) + 1):
+                if b - inicio > maximo + 1:
+                    continue
+                ultima = frase[b - 1][1]
+                penalidade = (0 if _termina_com_virgula(ultima) else 4 if _palavra_fraca(ultima) else 1) + abs(b - alvo) * 0.4
+                if melhor is None or penalidade < melhor[0]:
+                    melhor = (penalidade, b)
+            corte = melhor[1] if melhor else min(max(alvo, inicio + 1), n - 1)
+            grupos.append(frase[inicio:corte])
+            inicio = corte
+        grupos.append(frase[inicio:])
+    return [g for g in grupos if g]
+
+
 def gerar_ass(
     submaker: edge_tts.SubMaker,
     caminho: Path,
@@ -107,10 +175,7 @@ def gerar_ass(
     pares = list(zip(cues, textos))
 
     eventos = []
-    for i in range(0, len(pares), palavras_por_legenda):
-        grupo = pares[i : i + palavras_por_legenda]
-        if not grupo:
-            continue
+    for grupo in _agrupar_palavras(pares, palavras_por_legenda):
         inicio = _formatar_tempo_ass(grupo[0][0].start)
         fim = _formatar_tempo_ass(grupo[-1][0].end)
         texto = _texto_karaoke(grupo) if karaoke else " ".join(t.replace("{", "").replace("}", "") for _, t in grupo)
