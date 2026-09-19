@@ -112,6 +112,7 @@ def gerar_video(
     transicao: str = "fade",
     legenda: dict | None = None,
     reaproveitar_imagens: bool = False,
+    slug_pasta: str | None = None,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -127,7 +128,7 @@ def gerar_video(
         if progresso is not None:
             progresso(etapa, percentual)
 
-    pasta = RAIZ_SAIDA / _slug(titulo)
+    pasta = RAIZ_SAIDA / (slug_pasta or _slug(titulo))  # regenerar mantém a pasta mesmo se o título foi renomeado
     pasta.mkdir(parents=True, exist_ok=True)
     _salvar_metadados(
         pasta,
@@ -150,6 +151,7 @@ def gerar_video(
         transicao=transicao,
         legenda=legenda or {},
         aprovado=False,  # só publica depois de você confirmar na Fila
+        editado=False,   # vídeo (re)gerado do zero: a marca "Editado" volta a ser sua
         idioma=idioma,
         voz=voz,
         estilo_imagem=estilo_imagem,

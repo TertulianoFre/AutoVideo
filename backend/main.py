@@ -894,6 +894,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         transicao=metadados.get("transicao", "fade"),
         legenda=metadados.get("legenda") or None,
         reaproveitar_imagens=reaproveitar_imagens,
+        slug_pasta=slug,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
 
@@ -1528,7 +1529,7 @@ def api_listar_videos() -> list[dict]:
     # Regenerar/cena não entra aqui: a pasta e os mp4 antigos já existem, então
     # já aparecem no loop acima com o status de sempre até o novo mp4 sobrescrever.
     # vídeo já existente que está sendo (re)gerado agora: aparece como "processando", com progresso e tempo restante
-    ativos = {slug_titulo(j.titulo): j for j in jobs.listar_rodando() if j.na_fila}
+    ativos = {(j.slug or slug_titulo(j.titulo)): j for j in jobs.listar_rodando() if j.na_fila}
     for v in videos:
         j = ativos.get(v["slug"])
         if j:
@@ -1540,7 +1541,7 @@ def api_listar_videos() -> list[dict]:
             )
     slugs_existentes = {v["slug"] for v in videos}
     for job in jobs.listar_rodando():
-        slug_job = slug_titulo(job.titulo)
+        slug_job = job.slug or slug_titulo(job.titulo)
         if slug_job in slugs_existentes:
             continue
         slugs_existentes.add(slug_job)

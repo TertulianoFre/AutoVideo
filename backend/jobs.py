@@ -28,6 +28,7 @@ class Job:
     estimativa_bruta: float = 0.0  # segundos previstos, sem a correção aprendida
     estimativa: float = 0.0        # segundos previstos, com a correção
     iniciado_em: float = 0.0
+    slug: str = ""  # pasta do vídeo (pode ser diferente de slug_titulo(titulo) se o título foi renomeado)
     na_fila: bool = False  # jobs de vídeo novo/regenerar passam pela fila; cena e legenda rodam direto
 
 
@@ -91,7 +92,7 @@ def _rodar(job: Job, params: dict) -> None:
 
 
 def criar_job(titulo: str, params: dict) -> Job:
-    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"), status="aguardando", etapa="Na fila", na_fila=True)
+    job = Job(id=str(uuid.uuid4()), titulo=titulo, canal_id=params.get("canal_id"), status="aguardando", etapa="Na fila", na_fila=True, slug=params.get("slug_pasta") or "")
     with _lock:
         _jobs[job.id] = job
 
