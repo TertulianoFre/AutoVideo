@@ -20,9 +20,10 @@ function minSegSom(s) {
 
 async function abrirEditorDeSom(slug) {
   fecharEditorDeSom();
+  const canalDoVideo = document.querySelector(`.cenas-painel[data-slug="${slug}"]`)?.dataset.canal || "";
   const [dados, base] = await Promise.all([
     fetch(`/api/videos/${slug}/som-fundo`).then((r) => r.json()).catch(() => ({ erro: "Sem conexão." })),
-    fetch(`/api/biblioteca?canal=${encodeURIComponent(document.querySelector(`.cenas-painel[data-slug="${slug}"]`)?.dataset.canal || "")}`).then((r) => r.json()).catch(() => ({ audios: [] })),
+    fetch(`/api/biblioteca?canal=${encodeURIComponent(canalDoVideo)}`).then((r) => r.json()).catch(() => ({ audios_info: [] })),
   ]);
   if (dados.erro) { alert(dados.erro); return; }
   if (dados.publicado) { alert("Esse vídeo já foi publicado: não dá mais para trocar o som de fundo."); return; }
@@ -33,30 +34,42 @@ async function abrirEditorDeSom(slug) {
 
   document.body.insertAdjacentHTML("beforeend", `
     <div id="editor-som" class="previa-cena">
-      <div class="previa-caixa editor-textos-caixa">
+      <div class="previa-caixa es-caixa">
         <div class="previa-topo"><strong>Som de fundo</strong><button type="button" class="previa-fechar es-fechar" aria-label="Fechar">✕</button></div>
-        <div class="video-meta">Vale só para este vídeo (${minSegSom(dados.duracao_video)}). Refaz o áudio final e remonta o vídeo, sem mexer em roteiro, narração nem imagens. A publicação precisa ser confirmada de novo.</div>
-        <label class="et-campo"><span>Som de fundo</span><select class="es-tipo">${TIPOS_DE_SOM.map(([v, r]) => `<option value="${v}"${dados.tipo === v ? " selected" : ""}>${r}</option>`).join("")}</select></label>
-        <label class="et-campo es-linha-outro" hidden><span>Descreva o som que quer</span><input type="text" class="es-descricao" maxlength="200" value="${escaparAttr(dados.descricao || "")}" placeholder="Ex.: floresta com pássaros"></label>
-        <div class="es-bloco-base" hidden>
-          <div class="es-itens"></div>
-          <button type="button" class="btn-secondary btn-compacto es-juntar">+ Juntar outro áudio</button>
-          <div class="es-resumo video-meta"></div>
-          <div class="et-linha">
-            <label class="et-campo"><span>Se faltar áudio para o vídeo todo</span><select class="es-repetir"><option value="repetir">Repetir os áudios em ciclo</option><option value="silencio">Terminar em silêncio</option></select></label>
-            <div>
-              <label class="checkbox-row"><input type="checkbox" class="es-suave"><span>Transição suave entre os áudios (2 s)</span></label>
-              <label class="checkbox-row"><input type="checkbox" class="es-fade"><span>Sumir aos poucos no fim do vídeo</span></label>
+        <p class="video-meta es-intro">Este vídeo tem ${minSegSom(dados.duracao_video)}. Ao aplicar, só o áudio final é refeito e o vídeo remontado (roteiro, narração e imagens ficam iguais). A publicação precisa ser confirmada de novo.</p>
+
+        <fieldset class="es-campos">
+          <section class="es-secao">
+            <h4>1. Qual som</h4>
+            <select class="es-tipo">${TIPOS_DE_SOM.map(([v, r]) => `<option value="${v}"${dados.tipo === v ? " selected" : ""}>${r}</option>`).join("")}</select>
+            <div class="es-linha-outro" hidden>
+              <label class="es-rotulo">Descreva o som que você quer</label>
+              <input type="text" class="es-descricao" maxlength="200" value="${escaparAttr(dados.descricao || "")}" placeholder="Ex.: floresta com pássaros">
             </div>
-          </div>
-        </div>
-        <div class="es-bloco-volume">
-          <label class="et-campo"><span>Volume do som de fundo: <b class="es-volume-rotulo"></b> <em>(o padrão é 20%; a narração fica sempre no volume normal)</em></span>
-            <input type="range" class="es-volume" min="0" max="100" step="1" value="${Math.round((dados.volume ?? 0.2) * 100)}"></label>
-          <div class="cena-card-acoes"><button type="button" class="btn-secondary es-ouvir">▶ Ouvir exemplo (12 s)</button><span class="video-meta es-ouvir-status"></span></div>
-          <audio class="es-audio" controls hidden></audio>
-        </div>
-        <div class="cena-card-acoes">
+
+            <div class="es-bloco-base" hidden>
+              <label class="es-rotulo">Áudios, na ordem em que tocam</label>
+              <div class="es-itens"></div>
+              <button type="button" class="btn-secondary btn-compacto es-juntar">+ Juntar outro áudio</button>
+              <div class="es-resumo"></div>
+              <label class="es-rotulo">Se os áudios forem menores que o vídeo</label>
+              <select class="es-repetir"><option value="repetir">Repetir os áudios em ciclo</option><option value="silencio">Terminar em silêncio</option></select>
+              <label class="es-marca"><input type="checkbox" class="es-suave"><span>Transição suave entre os áudios (2 s)</span></label>
+              <label class="es-marca"><input type="checkbox" class="es-fade"><span>Sumir aos poucos no fim do vídeo</span></label>
+            </div>
+          </section>
+
+          <section class="es-secao es-bloco-volume">
+            <h4>2. Volume</h4>
+            <div class="es-volume-linha"><input type="range" class="es-volume" min="0" max="100" step="1" value="${Math.round((dados.volume ?? 0.2) * 100)}"><b class="es-volume-rotulo"></b></div>
+            <div class="video-meta">O padrão é 20%. A narração fica sempre no volume normal.</div>
+            <div class="es-ouvir-linha"><button type="button" class="btn-secondary es-ouvir">▶ Ouvir exemplo (12 s)</button><span class="video-meta es-ouvir-status"></span></div>
+            <audio class="es-audio" controls hidden></audio>
+          </section>
+        </fieldset>
+
+        <div class="es-progresso" hidden><div class="es-progresso-barra"><div></div></div></div>
+        <div class="es-rodape">
           <button type="button" class="btn-primary es-aplicar">Aplicar ao vídeo</button>
           <button type="button" class="btn-secondary es-fechar">Cancelar</button>
           <span class="video-meta es-status"></span>
@@ -72,12 +85,13 @@ async function abrirEditorDeSom(slug) {
 
   const desenharItens = () => {
     q(".es-itens").innerHTML = lista.map((it, i) => `
-      <div class="som-tempo-linha" data-i="${i}">
+      <div class="es-item" data-i="${i}">
+        <span class="es-item-num">${i + 1}</span>
         <select class="es-audio-escolha">${audios.map((a) => `<option value="${escaparAttr(a.nome)}"${a.nome === it.nome ? " selected" : ""}>${escaparAttr(a.descricao || a.nome)} (${minSegSom(a.duracao_segundos || 0)})</option>`).join("")}</select>
-        <span>tocar</span> <input type="number" class="es-seg" min="1" step="1" value="${it.segundos || ""}" placeholder="tudo"> <span>s</span>
-        ${lista.length > 1 ? '<button type="button" class="btn-regenerar btn-regenerar-sutil es-tirar">✕</button>' : ""}
+        <label class="es-item-tempo"><span>tocar</span><input type="number" class="es-seg" min="1" step="1" value="${it.segundos || ""}" placeholder="tudo"><span>s</span></label>
+        ${lista.length > 1 ? '<button type="button" class="es-tirar" title="Tirar este áudio">✕</button>' : ""}
       </div>`).join("");
-    q(".es-itens").querySelectorAll(".som-tempo-linha").forEach((linha) => {
+    q(".es-itens").querySelectorAll(".es-item").forEach((linha) => {
       const i = parseInt(linha.dataset.i, 10);
       linha.querySelector(".es-audio-escolha").addEventListener("change", (ev) => { lista[i].nome = ev.target.value; resumir(); });
       linha.querySelector(".es-seg").addEventListener("input", (ev) => { lista[i].segundos = ev.target.value ? parseInt(ev.target.value, 10) : ""; resumir(); });
@@ -88,7 +102,7 @@ async function abrirEditorDeSom(slug) {
 
   const resumir = () => {
     const resumo = q(".es-resumo");
-    resumo.classList.remove("es-aviso");
+    resumo.classList.remove("es-aviso", "es-ok");
     if (!audios.length) { resumo.textContent = "Você ainda não importou áudios na aba Base."; return; }
     const video = dados.duracao_video || 0;
     const suave = q(".es-suave").checked;
@@ -98,12 +112,13 @@ async function abrirEditorDeSom(slug) {
     }, 0);
     if (total < video - 1) {
       const cicla = q(".es-repetir").value === "repetir";
-      resumo.textContent = `Os áudios somam ${minSegSom(total)} e o vídeo tem ${minSegSom(video)}: faltam ${minSegSom(video - total)}. ${cicla ? "Os áudios vão se repetir em ciclo" : "O final vai ficar em silêncio"} — ou junte outro áudio para cobrir.`;
+      resumo.textContent = `Os áudios somam ${minSegSom(total)} e o vídeo tem ${minSegSom(video)}: faltam ${minSegSom(video - total)}. ${cicla ? "Os áudios vão se repetir em ciclo." : "O final vai ficar em silêncio."} Você também pode juntar outro áudio.`;
     } else if (total > video + 1) {
       resumo.classList.add("es-aviso");
-      resumo.textContent = `⚠ Os áudios somam ${minSegSom(total)} e o vídeo tem ${minSegSom(video)}: os últimos ${minSegSom(total - video)} vão ser cortados.`;
+      resumo.textContent = `⚠ Os áudios somam ${minSegSom(total)} e o vídeo tem ${minSegSom(video)}: os últimos ${minSegSom(total - video)} dos áudios vão ser cortados.`;
     } else {
-      resumo.textContent = `Os áudios cobrem o vídeo (${minSegSom(total)}).`;
+      resumo.classList.add("es-ok");
+      resumo.textContent = `✓ Os áudios cobrem o vídeo (${minSegSom(total)}).`;
     }
   };
 
@@ -164,17 +179,23 @@ async function abrirEditorDeSom(slug) {
     const status = q(".es-status");
     if (q(".es-tipo").value === "biblioteca" && !lista.length) { status.textContent = "Escolha pelo menos um áudio da Base."; return; }
     botao.disabled = true;
+    q(".es-campos").disabled = true; // enquanto remonta, nada muda por baixo
     status.textContent = "Enviando…";
     const r = await fetch(`/api/videos/${slug}/som-fundo`, { method: "POST", body: corpoDoPedido() }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
-    if (r.erro) { status.textContent = `Deu erro: ${r.erro}`; botao.disabled = false; return; }
+    const liberar = (mensagem) => { status.textContent = mensagem; botao.disabled = false; q(".es-campos").disabled = false; q(".es-progresso").hidden = true; };
+    if (r.erro) { liberar(`Deu erro: ${r.erro}`); return; }
+    q(".es-progresso").hidden = false;
     const intervalo = setInterval(async () => {
       const job = await fetch(`/api/jobs/${r.job_id}`).then((x) => x.json()).catch(() => null);
       if (!job || typeof job.progresso !== "number") return;
-      status.textContent = textoDeProgresso(job);
+      if (janela.isConnected) {
+        status.textContent = textoDeProgresso(job);
+        q(".es-progresso-barra > div").style.width = `${Math.round(job.progresso)}%`;
+      }
       if (job.status === "pronto" || job.status === "erro") {
         clearInterval(intervalo);
-        if (job.status === "erro") { status.textContent = `Deu erro: ${job.erro}`; botao.disabled = false; return; }
-        fecharEditorDeSom();
+        if (job.status === "erro") { if (janela.isConnected) liberar(`Deu erro: ${job.erro}`); return; }
+        if (janela.isConnected) fecharEditorDeSom();
         carregarFila(true);
       }
     }, 1200);
