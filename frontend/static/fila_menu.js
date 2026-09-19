@@ -235,6 +235,12 @@ async function abrirFormularioDeCena(painel, padrao, posicaoInicial) {
       return;
     }
   }
+  const dadosBase = padrao ? null : await fetch(`/api/biblioteca?canal=${encodeURIComponent(painel.dataset.canal || "")}`).then((r) => r.json()).catch(() => ({ imagens: [], videos: [] }));
+  const opcoesBase = dadosBase
+    ? `<option value="|">Nenhuma — a imagem é feita a partir do texto</option>` +
+      (dadosBase.imagens || []).map((i) => `<option value="imagem|${escaparAttr(i.nome)}">Imagem: ${escaparAttr(i.descricao || i.nome)}</option>`).join("") +
+      (dadosBase.videos || []).map((v) => `<option value="video|${escaparAttr(v.nome)}">Vídeo (${Math.round(v.duracao_segundos || 0)} s): ${escaparAttr(v.descricao || v.nome)}</option>`).join("")
+    : "";
   const posicoes = [`<option value="${n}">No fim do vídeo</option>`, '<option value="0">No começo</option>']
     .concat(Array.from({ length: n - 1 }, (_, k) => `<option value="${k + 1}">Depois da cena ${k + 1}</option>`)).join("");
   form.hidden = false;
@@ -244,18 +250,80 @@ async function abrirFormularioDeCena(painel, padrao, posicaoInicial) {
       ${padrao ? `<label><span>Qual cena padrão</span><select class="nc-preset">${presets.map((p, i) => `<option value="${i}">${escaparAttr(p.nome)}</option>`).join("")}</select></label>` : ""}
       <label class="nc-linha-texto"><span>Texto que a IA vai narrar nessa cena</span><textarea class="nc-texto" rows="3" placeholder="Ex.: Gostou? Então se inscreva no canal e deixe o seu like!"></textarea></label>
       <div class="video-meta nc-tempo">sem texto</div>
-      ${padrao ? '<div class="video-meta nc-midia"></div>' : '<label><span>Imagem da cena (opcional): descreva o que quer ver</span><input type="text" class="nc-descricao" maxlength="300" placeholder="Se deixar vazio, a imagem é feita a partir do texto"></label>'}
+      ${padrao ? '<div class="video-meta nc-midia"></div>' : `
+        <label><span>Imagem ou vídeo da cena (opcional)</span><select class="nc-base">${opcoesBase}</select></label>
+        <div class="nc-envio"><label class="btn-secondary btn-compacto" style="cursor:pointer">Ou enviar do computador<input type="file" class="nc-arquivo" accept="image/*,video/*" hidden></label><span class="video-meta nc-arquivo-nome"></span></div>
+        <label class="nc-linha-descricao"><span>Sem imagem escolhida? Descreva o que quer ver</span><input type="text" class="nc-descricao" maxlength="300" placeholder="Se deixar vazio, a imagem é feita a partir do texto"></label>`}
+      <label class="nc-ajuste" hidden><span>O vídeo é maior que a fala. O que fazer?</span><select class="nc-ajustar"><option value="1">Esticar a cena até o fim do vídeo (a fala termina e o vídeo continua)</option><option value="">Cortar o vídeo quando a fala terminar</option></select></label>
       <label><span>Onde entra</span><select class="nc-posicao">${posicoes}</select></label>
       <div class="cena-card-acoes"><button type="button" class="btn-primary nc-adicionar">Adicionar cena</button><button type="button" class="btn-secondary nc-cancelar">Cancelar</button></div>
     </div>`;
   const texto = form.querySelector(".nc-texto");
-  const atualizar = () => { form.querySelector(".nc-tempo").textContent = formatarNarracao(texto.value); };
+  let midia = { tipo: "", nome: "", dur: 0, arquivo: null };
+  let comAudioDoVideoAtual = false;
+  const atualizar = () => {
+    const tempo = form.querySelector(".nc-tempo");
+    const ajuste = form.querySelector(".nc-ajuste");
+    if (comAudioDoVideoAtual) { ajuste.hidden = true; return; }
+    const fala = estimarNarracao(texto.value).segundos;
+    let msg = formatarNarracao(texto.value);
+    let mostrarAjuste = false;
+    if (midia.tipo === "video" && midia.dur > 0 && fala > 0) {
+      const dv = Math.round(midia.dur * 10) / 10;
+      if (midia.dur > fala + 0.3) {
+        mostrarAjuste = true;
+        const esticar = form.querySelector(".nc-ajustar").value === "1";
+        msg += ` · vídeo de ${dv} s, maior que a fala → a cena vai durar ${esticar ? dv : Math.round(fala * 10) / 10} s${esticar ? "" : " (o resto do vídeo é cortado)"}`;
+      } else if (midia.dur < fala - 0.3) {
+        msg += ` · vídeo de ${dv} s, menor que a fala → ele se repete até a fala acabar (a cena dura ≈ ${Math.round(fala * 10) / 10} s)`;
+      } else {
+        msg += ` · vídeo de ${dv} s, do tamanho da fala`;
+      }
+    } else if (midia.tipo === "video" && midia.dur > 0) {
+      msg += ` · vídeo de ${Math.round(midia.dur * 10) / 10} s (escreva o texto para calcular a cena)`;
+    }
+    tempo.textContent = msg;
+    ajuste.hidden = !mostrarAjuste;
+  };
+  if (!padrao) {
+    const seletorBase = form.querySelector(".nc-base");
+    const linhaDescricao = form.querySelector(".nc-linha-descricao");
+    seletorBase.addEventListener("change", () => {
+      const [tipo, nome] = seletorBase.value.split("|");
+      const v = tipo === "video" ? (dadosBase.videos || []).find((x) => x.nome === nome) : null;
+      midia = { tipo, nome, dur: v ? v.duracao_segundos || 0 : 0, arquivo: null };
+      form.querySelector(".nc-arquivo").value = "";
+      form.querySelector(".nc-arquivo-nome").textContent = "";
+      linhaDescricao.hidden = !!tipo;
+      atualizar();
+    });
+    form.querySelector(".nc-arquivo").addEventListener("change", (ev) => {
+      const arquivo = ev.target.files[0];
+      if (!arquivo) return;
+      const ehVideo = arquivo.type.startsWith("video");
+      midia = { tipo: ehVideo ? "video" : "imagem", nome: "", dur: 0, arquivo };
+      seletorBase.value = "|";
+      linhaDescricao.hidden = true;
+      form.querySelector(".nc-arquivo-nome").textContent = `${arquivo.name} (vai para a Base)`;
+      if (ehVideo) {
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.onloadedmetadata = () => { midia.dur = v.duration || 0; URL.revokeObjectURL(v.src); atualizar(); };
+        v.src = URL.createObjectURL(arquivo);
+      }
+      atualizar();
+    });
+    form.querySelector(".nc-ajustar").addEventListener("change", atualizar);
+  }
   const escolherPreset = () => {
     const p = presets[parseInt(form.querySelector(".nc-preset").value, 10)];
     texto.value = p.texto;
     if (posicaoInicial === null) form.querySelector(".nc-posicao").value = p.posicao_padrao === "inicio" ? "0" : String(n); // introdução vai pro começo, o resto pro fim
     form.querySelector(".nc-midia").textContent = p.midia_nome ? `${p.midia_tipo === "video" ? "Vídeo" : "Imagem"} da Base: ${p.midia_nome}` : "Sem imagem definida: a imagem será feita a partir do texto.";
     form.querySelector(".nc-linha-texto").hidden = !!p.usar_audio_video;
+    comAudioDoVideoAtual = !!p.usar_audio_video;
+    midia = { tipo: p.midia_tipo || "", nome: p.midia_nome || "", dur: p.duracao_segundos || 0, arquivo: null };
+    form.querySelector(".nc-ajustar").addEventListener("change", atualizar);
     if (p.usar_audio_video) form.querySelector(".nc-tempo").textContent = `Usa o áudio do próprio vídeo · a cena dura ${Math.round((p.duracao_segundos || 0) * 10) / 10} s (o tempo do vídeo)`;
     else atualizar();
   };
@@ -266,16 +334,32 @@ async function abrirFormularioDeCena(painel, padrao, posicaoInicial) {
     escolherPreset();
   }
   form.querySelector(".nc-cancelar").addEventListener("click", () => { form.hidden = true; form.innerHTML = ""; });
-  form.querySelector(".nc-adicionar").addEventListener("click", () => {
+  form.querySelector(".nc-adicionar").addEventListener("click", async () => {
     const p = padrao ? presets[parseInt(form.querySelector(".nc-preset").value, 10)] : null;
     const comAudioDoVideo = !!(p && p.usar_audio_video);
     if (!comAudioDoVideo && texto.value.trim().length < 3) { texto.focus(); return; }
     if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
+    let tipo = p?.midia_tipo || midia.tipo || "";
+    let nome = p?.midia_nome || midia.nome || "";
+    if (!padrao && midia.arquivo) {
+      const botao = form.querySelector(".nc-adicionar");
+      botao.disabled = true;
+      botao.textContent = "Enviando o arquivo…";
+      const corpo = new FormData();
+      corpo.set("arquivo", midia.arquivo);
+      const r = await fetch(`/api/biblioteca/${midia.tipo === "video" ? "videos" : "imagens"}/upload`, { method: "POST", body: corpo }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+      botao.disabled = false;
+      botao.textContent = "Adicionar cena";
+      if (r.erro) { alert(r.erro); return; }
+      nome = r.nome;
+    }
+    const ajusteVisivel = !form.querySelector(".nc-ajuste").hidden;
     form.hidden = true;
     enviarEstruturaDeCenas(painel, slug, {
       operacao: "adicionar", posicao: form.querySelector(".nc-posicao").value, texto: comAudioDoVideo ? "" : texto.value.trim(), audio_do_video: comAudioDoVideo ? "1" : "",
-      descricao_imagem: padrao ? "" : form.querySelector(".nc-descricao").value,
-      midia_tipo: p?.midia_tipo || "", midia_nome: p?.midia_nome || "",
+      descricao_imagem: padrao || tipo ? "" : form.querySelector(".nc-descricao").value,
+      midia_tipo: tipo, midia_nome: nome,
+      ajustar_ao_video: tipo === "video" && !comAudioDoVideo && ajusteVisivel ? form.querySelector(".nc-ajustar").value : "",
     });
   });
   texto.focus();
@@ -433,3 +517,32 @@ document.addEventListener("click", (ev) => {
   lapis.classList.toggle("aberto", !campo.hidden);
   if (!campo.hidden) campo.focus();
 });
+
+
+// ---------------- pré-visualizar a cena (clique na imagem) ----------------
+
+function fecharPreviaDaCena() {
+  const janela = document.getElementById("previa-cena");
+  if (!janela) return;
+  janela.querySelectorAll("video").forEach((v) => v.pause());
+  janela.remove();
+}
+
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("#previa-cena .previa-fechar") || ev.target.id === "previa-cena") {
+    fecharPreviaDaCena();
+    return;
+  }
+  const imagem = ev.target.closest(".cena-card .cena-img, .cena-card .cena-img-vazia");
+  if (!imagem) return;
+  const card = imagem.closest(".cena-card");
+  const video = card.dataset.videoBase;
+  const titulo = `Cena ${parseInt(card.dataset.indice, 10) + 1}`;
+  const corpo = video
+    ? `<video controls autoplay src="/biblioteca/videos/${encodeURIComponent(video)}"></video><div class="video-meta">Vídeo original da Base (com o som dele). No vídeo final ele é cortado para caber no formato.</div>`
+    : `<div class="previa-imagens">${card.dataset.img16 ? `<img src="${card.dataset.img16}" alt="">` : ""}${card.dataset.img9 ? `<img class="previa-vertical" src="${card.dataset.img9}" alt="">` : ""}</div>`;
+  fecharPreviaDaCena();
+  document.body.insertAdjacentHTML("beforeend", `<div id="previa-cena" class="previa-cena"><div class="previa-caixa"><div class="previa-topo"><strong>${titulo}</strong><button type="button" class="previa-fechar" aria-label="Fechar">✕</button></div>${corpo}</div></div>`);
+});
+
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") fecharPreviaDaCena(); });

@@ -1394,7 +1394,7 @@ def _marcar_imagem_base_da_cena(caminho_meta: Path, indice: int, nome: str | Non
 def api_estrutura_das_cenas(
     slug: str, operacao: str = Form(...), indice: int | None = Form(None), posicao: int | None = Form(None),
     texto: str = Form(""), descricao_imagem: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
-    edicoes: str = Form(""), audio_do_video: bool = Form(False),
+    edicoes: str = Form(""), audio_do_video: bool = Form(False), ajustar_ao_video: bool = Form(False),
 ) -> dict:
     """Adiciona uma cena (narração nova + imagem/vídeo), remove uma ou troca o texto de várias — sem regenerar
     o vídeo inteiro. Roda como job (leva um tempo)."""
@@ -1415,7 +1415,7 @@ def api_estrutura_das_cenas(
     job = jobs.criar_job_funcao(
         metadados.get("titulo", slug),
         lambda cb: _resultado_videos(slug, pipeline_mod.editar_estrutura(
-            slug, operacao, indice, posicao, texto, descricao_imagem, midia_tipo, midia_nome, mapa_edicoes, progresso=cb, audio_do_video=audio_do_video)),
+            slug, operacao, indice, posicao, texto, descricao_imagem, midia_tipo, midia_nome, mapa_edicoes, progresso=cb, audio_do_video=audio_do_video, ajustar_ao_video=ajustar_ao_video)),
         estimativa=90.0 if operacao == "adicionar" else 60.0,
     )
     return {"job_id": job.id}

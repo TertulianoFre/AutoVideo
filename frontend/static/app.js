@@ -635,7 +635,7 @@ function cardDeCena(slug, cena, tempoEditavel) {
        </label>`
     : "";
   return `
-    <div class="cena-card${cena.audio_do_video ? " cena-audio-video" : ""}" data-indice="${cena.indice}" data-duracao="${cena.duracao_segundos || 0}">
+    <div class="cena-card${cena.audio_do_video ? " cena-audio-video" : ""}" data-indice="${cena.indice}" data-duracao="${cena.duracao_segundos || 0}" data-video-base="${escaparAttr(cena.video_base || "")}" data-img16="${escaparAttr(cena.imagem || "")}" data-img9="${escaparAttr(cena.imagem_vertical || "")}">
       <div class="cena-card-imagens">${img16}${img9}</div>
       <div class="cena-card-body">
         <div class="cena-card-indice">Cena ${cena.indice + 1}

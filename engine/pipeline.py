@@ -604,6 +604,7 @@ def editar_estrutura(
     slug: str, operacao: str, indice: int | None = None, posicao: int | None = None, texto: str = "",
     descricao_imagem: str = "", midia_tipo: str = "", midia_nome: str = "", edicoes: dict | None = None,
     progresso: Callable[[str, float], None] | None = None, audio_do_video: bool = False,
+    ajustar_ao_video: bool = False,
 ) -> dict:
     """Muda a estrutura do vídeo SEM regenerar tudo: "adicionar" uma cena (narração nova + imagem/vídeo),
     "remover" uma (com a fala dela) ou "substituir" o texto de várias (só elas são narradas de novo; as outras
@@ -661,6 +662,10 @@ def editar_estrutura(
                 raise RuntimeError("Escreva o texto que será narrado nessa cena.")
             avisar("Narrando a cena nova", 8)
             novos.append(narrar(texto.strip(), 0))
+            video_maior = biblioteca.caminho_video_valido(midia_nome) if midia_tipo == "video" else None
+            if ajustar_ao_video and video_maior and biblioteca.duracao_de(video_maior) > novos[0]["dur"] + 0.2:
+                # o vídeo é mais longo que a fala: a cena dura o vídeo todo (a fala termina e o resto é pausa)
+                novos[0]["dur_cena"] = biblioteca.duracao_de(video_maior)
         ordem.insert(len(cenas) if posicao is None else max(0, min(int(posicao), len(cenas))), -1)
     elif operacao == "substituir":
         pedidos = {int(k): str(v).strip() for k, v in (edicoes or {}).items()}
@@ -759,7 +764,7 @@ def editar_estrutura(
             avisar(f"Preparando a imagem da cena nova ({formato})", 46 + 20 * k / len(formatos_ativos))
             png = pasta / f"cena{k_nova:02d}_{suf}.png"
             if midia_tipo == "video" and biblioteca.caminho_video_valido(midia_nome):
-                render.preparar_clip(biblioteca.caminho_video_valido(midia_nome), estilo["largura"], estilo["altura"], png.with_suffix(".mp4"), png, max_segundos=int(dur_nova) + (2 if audio_do_video else 5))
+                render.preparar_clip(biblioteca.caminho_video_valido(midia_nome), estilo["largura"], estilo["altura"], png.with_suffix(".mp4"), png, max_segundos=int(novos[0].get("dur_cena", dur_nova)) + (2 if audio_do_video or "dur_cena" in novos[0] else 5))
             elif midia_tipo == "imagem" and biblioteca.caminho_imagem_valida(midia_nome):
                 visuals._cobrir(Image.open(biblioteca.caminho_imagem_valida(midia_nome)).convert("RGB"), estilo["largura"], estilo["altura"]).save(png, "PNG")
             else:
@@ -781,7 +786,7 @@ def editar_estrutura(
     for i in ordem:
         if i < 0:
             peca = novos[-i - 1]
-            cena_nova = {"texto": peca["texto"], "duracao_segundos": round(peca["dur"], 3), "duracao_natural": round(peca["dur"], 3)}
+            cena_nova = {"texto": peca["texto"], "duracao_segundos": round(peca.get("dur_cena", peca["dur"]), 3), "duracao_natural": round(peca["dur"], 3)}
             if peca.get("audio_do_video"):
                 cena_nova["audio_do_video"] = True  # duração fixa: é a do vídeo, com o som dele
             novas_cenas.append(cena_nova)

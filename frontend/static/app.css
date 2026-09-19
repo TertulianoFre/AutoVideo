@@ -650,3 +650,15 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .cena-inserir { align-self: center; justify-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); font-size: 16px; line-height: 1; cursor: pointer; padding: 0; }
 .cena-inserir:hover { border-style: solid; border-color: #F2C230; background: #F2C230; color: #14130F; }
 .cena-audio-video .cena-card-acoes, .cena-audio-video .cena-tempo, .cena-audio-video .btn-lapis, .cena-audio-video .cena-base-grade, .cena-audio-video .cena-descricao { display: none; }
+
+/* pré-visualização da cena */
+.cena-card .cena-img, .cena-card .cena-img-vazia { cursor: zoom-in; }
+.previa-cena { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, .78); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.previa-caixa { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; max-width: min(960px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.previa-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.previa-fechar { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+.previa-caixa video { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; }
+.previa-imagens { display: flex; gap: 12px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.previa-imagens img { max-width: 100%; max-height: 70vh; border-radius: 8px; }
+.previa-imagens .previa-vertical { max-height: 70vh; }
+.nc-envio { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
