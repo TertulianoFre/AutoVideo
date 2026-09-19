@@ -74,6 +74,75 @@ def _derivar_16x9_do_vertical(pasta: Path, indice: int) -> None:
         visuals._cobrir(Image.open(vertical).convert("RGB"), 1920, 1080).save(pasta / f"cena{indice:02d}_16x9.png", "PNG")
 
 
+def _imagem_de_cena_em_branco(caminho: Path, largura: int, altura: int, numero: int) -> None:
+    """Quadro vazio de uma cena que você ainda vai montar: fundo escuro liso com o número da cena."""
+    from PIL import ImageDraw, ImageFont
+
+    imagem = Image.new("RGB", (largura, altura), (28, 27, 24))
+    desenho = ImageDraw.Draw(imagem)
+
+    def fonte(tamanho: int):
+        for nome in ("arialbd.ttf", "arial.ttf", "DejaVuSans-Bold.ttf"):
+            try:
+                return ImageFont.truetype(nome, tamanho)
+            except OSError:
+                continue
+        return ImageFont.load_default(tamanho)
+
+    for texto, tamanho, cor, dy in ((f"Cena {numero}", altura // 7, (242, 194, 48), -altura // 12), ("Vazia: importe uma imagem ou vídeo", altura // 22, (170, 165, 150), altura // 10)):
+        f = fonte(tamanho)
+        caixa = desenho.textbbox((0, 0), texto, font=f)
+        desenho.text(((largura - (caixa[2] - caixa[0])) / 2, altura / 2 + dy - (caixa[3] - caixa[1]) / 2), texto, font=f, fill=cor)
+    imagem.save(caminho, "PNG")
+
+
+def _gerar_em_branco(pasta: Path, titulo: str, formatos: str, num_cenas: int | None, duracao_alvo_minutos: float | None, transicao: str, legenda: dict | None, progresso) -> ResultadoGeracao:
+    """Vídeo sem IA: só as cenas (no número escolhido), todas vazias e mudas, para você montar na Fila
+    (escrever o texto de cada uma, importar imagem/vídeo, ajustar o tempo). Reaproveita a remontagem
+    de "tempo das cenas" para gerar o áudio (silêncio) e o mp4."""
+    import subprocess
+
+    from engine.ferramentas import caminho_ffmpeg
+
+    def avisar(etapa: str, pct: float) -> None:
+        if progresso is not None:
+            progresso(etapa, pct)
+
+    n = max(1, min(int(num_cenas or 3), 40))
+    por_cena = round(max(2.0, min(120.0, (duracao_alvo_minutos or 0.5) * 60 / n)), 1)
+    avisar("Criando as cenas em branco", 10)
+    narracao = pasta / "narracao.mp3"
+    r = subprocess.run(
+        [caminho_ffmpeg(), "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{por_cena * n:.2f}", "-c:a", "libmp3lame", "-q:a", "5", str(narracao)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"FFmpeg falhou ao criar o áudio vazio:\n{r.stderr[-800:]}")
+    (pasta / "cues.json").write_text("[]", encoding="utf-8")
+    (pasta / "roteiro.txt").write_text("", encoding="utf-8")
+    formatos_ativos = _formatos_de(formatos)
+    for k, (formato, estilo) in enumerate(formatos_ativos.items()):
+        sufixo = formato.replace(":", "x")
+        for i in range(n):
+            (pasta / f"cena{i:02d}_{sufixo}.png").with_suffix(".mp4").unlink(missing_ok=True)
+            _imagem_de_cena_em_branco(pasta / f"cena{i:02d}_{sufixo}.png", estilo["largura"], estilo["altura"], i + 1)
+    if "16:9" not in formatos_ativos:
+        for i in range(n):
+            _derivar_16x9_do_vertical(pasta, i)
+    _salvar_metadados(
+        pasta,
+        cenas=[{"texto": "", "duracao_segundos": por_cena, "duracao_natural": por_cena} for _ in range(n)],
+        num_cenas=n, narracao_arquivo=narracao.name, audio_natural=narracao.name, audio_arquivo=narracao.name,
+        imagens_base_cenas={}, videos_base_cenas={}, descricoes_cenas={}, descricao_youtube="",
+        duracao_segundos=round(por_cena * n, 1),
+    )
+    resultado = aplicar_duracoes(pasta.name, {}, progresso=lambda etapa, pct: avisar(etapa, 20 + 0.75 * pct))
+    avisar("Gerando a thumbnail", 97)
+    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
+    avisar("Pronto", 100)
+    return ResultadoGeracao(pasta, pasta / "audio_ajustado.m4a", (pasta / "video_16x9.mp4") if resultado.get("video_16_9") else None, (pasta / "video_9x16.mp4") if resultado.get("video_9_16") else None, por_cena * n, "", [], caminho_thumb)
+
+
 def _preparar_som_da_base(nome_unico: str, playlist: list | None, opcoes: dict | None, duracao: float, destino: Path) -> None:
     """Som de fundo vindo da Base: uma playlist de áudios (com tempo por áudio, transição suave e fade final)
     ou, sem playlist, o áudio único repetido em loop até o fim do vídeo."""
@@ -121,6 +190,7 @@ def gerar_video(
     legenda: dict | None = None,
     reaproveitar_imagens: bool = False,
     slug_pasta: str | None = None,
+    em_branco: bool = False,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -165,7 +235,11 @@ def gerar_video(
         estilo_imagem=estilo_imagem,
         duracao_alvo_minutos=duracao_alvo_minutos,
         canal_id=canal_id,
+        em_branco=em_branco,
     )
+
+    if em_branco:
+        return _gerar_em_branco(pasta, titulo, formatos, num_cenas, duracao_alvo_minutos, transicao, legenda, progresso)
 
     tags: list = []
 
@@ -570,7 +644,7 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
         sufixo = formato.replace(":", "x")
         avisar(f"Remontando o vídeo ({formato})", 30 + 60 * k / len(formatos_ativos))
         legenda_path = None
-        if config.get("modo") != "nenhuma":
+        if config.get("modo") != "nenhuma" and submaker.cues:  # vídeo em branco: ainda não há fala
             legenda_path = subtitles.gerar_ass(submaker, pasta / f"legenda_{sufixo}.ass", roteiro=roteiro, config=config, **estilo)
         imagens = [(pasta / f"cena{i:02d}_{sufixo}.png", c["duracao_segundos"]) for i, c in enumerate(cenas)]
         with _trava_do_video(slug):

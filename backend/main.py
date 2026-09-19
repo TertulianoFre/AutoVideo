@@ -774,6 +774,7 @@ def api_criar_video(
     legenda_caixa: bool = Form(False),
     legenda_fundo: str = Form(""),
     confirmar_duplicado: bool = Form(False),
+    em_branco: bool = Form(False),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
@@ -840,6 +841,7 @@ def api_criar_video(
         transicao=transicao if transicao in render_mod.TRANSICOES else "fade",
         legenda=_config_legenda(legenda_modo, legenda_tamanho, legenda_posicao, legenda_cor, legenda_caixa, legenda_fundo),
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
+        em_branco=em_branco and not sem_narracao,
     )
 
     job = jobs.criar_job(titulo, params)
@@ -964,6 +966,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         transicao=metadados.get("transicao", "fade"),
         legenda=metadados.get("legenda") or None,
         reaproveitar_imagens=reaproveitar_imagens,
+        em_branco=bool(metadados.get("em_branco")),
         slug_pasta=slug,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )

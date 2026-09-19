@@ -246,3 +246,26 @@ formNovo.som_fundo_biblioteca.addEventListener("change", atualizarPlaylistSom);
 formNovo.duracao_alvo.addEventListener("input", atualizarPlaylistSom);
 formNovo.roteiro.addEventListener("input", atualizarPlaylistSom);
 document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { listaExtrasSom.innerHTML = ""; document.getElementById("som-tempo-0").value = ""; atualizarPlaylistSom(); }, 60));
+
+
+// ---------------- gerar em branco (sem IA) ----------------
+(function () {
+  const caixa = document.getElementById("campo-em-branco");
+  const info = document.getElementById("em-branco-info");
+  const rotulo = document.querySelector("#btn-gerar-video .btn-gerar-rotulo");
+  function atualizarEmBranco() {
+    const ligado = caixa.checked;
+    rotulo.textContent = ligado ? "Criar vídeo em branco" : "Gerar vídeo";
+    info.hidden = !ligado;
+    if (!ligado) return;
+    const n = Math.max(1, Math.min(40, parseInt(campoNumCenas.value, 10) || 3));
+    const total = (parseFloat(formNovo.duracao_alvo.value) || 0.5) * 60;
+    const cada = Math.round(Math.max(2, Math.min(120, total / n)) * 10) / 10;
+    info.textContent = `Vai criar ${n} cena(s) vazia(s) de ${cada} s cada, sem roteiro, sem narração e sem imagem: nada de IA. Na Fila, escreva o texto de cada cena, importe imagens/vídeos e ajuste os tempos. (Quantidade de cenas e duração acima definem isso.)`;
+  }
+  caixa.addEventListener("change", atualizarEmBranco);
+  campoNumCenas.addEventListener("input", atualizarEmBranco);
+  formNovo.duracao_alvo.addEventListener("input", atualizarEmBranco);
+  document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(atualizarEmBranco, 80));
+  window.atualizarEmBranco = atualizarEmBranco;
+})();

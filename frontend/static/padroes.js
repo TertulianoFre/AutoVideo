@@ -1,7 +1,7 @@
 // Padrões do Novo vídeo por canal: o que você salva aqui já vem preenchido em todo formulário novo daquele canal.
 // Não guarda o que muda a cada vídeo (título, data, hora, roteiro, mídias escolhidas, playlist de som).
 
-const PADROES_IGNORADOS = new Set(["titulo", "data_postagem", "hora_postagem", "roteiro", "imagens_base", "base_restante", "num_cenas", "som_fundo_playlist", "som_fundo_biblioteca"]);
+const PADROES_IGNORADOS = new Set(["titulo", "data_postagem", "hora_postagem", "roteiro", "imagens_base", "base_restante", "num_cenas", "som_fundo_playlist", "som_fundo_biblioteca", "em_branco"]);
 const statusPadroes = document.getElementById("padroes-status");
 
 function valoresDoFormulario() {
