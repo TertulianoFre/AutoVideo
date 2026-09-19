@@ -534,7 +534,21 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
             avisar("Ajustando o som de fundo ao novo tamanho", 12)
             _preparar_som_da_base(metadados.get("som_fundo_biblioteca", ""), metadados.get("som_fundo_playlist"), metadados.get("som_fundo_opcoes"), sum(novos), som_fundo)
         if metadados.get("som_fundo_tipo") and som_fundo.exists():
-            render.mixar_audio_com_fundo(com_pausas, som_fundo, final, VOLUME_SOM_DE_FUNDO)
+            # nas cenas com o áudio do próprio vídeo (ex.: introdução com música) o som de fundo fica mudo
+            trechos, inicio_cena = [], 0.0
+            for c in cenas:
+                if c.get("audio_do_video"):
+                    trechos.append(f"between(t,{inicio_cena:.3f},{inicio_cena + c['duracao_segundos']:.3f})")
+                inicio_cena += c["duracao_segundos"]
+            fundo_usado = som_fundo
+            if trechos:
+                fundo_usado = pasta / "som_fundo_mudo_nas_cenas.wav"
+                r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(som_fundo), "-af", f"volume=enable='{'+'.join(trechos)}':volume=0", str(fundo_usado)], capture_output=True, text=True)
+                if r.returncode != 0:
+                    raise RuntimeError(f"FFmpeg falhou ao silenciar o som de fundo: {r.stderr[-800:]}")
+            render.mixar_audio_com_fundo(com_pausas, fundo_usado, final, VOLUME_SOM_DE_FUNDO)
+            if fundo_usado != som_fundo:
+                fundo_usado.unlink(missing_ok=True)
         else:
             r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(com_pausas), "-c:a", "aac", "-b:a", "192k", str(final)], capture_output=True, text=True)
             if r.returncode != 0:
