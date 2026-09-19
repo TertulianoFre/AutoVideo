@@ -639,8 +639,18 @@ async function abrirEditorDeTextos(slug) {
   document.body.insertAdjacentHTML("beforeend", `
     <div id="editor-textos" class="previa-cena">
       <div class="previa-caixa editor-textos-caixa">
-        <div class="previa-topo"><strong>Título e descrição do vídeo</strong><button type="button" class="previa-fechar et-fechar" aria-label="Fechar">✕</button></div>
-        ${bloqueado ? '<div class="video-meta">Esse vídeo já foi publicado: não dá mais para trocar o título aqui.</div>' : '<div class="video-meta">O texto fica exatamente como você escrever (letras maiúsculas e minúsculas incluídas). Ao salvar, a publicação precisa ser confirmada de novo.</div>'}
+        <div class="previa-topo"><strong>Título, descrição e agendamento</strong><button type="button" class="previa-fechar et-fechar" aria-label="Fechar">✕</button></div>
+        ${bloqueado ? '<div class="video-meta">Esse vídeo já foi publicado: não dá mais para trocar o título aqui.</div>' : '<div class="video-meta">O texto fica exatamente como você escrever (letras maiúsculas e minúsculas incluídas). Mudar título, descrição ou visibilidade exige confirmar a publicação de novo; só reagendar não.</div>'}
+        <div class="et-linha">
+          <label class="et-campo"><span>Data de postagem</span><input type="date" class="et-data" value="${escaparAttr(dados.data_postagem || "")}"${bloqueado ? " disabled" : ""}></label>
+          <label class="et-campo"><span>Hora (vazio = assim que possível)</span><input type="time" class="et-hora" value="${escaparAttr(dados.hora_postagem || "")}"${bloqueado ? " disabled" : ""}></label>
+          <label class="et-campo"><span>Visibilidade no YouTube</span><select class="et-privacidade"${bloqueado ? " disabled" : ""}>
+            <option value="public"${dados.privacidade === "public" ? " selected" : ""}>Público</option>
+            <option value="unlisted"${dados.privacidade === "unlisted" ? " selected" : ""}>Não listado (só com o link)</option>
+            <option value="private"${dados.privacidade === "private" ? " selected" : ""}>Privado (só você vê)</option>
+          </select></label>
+        </div>
+        ${bloqueado ? "" : '<div class="et-atalhos"><button type="button" class="btn-secondary btn-compacto et-hoje">Hoje</button><button type="button" class="btn-secondary btn-compacto et-amanha">Amanhã</button><span class="video-meta et-aviso-data"></span></div>'}
         <label class="et-campo"><span>Título (aparece no YouTube)</span><input type="text" class="et-titulo" maxlength="100" value="${escaparAttr(dados.titulo)}"${bloqueado ? " readonly" : ""}></label>
         <label class="et-campo"><span>Descrição do YouTube <em class="et-contagem"></em></span><textarea class="et-descricao" rows="10" maxlength="5000" placeholder="Ainda não tem descrição. Escreva ou peça para a IA escrever."${bloqueado ? " readonly" : ""}>${escaparAttr(dados.descricao_youtube)}</textarea></label>
         ${!bloqueado && dados.hashtags_automaticas ? `<div class="video-meta">As hashtags entram sozinhas na hora de publicar (você não precisa escrever). Vão no fim da descrição: <b>${escaparAttr(dados.hashtags_automaticas)}</b></div>` : ""}
@@ -653,12 +663,27 @@ async function abrirEditorDeTextos(slug) {
     </div>`);
   const janela = document.getElementById("editor-textos");
   const descricao = janela.querySelector(".et-descricao");
+  const dataLocal = (deslocamento) => {
+    const d = new Date();
+    d.setDate(d.getDate() + deslocamento);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const avisarData = () => {
+    const aviso = janela.querySelector(".et-aviso-data");
+    if (!aviso) return;
+    const dia = janela.querySelector(".et-data").value;
+    aviso.textContent = dia && dia < dataLocal(0) ? "Essa data já passou: escolha uma data de hoje em diante para reagendar." : "";
+  };
   const contar = () => { janela.querySelector(".et-contagem").textContent = `(${descricao.value.length}/5000)`; };
   contar();
   descricao.addEventListener("input", contar);
   janela.querySelectorAll(".et-fechar").forEach((b) => b.addEventListener("click", fecharEditorDeTextos));
   janela.addEventListener("click", (ev) => { if (ev.target === janela) fecharEditorDeTextos(); });
   if (bloqueado) return;
+  janela.querySelector(".et-data").addEventListener("input", avisarData);
+  janela.querySelector(".et-hoje").addEventListener("click", () => { janela.querySelector(".et-data").value = dataLocal(0); avisarData(); });
+  janela.querySelector(".et-amanha").addEventListener("click", () => { janela.querySelector(".et-data").value = dataLocal(1); avisarData(); });
+  avisarData();
   const status = janela.querySelector(".et-status");
   janela.querySelector(".et-ia").addEventListener("click", async (ev) => {
     if (descricao.value.trim() && !confirm("Substituir a descrição atual pela que a IA escrever? (Só aparece aqui: você ainda decide se salva.)")) return;
@@ -681,6 +706,10 @@ async function abrirEditorDeTextos(slug) {
     const corpo = new FormData();
     corpo.set("titulo", titulo);
     corpo.set("descricao_youtube", descricao.value);
+    if (!janela.querySelector(".et-data").value) { status.textContent = "Escolha a data de postagem."; ev.currentTarget.disabled = false; return; }
+    corpo.set("data_postagem", janela.querySelector(".et-data").value);
+    corpo.set("hora_postagem", janela.querySelector(".et-hora").value);
+    corpo.set("privacidade", janela.querySelector(".et-privacidade").value);
     const r = await fetch(`/api/videos/${slug}/textos`, { method: "POST", body: corpo }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
     if (r.erro) { status.textContent = r.erro; ev.currentTarget.disabled = false; return; }
     fecharEditorDeTextos();

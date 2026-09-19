@@ -866,11 +866,15 @@ def api_textos_do_video(slug: str) -> JSONResponse:
     tags = [t.strip() for t in tags_arq.read_text(encoding="utf-8").split(",") if t.strip()] if tags_arq.exists() else []
     automaticas = roteiro_mod.hashtags_faltantes(meta.get("descricao_youtube", ""), tags, meta.get("titulo", slug))
     return JSONResponse({"titulo": meta.get("titulo", slug), "descricao_youtube": meta.get("descricao_youtube", ""), "publicado": _video_ja_publicado(meta),
+                         "data_postagem": meta.get("data_postagem") or "", "hora_postagem": meta.get("hora_postagem") or "", "privacidade": meta.get("privacidade") or "public",
                          "hashtags_automaticas": " ".join("#" + h for h in automaticas)})
 
 
 @app.post("/api/videos/{slug}/textos")
-def api_salvar_textos_do_video(slug: str, titulo: str = Form(...), descricao_youtube: str = Form("")) -> JSONResponse:
+def api_salvar_textos_do_video(
+    slug: str, titulo: str = Form(...), descricao_youtube: str = Form(""),
+    data_postagem: str | None = Form(None), hora_postagem: str | None = Form(None), privacidade: str | None = Form(None),
+) -> JSONResponse:
     """Troca título e descrição exatamente como escritos (sem mexer nas letras). Só antes de publicar; a pasta
     do vídeo não muda. A publicação precisa ser confirmada de novo."""
     caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
@@ -882,9 +886,26 @@ def api_salvar_textos_do_video(slug: str, titulo: str = Form(...), descricao_you
     titulo = titulo.strip()
     if not titulo:
         return JSONResponse({"erro": "o título não pode ficar vazio"}, status_code=400)
+    if data_postagem is not None and not _RE_DATA_ISO.fullmatch(data_postagem.strip()):
+        return JSONResponse({"erro": "data inválida"}, status_code=400)
+    if hora_postagem is not None and hora_postagem.strip() and not _RE_HORA.fullmatch(hora_postagem.strip()):
+        return JSONResponse({"erro": "hora inválida"}, status_code=400)
+    if privacidade is not None and privacidade not in ("private", "unlisted", "public"):
+        return JSONResponse({"erro": "visibilidade inválida"}, status_code=400)
+    mudou_conteudo = (titulo[:100] != meta.get("titulo") or descricao_youtube.strip()[:5000] != (meta.get("descricao_youtube") or "")
+                      or (privacidade is not None and privacidade != (meta.get("privacidade") or "public")))
     meta["titulo"] = titulo[:100]
     meta["descricao_youtube"] = descricao_youtube.strip()[:5000]
-    meta["aprovado"] = False
+    if data_postagem is not None:  # reagendar não muda o vídeo: a confirmação da publicação continua valendo
+        meta["data_postagem"] = data_postagem.strip()
+        if (hora_postagem or "").strip():
+            meta["hora_postagem"] = hora_postagem.strip()
+        else:
+            meta.pop("hora_postagem", None)
+    if privacidade is not None:
+        meta["privacidade"] = privacidade
+    if mudou_conteudo:
+        meta["aprovado"] = False
     caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return JSONResponse({"ok": True, "titulo": meta["titulo"]})
 

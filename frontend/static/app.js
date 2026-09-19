@@ -102,7 +102,7 @@ function linhaDeVideo(v, comRegenerar) {
            ${v.tem_cenas ? `<button type="button" data-acao="cenas" data-slug="${v.slug}">Cenas e roteiro</button>` : ""}
            ${!v.sem_narracao ? `<button type="button" data-acao="legenda" data-slug="${v.slug}">Legenda e transição</button>` : ""}
            <button type="button" data-acao="thumb" data-slug="${v.slug}">Thumbnail</button>
-           <button type="button" data-acao="textos" data-slug="${v.slug}">Título e descrição</button>
+           <button type="button" data-acao="textos" data-slug="${v.slug}">Título, descrição e agendamento</button>
            ${v.aprovado ? `<button type="button" class="btn-desfazer-confirmacao" data-slug="${v.slug}" data-titulo="${tituloAttr}">Desfazer confirmação de publicação</button>` : ""}
          </div>
        </div>`
@@ -124,7 +124,7 @@ function linhaDeVideo(v, comRegenerar) {
         <div class="video-thumb">${thumb}</div>
         <div class="video-info">
           <div class="video-title">${v.titulo} ${badgeCanal}</div>
-          <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem, v.hora_postagem)} ${modoLabel}</div>
+          <div class="video-meta video-meta-status">${formatarDataPostagem(v.data_postagem, v.hora_postagem)} ${modoLabel}${v.privacidade === "private" ? " · 🔒 privado" : v.privacidade === "unlisted" ? " · 🔗 não listado" : ""}</div>
           ${publicacao ? `<div class="video-meta">${publicacao}</div>` : ""}
           ${badgeStatus ? `<div class="video-meta">${badgeStatus}</div>` : ""}
           ${comRegenerar && !publicado ? `<label class="chk-editado" title="Marque quando terminar de editar este vídeo. Só vídeo editado pode ter a publicação confirmada."><input type="checkbox" class="chk-editado-input" data-slug="${v.slug}"${v.editado ? " checked" : ""}> Editado</label>` : ""}
