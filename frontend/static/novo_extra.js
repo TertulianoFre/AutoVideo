@@ -186,7 +186,7 @@ function duracaoDoVideoEstimada() {
 
 function minSeg(s) {
   const t = Math.round(s);
-  return t >= 60 ? `${Math.floor(t / 60)} min ${t % 60} s` : `${t} s`;
+  return t >= 60 ? `${Math.floor(t / 60)} min${t % 60 ? ` ${t % 60} s` : ""}` : `${t} s`;
 }
 
 function atualizarPlaylistSom() {

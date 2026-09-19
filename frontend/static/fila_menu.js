@@ -372,7 +372,7 @@ document.addEventListener("click", (ev) => {
     }
     painel.classList.remove("aberto");
   }
-  document.querySelector(`.video-row[data-slug="${slug}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  document.querySelector(`#fila-lista .video-row[data-slug="${slug}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 });
 
 // ---------------- muitos vídeos: confirmar vários de uma vez ----------------
@@ -398,4 +398,14 @@ document.addEventListener("click", (ev) => {
     limiteFila += 20;
     aplicarFiltrosFila();
   }
+});
+
+// lápis pequeno ao lado de "Gerar outra imagem": abre/fecha o campo de descrição da imagem
+document.addEventListener("click", (ev) => {
+  const lapis = ev.target.closest(".btn-lapis-desc");
+  if (!lapis) return;
+  const campo = lapis.closest(".cena-card").querySelector(".cena-descricao");
+  campo.hidden = !campo.hidden;
+  lapis.classList.toggle("aberto", !campo.hidden);
+  if (!campo.hidden) campo.focus();
 });

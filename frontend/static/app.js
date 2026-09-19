@@ -499,7 +499,7 @@ async function carregarImagensThumb(slug, painel) {
 }
 
 async function _atualizarBaseThumb(slug, painel, resultado) {
-  const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+  const thumbImg = document.querySelector(`#fila-lista .video-row[data-slug="${slug}"] .video-thumb img`);
   if (thumbImg && resultado.thumbnail) thumbImg.src = resultado.thumbnail;
   if (resultado.thumbnail_base) {
     painel.dataset.base = resultado.thumbnail_base;
@@ -595,7 +595,7 @@ async function salvarThumb(slug, painel) {
       painel.dataset.posX = "";
       painel.dataset.posY = "";
     }
-    const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+    const thumbImg = document.querySelector(`#fila-lista .video-row[data-slug="${slug}"] .video-thumb img`);
     if (thumbImg) thumbImg.src = resultado.thumbnail;
   } catch {
     botaoSalvar.disabled = false;
@@ -748,7 +748,7 @@ function acompanharJobCena(jobId, card, botao, rotuloBotao) {
       // atualiza só a miniatura da linha (se essa era a cena 0), sem recarregar
       // a fila — o painel de cenas continua aberto pra corrigir mais de uma
       if (job.resultado.thumbnail) {
-        const thumbImg = document.querySelector(`.video-row[data-slug="${slug}"] .video-thumb img`);
+        const thumbImg = document.querySelector(`#fila-lista .video-row[data-slug="${slug}"] .video-thumb img`);
         if (thumbImg) thumbImg.src = job.resultado.thumbnail;
       }
     } else if (job.status === "erro") {

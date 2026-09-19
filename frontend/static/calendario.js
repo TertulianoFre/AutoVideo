@@ -111,7 +111,7 @@ popCalendario.addEventListener("click", (ev) => {
     trocarAba("fila");
     const slug = item.dataset.slug;
     const tentar = (n) => {
-      const linha = document.querySelector(`.video-row[data-slug="${slug}"]`) || document.querySelector(`[data-processando="${slug}"]`);
+      const linha = document.querySelector(`#fila-lista .video-row[data-slug="${slug}"]`) || document.querySelector(`#fila-lista [data-processando="${slug}"]`);
       if (linha) {
         linha.scrollIntoView({ block: "center", behavior: "smooth" });
         linha.classList.add("piscar");
