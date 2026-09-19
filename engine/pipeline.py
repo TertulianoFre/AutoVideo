@@ -695,7 +695,7 @@ def editar_estrutura(
     slug: str, operacao: str, indice: int | None = None, posicao: int | None = None, texto: str = "",
     descricao_imagem: str = "", midia_tipo: str = "", midia_nome: str = "", edicoes: dict | None = None,
     progresso: Callable[[str, float], None] | None = None, audio_do_video: bool = False,
-    ajustar_ao_video: bool = False,
+    ajustar_ao_video: bool = False, indices: list | None = None,
 ) -> dict:
     """Muda a estrutura do vídeo SEM regenerar tudo: "adicionar" uma cena (narração nova + imagem/vídeo),
     "remover" uma (com a fala dela) ou "substituir" o texto de várias (só elas são narradas de novo; as outras
@@ -738,9 +738,13 @@ def editar_estrutura(
                 "cues": [(c.start.total_seconds(), c.end.total_seconds(), c.content) for c in sm.cues], "substitui": None}
 
     if operacao == "remover":
-        if indice is None or not (0 <= indice < len(cenas)) or len(cenas) < 2:
-            raise RuntimeError("Cena inexistente ou única (o vídeo precisa de pelo menos uma cena).")
-        ordem.remove(indice)
+        alvo = sorted({int(i) for i in (indices if indices else ([indice] if indice is not None else []))})
+        if not alvo or any(not (0 <= i < len(cenas)) for i in alvo):
+            raise RuntimeError("Cena inexistente.")
+        if len(alvo) >= len(cenas):
+            raise RuntimeError("O vídeo precisa ficar com pelo menos uma cena.")
+        for i in alvo:  # todas saem de uma vez: a narração, a legenda e o vídeo são refeitos uma só vez
+            ordem.remove(i)
     elif operacao == "adicionar":
         if audio_do_video:
             video_da_cena = biblioteca.caminho_video_valido(midia_nome) if midia_tipo == "video" else None

@@ -662,7 +662,7 @@ function cardDeCena(slug, cena, tempoEditavel) {
         ${origem}
         <div class="cena-base-grade" hidden></div>
       </div>
-      <button type="button" class="btn-excluir-cena" title="Excluir esta cena (pede confirmação)">✕</button>
+      <button type="button" class="btn-excluir-cena" title="Marcar esta cena para excluir (nada é apagado até você confirmar)">✕</button>
       <button type="button" class="btn-lapis" title="Editar o texto desta cena (só a fala dela é narrada de novo)">✎</button>
     </div>`;
 }
@@ -701,6 +701,7 @@ async function alternarPainelCenas(botao) {
     <div class="cenas-rodape">
       <button type="button" class="btn-primary btn-salvar-textos" hidden>Salvar textos e refazer narração</button>
       <button type="button" class="btn-primary btn-aplicar-tempos" hidden>Aplicar tempos</button>
+      <button type="button" class="btn-primary btn-excluir-marcadas" hidden>Excluir cenas marcadas e remontar</button>
       <button type="button" class="btn-secondary btn-concluir-cenas">Concluir e fechar</button>
       <span class="video-meta cenas-rodape-status"></span>
     </div>`;

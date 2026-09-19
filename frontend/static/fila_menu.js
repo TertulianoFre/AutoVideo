@@ -180,21 +180,49 @@ async function salvarTextosDasCenas(painel, slug) {
   enviarEstruturaDeCenas(painel, slug, { operacao: "substituir", edicoes: JSON.stringify(edicoes) });
 }
 
-// ---------------- excluir cena (sempre com confirmação) ----------------
+// ---------------- excluir cenas: marca várias e remonta uma vez só ----------------
+
+function cenasMarcadas(painel) {
+  return [...painel.querySelectorAll(".cena-card.cena-marcada")];
+}
+
+function atualizarMarcadas(painel) {
+  const marcadas = cenasMarcadas(painel);
+  const botao = painel.querySelector(".btn-excluir-marcadas");
+  if (botao) {
+    botao.hidden = marcadas.length === 0;
+    botao.textContent = marcadas.length === 1 ? "Excluir 1 cena marcada e remontar" : `Excluir ${marcadas.length} cenas marcadas e remontar`;
+  }
+  recalcularTemposDasCenas(painel); // tempos e total já sem as cenas marcadas
+}
 
 document.addEventListener("click", (ev) => {
   const botao = ev.target.closest(".btn-excluir-cena");
   if (!botao) return;
   const painel = botao.closest(".cenas-painel");
   const card = botao.closest(".cena-card");
-  if (painel.querySelectorAll(".cena-card").length < 2) {
-    alert("O vídeo precisa de pelo menos uma cena.");
+  const marcando = !card.classList.contains("cena-marcada");
+  if (marcando && cenasMarcadas(painel).length + 1 >= painel.querySelectorAll(".cena-card").length) {
+    alert("O vídeo precisa ficar com pelo menos uma cena.");
     return;
   }
+  card.classList.toggle("cena-marcada", marcando);
+  botao.textContent = marcando ? "↺" : "✕";
+  botao.title = marcando ? "Desfazer: manter esta cena" : "Marcar esta cena para excluir (nada é apagado até você confirmar)";
+  atualizarMarcadas(painel);
+});
+
+document.addEventListener("click", (ev) => {
+  const botao = ev.target.closest(".btn-excluir-marcadas");
+  if (!botao) return;
+  const painel = botao.closest(".cenas-painel");
+  const marcadas = cenasMarcadas(painel);
+  if (!marcadas.length) return;
   if (haAlteracoesNaoSalvas(painel) && !confirm("Tem textos/tempos editados ainda não salvos; eles serão descartados. Continuar?")) return;
-  const trecho = card.querySelector(".cena-card-texto").textContent.trim().slice(0, 70);
-  if (!confirm(`Excluir a cena ${parseInt(card.dataset.indice, 10) + 1} ("${trecho}…")? A fala dela também sai do vídeo e as cenas seguintes andam pra frente.`)) return;
-  enviarEstruturaDeCenas(painel, painel.dataset.slug, { operacao: "remover", indice: card.dataset.indice });
+  const segundos = marcadas.reduce((soma, c) => soma + parseFloat(c.dataset.duracao || 0), 0);
+  const lista = marcadas.map((c) => `Cena ${parseInt(c.dataset.indice, 10) + 1}`).join(", ");
+  if (!confirm(`Excluir ${marcadas.length === 1 ? "a" : "as"} ${lista}? Saem ${formatarTempo(segundos)} do vídeo (a fala delas também) e as outras cenas andam pra frente. O vídeo é remontado uma vez só.`)) return;
+  enviarEstruturaDeCenas(painel, painel.dataset.slug, { operacao: "remover", indices: marcadas.map((c) => c.dataset.indice).join(",") });
 });
 
 // ---------------- adicionar cena (nova ou padrão) ----------------
@@ -377,6 +405,11 @@ function recalcularTemposDasCenas(painel) {
   painel.querySelectorAll(".cena-card").forEach((card) => {
     const campo = card.querySelector(".cena-duracao");
     const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo)) : parseFloat(card.dataset.duracao || 0);
+    if (card.classList.contains("cena-marcada")) {  // vai ser excluída: não conta no tempo
+      const rot = card.querySelector(".cena-card-tempo");
+      if (rot) rot.textContent = "será excluída";
+      return;
+    }
     if (campo) {
       const natural = parseFloat(campo.dataset.natural);
       const info = card.querySelector(".cena-tempo-info");
@@ -561,16 +594,17 @@ function atualizarLinhaDoTempo(painel) {
     const campo = card.querySelector(".cena-duracao");
     const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo) || 0) : parseFloat(card.dataset.duracao || 0);
     const inicio = acumulado;
-    acumulado += dur;
+    const marcada = card.classList.contains("cena-marcada");
+    if (!marcada) acumulado += dur;
     const texto = (card.querySelector(".cena-card-texto")?.textContent || "").trim();
     const comVideo = card.classList.contains("cena-audio-video");
     const vazia = !texto && !comVideo;
     const capa = card.dataset.img16 ? `background-image:url('${card.dataset.img16}')` : "";
-    const classe = `lt-bloco${comVideo ? " lt-video" : ""}${vazia ? " lt-vazia" : ""}`;
+    const classe = `lt-bloco${comVideo ? " lt-video" : ""}${vazia ? " lt-vazia" : ""}${marcada ? " lt-marcada" : ""}`;
     const dica = comVideo ? "Vídeo com o áudio dele" : vazia ? "Cena vazia (sem texto)" : texto.slice(0, 90);
     return `<div class="lt-item" style="flex:${Math.max(dur, 0.5)} 1 0px" data-indice="${card.dataset.indice}">
       <div class="${classe}" style="${capa}" title="${escaparAttr(`Cena ${i + 1} · ${dica}`)}"><span class="lt-rotulo">${comVideo ? "🎬 " : ""}${i + 1} · ${Math.round(dur * 10) / 10}s</span></div>
-      <span class="lt-tempo">${formatarTempo(inicio)}</span></div>`;
+      <span class="lt-tempo">${marcada ? "excluir" : formatarTempo(inicio)}</span></div>`;
   }).join("");
   const cabeca = painel.querySelector(".lt-cabeca");
   if (cabeca) cabeca.textContent = `Linha do tempo · ${cartoes.length} cena(s) · total ${formatarTempo(acumulado)} (clique numa cena para ir até ela)`;
