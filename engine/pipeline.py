@@ -1129,7 +1129,7 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
 
     if indice == 0:
         avisar("Atualizando a thumbnail", 95)
-        texto_thumb = metadados.get("thumbnail_texto") or metadados.get("titulo", slug)
+        texto_thumb = metadados["thumbnail_texto"] if isinstance(metadados.get("thumbnail_texto"), str) else metadados.get("titulo", slug)
         cor_thumb = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
         posicao_thumb = metadados.get("thumbnail_posicao", "baixo-centro")
         px_thumb = metadados.get("thumbnail_tamanho_px")

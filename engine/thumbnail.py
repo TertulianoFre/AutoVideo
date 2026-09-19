@@ -130,6 +130,9 @@ def gerar_thumbnail(
     tamanho_fonte = max(TAMANHO_FONTE_MIN, min(TAMANHO_FONTE_MAX, tamanho_fonte))
     base = Image.open(imagem_base).convert("RGB")
     base = cobrir(base, (LARGURA, ALTURA))
+    if not (titulo or "").strip():  # sem texto: só a imagem, sem a faixa escura nem nada por cima
+        base.save(caminho_saida, "PNG")
+        return caminho_saida
 
     fonte = _fonte(tamanho_fonte, pesada=efeito == "youtuber")
     if efeito == "youtuber":
@@ -228,7 +231,8 @@ def config_shorts(metadados: dict, padrao_titulo: str) -> dict:
     salvo = metadados.get("thumbnail_short") or {}
     px = salvo.get("tamanho_px")
     return {
-        "texto": salvo.get("texto") or metadados.get("thumbnail_texto") or metadados.get("titulo") or padrao_titulo,
+        # texto vazio salvo de propósito = thumbnail sem texto (só cai no título quando nunca foi definido)
+        "texto": salvo["texto"] if isinstance(salvo.get("texto"), str) else (metadados["thumbnail_texto"] if isinstance(metadados.get("thumbnail_texto"), str) else (metadados.get("titulo") or padrao_titulo)),
         "cor": salvo.get("cor", metadados.get("thumbnail_cor", "")),
         "tamanho_px": int(px) if isinstance(px, (int, float)) and px else 120,
         "pos_x": salvo.get("pos_x") if isinstance(salvo.get("pos_x"), (int, float)) else 0.5,

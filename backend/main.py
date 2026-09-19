@@ -1231,7 +1231,7 @@ def _base_valida_ou_erro(pasta: Path) -> Path | JSONResponse:
 
 
 def _rerenderizar_thumbnail(pasta: Path, base: Path, metadados: dict) -> None:
-    texto = metadados.get("thumbnail_texto") or metadados.get("titulo", pasta.name)
+    texto = metadados["thumbnail_texto"] if isinstance(metadados.get("thumbnail_texto"), str) else metadados.get("titulo", pasta.name)
     cor = thumbnail_mod.cor_de_hex(metadados.get("thumbnail_cor", ""))
     posicao = metadados.get("thumbnail_posicao", "baixo-centro")
     thumbnail_mod.gerar_thumbnail(base, texto, pasta / "thumbnail.png", cor, posicao, _tamanho_fonte_de(metadados), _pos_livre_de(metadados), efeito=metadados.get("thumbnail_efeito", "nenhum"))
@@ -1256,7 +1256,7 @@ def api_fundo_thumbnail_shorts(slug: str) -> dict:
 @app.post("/api/videos/{slug}/thumbnail-shorts/editar")
 def api_editar_thumbnail_shorts(
     slug: str,
-    texto: str = Form(...),
+    texto: str = Form(""),
     cor: str = Form(""),
     tamanho_px: int = Form(120),
     pos_x: float = Form(0.5),
@@ -1271,9 +1271,7 @@ def api_editar_thumbnail_shorts(
     caminho_meta = pasta / "metadata.json"
     if not caminho_meta.exists():
         return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
-    texto = texto.strip()
-    if not texto:
-        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
+    texto = texto.strip()  # vazio = Short sem texto na thumbnail
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
     metadados["thumbnail_short"] = {
         "texto": texto,
@@ -1400,7 +1398,7 @@ async def api_upload_imagem_thumbnail(slug: str, arquivo: UploadFile = File(...)
 @app.post("/api/videos/{slug}/thumbnail/editar")
 def api_editar_thumbnail(
     slug: str,
-    texto: str = Form(...),
+    texto: str = Form(""),
     cor: str = Form(""),
     posicao: str = Form("baixo-centro"),
     tamanho_px: int = Form(80),
@@ -1418,9 +1416,7 @@ def api_editar_thumbnail(
     if not caminho_meta.exists():
         return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
 
-    texto = texto.strip()
-    if not texto:
-        return JSONResponse({"erro": "o texto da thumbnail não pode ficar vazio"}, status_code=400)
+    texto = texto.strip()  # vazio é permitido: thumbnail sem texto nenhum
 
     base = _base_valida_ou_erro(pasta)
     if isinstance(base, JSONResponse):
@@ -1739,7 +1735,8 @@ def api_listar_videos() -> list[dict]:
                 "youtube_video_id": metadados.get("youtube_video_id"),
                 "publicacao_erro": metadados.get("publicacao_erro"),
                 "tem_cenas": bool(metadados.get("cenas")),
-                "thumbnail_texto": metadados.get("thumbnail_texto") or metadados.get("titulo") or pasta.name.replace("-", " "),
+                "thumbnail_texto": metadados["thumbnail_texto"] if isinstance(metadados.get("thumbnail_texto"), str) else (metadados.get("titulo") or pasta.name.replace("-", " ")),
+                "youtube_short_id": metadados.get("youtube_short_id"),
                 "thumbnail_cor": metadados.get("thumbnail_cor", ""),
                 "thumbnail_posicao": metadados.get("thumbnail_posicao", "baixo-centro"),
                 "thumbnail_tamanho_px": _tamanho_fonte_de(metadados),

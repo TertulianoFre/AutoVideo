@@ -35,7 +35,7 @@ async function montarEditorShorts(slug, painel) {
         <div class="thumb-preview-texto"></div>
       </div>
       <div class="thumb-shorts-controles">
-        <input type="text" class="short-texto" value="${(cfg.texto || "").replace(/"/g, "&quot;")}" maxlength="80" placeholder="Texto da thumbnail do Short">
+        <input type="text" class="short-texto" value="${(cfg.texto || "").replace(/"/g, "&quot;")}" maxlength="80" placeholder="Texto da thumbnail do Short (vazio = sem texto)">
         <div class="cor-swatches">${swatches}</div>
         ${seletorEfeito(cfg.efeito)}
         <select class="short-fundo" title="Fundo">
@@ -114,7 +114,7 @@ async function montarEditorShorts(slug, painel) {
   const salvar = async (novoFundo) => {
     const status = secao.querySelector(".short-status");
     const texto = secao.querySelector(".short-texto").value.trim();
-    if (!texto) { status.textContent = "Escreve algum texto primeiro."; return; }
+    if (!texto && !confirm("O texto está vazio: a thumbnail do Short vai ficar SEM texto. Continuar?")) return;
     status.textContent = "Salvando…";
     const dados = new FormData();
     dados.set("texto", texto);

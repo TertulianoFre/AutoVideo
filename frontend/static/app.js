@@ -131,8 +131,8 @@ function linhaDeVideo(v, comRegenerar) {
           ${comRegenerar && !publicado ? `<label class="chk-editado" title="Marque quando terminar de editar este vídeo. Só vídeo editado pode ter a publicação confirmada."><input type="checkbox" class="chk-editado-input" data-slug="${v.slug}"${v.editado ? " checked" : ""}> Editado</label>` : ""}
         </div>
         <div class="video-links">
-          ${v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
-          ${v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
+          ${v.youtube_video_id ? `<a href="https://www.youtube.com/watch?v=${v.youtube_video_id}" target="_blank" rel="noopener" title="Abrir este vídeo no YouTube">16:9 ↗ YouTube</a>` : v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
+          ${v.youtube_short_id ? `<a href="https://www.youtube.com/shorts/${v.youtube_short_id}" target="_blank" rel="noopener" title="Abrir este Short no YouTube">Shorts ↗ YouTube</a>` : v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
           ${acoesEdicao}
           ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${tituloAttr}"${v.editado ? "" : " disabled"} title="${v.editado ? "Sem confirmar, o vídeo NÃO é publicado" : "Marque a caixinha Editado primeiro"}">Confirmar publicação</button>` : ""}
           ${menuRegenerar}
@@ -140,7 +140,7 @@ function linhaDeVideo(v, comRegenerar) {
         </div>
       </div>
       ${comRegenerar && !publicado ? `<div class="painel-barra" data-slug="${v.slug}" hidden><span class="painel-barra-titulo"></span><button type="button" class="btn-minimizar-painel" title="Fecha a edição e volta o vídeo ao tamanho normal">▲ Minimizar edição</button></div>` : ""}
-      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
+      ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto ?? v.titulo ?? "").replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
       ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}" data-canal="${v.canal_id || ""}"></div>` : ""}
       ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="legenda-painel" data-slug="${v.slug}" data-tem-cues="${v.tem_cues}" data-legenda="${encodeURIComponent(JSON.stringify(v.legenda || {}))}" data-transicao="${v.transicao || "fade"}"></div>` : ""}
     </div>`;
@@ -369,7 +369,7 @@ function alternarPainelThumb(botao) {
         <div class="thumb-preview-texto" style="left:${fx0 * 100}%; top:${fy0 * 100}%; color:${corAtual ? "#" + corAtual : "#F6F2E9"}">${textoAtual}</div>
       </div>` : ""}
     <div class="thumb-form">
-      <input type="text" class="thumb-texto" value="${textoAtual}" maxlength="80" placeholder="Texto que aparece na thumbnail">
+      <input type="text" class="thumb-texto" value="${textoAtual}" maxlength="80" placeholder="Texto que aparece na thumbnail (vazio = thumbnail sem texto)">
       <div class="cor-swatches">${swatches}</div>
       ${seletorEfeito(painel.dataset.efeito || "nenhum")}
       <button type="button" class="btn-secondary btn-salvar-thumb">Salvar</button>
@@ -557,10 +557,7 @@ async function salvarThumb(slug, painel) {
   const status = painel.querySelector(".thumb-status");
   const botaoSalvar = painel.querySelector(".btn-salvar-thumb");
 
-  if (!texto) {
-    status.textContent = "Escreve algum texto primeiro.";
-    return;
-  }
+  if (!texto && !confirm("O texto está vazio: a thumbnail vai ficar SEM nenhum texto (só a imagem). Continuar?")) return;
 
   botaoSalvar.disabled = true;
   status.textContent = "Salvando…";
