@@ -21,7 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -109,6 +109,41 @@ def api_ativar_canal(canal_id: str) -> dict:
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=404)
     return {"ok": True}
+
+
+@app.get("/api/canais/{canal_id}/padroes")
+def api_padroes_do_canal(canal_id: str) -> dict:
+    return {"padroes": canal.obter_padroes(canal_id)}
+
+
+@app.put("/api/canais/{canal_id}/padroes")
+async def api_salvar_padroes(canal_id: str, requisicao: Request) -> dict:
+    if not canal.obter_canal(canal_id):
+        return JSONResponse({"erro": "Canal não encontrado."}, status_code=404)
+    valores = await requisicao.json()
+    if not isinstance(valores, dict):
+        return JSONResponse({"erro": "Formato inválido."}, status_code=400)
+    limpos = {str(k): v for k, v in valores.items() if isinstance(v, (str, int, float, bool))}
+    canal.salvar_padroes(canal_id, limpos)
+    return {"ok": True, "padroes": limpos}
+
+
+@app.get("/api/ia/status")
+def api_ia_status() -> dict:
+    from engine import ia_texto
+
+    return {"provedores": ia_texto.status()}
+
+
+@app.post("/api/ia/chave")
+def api_ia_chave(provedor: str = Form(...), chave: str = Form("")) -> dict:
+    from engine import ia_texto
+
+    try:
+        ia_texto.gravar_chave(provedor, chave)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    return {"provedores": ia_texto.status()}
 
 
 @app.post("/api/canais/{canal_id}/editar")
@@ -483,6 +518,41 @@ def api_info_biblioteca(tipo: str, nome: str, descricao: str = Form(""), canal_i
     biblioteca.RAIZ.mkdir(parents=True, exist_ok=True)
     (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True}
+
+
+@app.post("/api/biblioteca/{tipo}/{nome}/descrever")
+def api_descrever_midia(tipo: str, nome: str) -> dict:
+    """Uma IA com visão (chave grátis do Gemini/Groq/OpenRouter, ou Ollama local) descreve a imagem (ou o 1º quadro do vídeo)
+    e a descrição fica salva na Base."""
+    from engine import ia_texto
+
+    if tipo == "imagens":
+        arquivo = biblioteca.caminho_imagem_valida(nome)
+    elif tipo == "videos":
+        origem = biblioteca.caminho_video_valido(nome)
+        arquivo = None
+        if origem:
+            import subprocess, tempfile
+
+            arquivo = Path(tempfile.gettempdir()) / f"quadro_{abs(hash(nome))}.jpg"
+            subprocess.run(["ffmpeg", "-y", "-ss", "0.5", "-i", str(origem), "-frames:v", "1", "-vf", "scale=768:-2", str(arquivo)], capture_output=True)
+            if not arquivo.exists():
+                arquivo = None
+    else:
+        arquivo = None
+    if not arquivo:
+        return JSONResponse({"erro": "item não encontrado"}, status_code=404)
+    if not ia_texto.visao_disponivel():
+        return JSONResponse({"erro": "Para a IA olhar as imagens, coloque uma chave grátis (Gemini ou Groq) em Agente → Motores de IA."}, status_code=400)
+    try:
+        descricao = ia_texto.descrever_imagem(arquivo)
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=502)
+    meta = _meta_biblioteca()
+    atual = (meta.get(tipo) or {}).get(nome) or {}
+    meta.setdefault(tipo, {})[nome] = {"descricao": descricao, "canal_id": atual.get("canal_id", "")}
+    (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"descricao": descricao}
 
 
 @app.post("/api/biblioteca/audios/upload")

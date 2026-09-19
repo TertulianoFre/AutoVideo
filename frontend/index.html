@@ -180,6 +180,14 @@
         </div>
 
         <div class="card">
+          <div class="card-head">Motores de IA (roteiros e descrição de imagens)</div>
+          <p class="hint" style="margin:0 0 12px">
+            Para gerar muitos roteiros por dia sem travar, o sistema usa vários motores em rodízio: se um atinge o limite, outro assume. Todos abaixo têm plano grátis (só criar uma chave, sem cartão). Motores com <b>visão</b> (Gemini, Groq, OpenRouter) também conseguem <b>olhar as imagens</b> e descrevê-las. Sem nenhuma chave, usa a Pollinations (sem visão e com limite baixo).
+          </p>
+          <div id="motores-ia" class="motores-ia"></div>
+        </div>
+
+        <div class="card">
           <div class="card-head">Roteiro a partir das imagens da Base</div>
           <p class="hint" style="margin:0 0 14px">
             Escolha as imagens (ou vídeos) da sua Base na ordem em que devem aparecer, diga a duração do vídeo e o agente escreve um roteiro com um parágrafo para cada uma, dividindo o tempo entre elas. A IA gratuita não enxerga imagens: ela segue a <b>descrição</b> que você escreve em cada uma (fica salva na Base). Depois é só enviar para o Novo vídeo.
@@ -228,7 +236,12 @@
       <section id="tab-novo" class="tab">
         <div class="novo-grid">
           <form id="form-novo" class="card form">
-            <div class="video-meta" id="novo-video-canal-ativo" style="margin-top:-6px"></div>
+            <div class="video-meta" id="novo-video-canal-ativo"></div>
+            <div class="padroes-canal">
+              <button type="button" class="btn-secondary btn-compacto" id="btn-salvar-padroes" title="Guarda as escolhas atuais (formato, voz, estilo, legenda, som...) como o ponto de partida deste canal">Salvar como padrão do canal</button>
+              <button type="button" class="btn-regenerar btn-regenerar-sutil" id="btn-apagar-padroes" hidden>apagar padrão</button>
+              <span class="video-meta" id="padroes-status"></span>
+            </div>
             <details class="secao" open>
               <summary>1. Básico</summary>
             <div class="row-2">
@@ -691,5 +704,7 @@
 <script src="/static/fila_menu.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/novo_extra.js"></script>
+<script src="/static/padroes.js"></script>
+<script src="/static/ia_motores.js"></script>
 </body>
 </html>

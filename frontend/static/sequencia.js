@@ -42,6 +42,7 @@ async function montarSequencia(cfg) {
                 <input type="text" class="seq-desc" data-chave="${escaparAttr(chave)}" value="${escaparAttr(it.descricao || "")}" maxlength="300" placeholder="Descreva o que aparece (ex.: polvo abrindo um caramujo)">
               </div>
               <div class="seq-botoes">
+                <button type="button" class="seq-olhar" title="A IA olha a imagem e escreve a descrição (precisa de chave grátis em Agente → Motores de IA)">👁</button>
                 <button type="button" class="seq-up" title="Subir"${i === 0 ? " disabled" : ""}>↑</button>
                 <button type="button" class="seq-down" title="Descer"${i === lista.length - 1 ? " disabled" : ""}>↓</button>
                 <button type="button" class="seq-rem" title="Tirar da sequência">✕</button>
@@ -68,6 +69,21 @@ async function montarSequencia(cfg) {
         const i = parseInt(linha.dataset.i, 10);
         linha.querySelector(".seq-up").addEventListener("click", () => { [lista[i - 1], lista[i]] = [lista[i], lista[i - 1]]; desenhar(); });
         linha.querySelector(".seq-down").addEventListener("click", () => { [lista[i + 1], lista[i]] = [lista[i], lista[i + 1]]; desenhar(); });
+        linha.querySelector(".seq-olhar").addEventListener("click", async (ev) => {
+          const botao = ev.currentTarget;
+          const it = itens.find((x) => chaveDe(x) === lista[i]);
+          botao.disabled = true;
+          botao.textContent = "…";
+          const r = await fetch(`/api/biblioteca/${it.tipo === "video" ? "videos" : "imagens"}/${encodeURIComponent(it.nome)}/descrever`, { method: "POST" }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+          if (r.erro) {
+            alert(r.erro);
+            botao.disabled = false;
+            botao.textContent = "👁";
+            return;
+          }
+          it.descricao = r.descricao;
+          desenhar();
+        });
         linha.querySelector(".seq-rem").addEventListener("click", () => { lista.splice(i, 1); desenhar(); });
         linha.querySelector(".seq-desc").addEventListener("change", async (ev) => {
           const it = itens.find((x) => chaveDe(x) === ev.target.dataset.chave);
@@ -128,6 +144,15 @@ document.getElementById("btn-ag-roteiro").addEventListener("click", async (ev) =
     return;
   }
   botao.disabled = true;
+  // a IA com visão (se houver chave) descreve as mídias que ainda estão sem descrição, para o roteiro fazer sentido
+  const semDescricao = Array.from(document.querySelectorAll("#ag-base-sequencia .seq-desc")).filter((c) => !c.value.trim());
+  for (const campoDesc of semDescricao) {
+    status.textContent = "A IA está olhando as imagens…";
+    const [tipo, ...resto] = campoDesc.dataset.chave.split(":");
+    const r = await fetch(`/api/biblioteca/${tipo === "video" ? "videos" : "imagens"}/${encodeURIComponent(resto.join(":"))}/descrever`, { method: "POST" }).then((x) => x.json()).catch(() => ({}));
+    if (r.descricao) campoDesc.value = r.descricao;
+    else break; // sem visão disponível: segue só com o que está escrito
+  }
   document.getElementById("ag-barra").hidden = false;
   const inicio = Date.now();
   const relogio = setInterval(() => (status.textContent = `O agente está escrevendo o roteiro… ${Math.round((Date.now() - inicio) / 1000)}s`), 500);

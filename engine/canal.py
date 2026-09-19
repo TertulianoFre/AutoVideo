@@ -127,6 +127,29 @@ def atualizar_canal(canal_id: str, nome: str | None = None, contexto: str | None
     raise ValueError(f"Canal '{canal_id}' não existe.")
 
 
+CAMINHO_PADROES = RAIZ / "dados" / "padroes_novo_video.json"
+
+
+def obter_padroes(canal_id: str | None = None) -> dict:
+    canal_id = canal_id or canal_ativo_id()
+    try:
+        return json.loads(CAMINHO_PADROES.read_text(encoding="utf-8")).get(canal_id, {})
+    except (OSError, ValueError):
+        return {}
+
+
+def salvar_padroes(canal_id: str, valores: dict) -> None:
+    try:
+        todos = json.loads(CAMINHO_PADROES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        todos = {}
+    if valores:
+        todos[canal_id] = valores
+    else:
+        todos.pop(canal_id, None)
+    CAMINHO_PADROES.write_text(json.dumps(todos, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def obter_contexto(canal_id: str | None = None) -> str:
     """Contexto do canal dado, ou do canal ativo se não especificar."""
     canal = obter_canal(canal_id or canal_ativo_id())

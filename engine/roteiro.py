@@ -26,28 +26,10 @@ PROMPT_SISTEMA = (
 
 
 def chamar_pollinations(mensagens: list, tentativas: int = 4) -> str:
-    # reasoning_effort baixo: esse modelo às vezes gasta todo o orçamento de
-    # tokens "pensando" e não sobra espaço pra escrever a resposta final.
-    payload = {"model": "openai", "messages": mensagens, "reasoning_effort": "low"}
-    ultimo_erro = None
-    for tentativa in range(1, tentativas + 1):
-        try:
-            resposta = requests.post(POLLINATIONS_CHAT_URL, json=payload, timeout=60)
-            if resposta.ok:
-                dados = resposta.json()
-                escolhas = dados.get("choices") or []
-                texto = (escolhas[0].get("message", {}).get("content", "") if escolhas else "")
-                # o modelo às vezes vaza tokens especiais tipo <|endoftext|> no texto
-                texto = re.sub(r"<\|[^|>]*\|>", "", texto).strip()
-                if texto:
-                    return texto
-                ultimo_erro = f"resposta sem conteúdo: {str(dados)[:200]}"
-            else:
-                ultimo_erro = f"HTTP {resposta.status_code}: {resposta.text[:200]}"
-        except (requests.RequestException, ValueError) as erro:
-            ultimo_erro = str(erro)
-        time.sleep(2 * tentativa)
-    raise RuntimeError(f"Chamada à Pollinations falhou {tentativas}x ({ultimo_erro})")
+    """Nome antigo mantido: agora tenta os provedores em cadeia (chaves grátis, Ollama local, Pollinations)."""
+    from engine.ia_texto import chamar_ia
+
+    return chamar_ia(mensagens, tentativas)
 
 
 PROMPT_SISTEMA_REVISAO = (
@@ -109,8 +91,10 @@ def gerar_roteiro(
         partes.append(
             f"O vídeo terá {n_total} cenas, cada uma com uma imagem/vídeo já escolhido, nesta ordem:\n{lista}\n"
             f"Cada parágrafo deve ter cerca de {por_cena} palavras (o vídeo todo, {palavras_alvo} palavras).\n"
-            f"Escreva EXATAMENTE {n_total} parágrafos, separados por uma linha em branco: o parágrafo N narra o que aparece na cena N "
-            f"(use o que está descrito, sem inventar detalhes visuais que contradigam) e liga naturalmente com o anterior.{extra}"
+            f"Escreva EXATAMENTE {n_total} parágrafos, separados por uma linha em branco: o parágrafo N narra o que aparece na cena N. "
+            "Conte UMA história com começo, meio e fim, em que cada parágrafo desenvolve UMA ideia só (a da sua imagem) e continua a anterior "
+            "com uma ligação natural. Não empilhe fatos soltos nem repita informação já dita; se um dado não combina com a imagem, deixe de fora. "
+            f"Use o que está descrito, sem inventar detalhes visuais que contradigam.{extra}"
         )
         num_cenas = n_total
     elif num_cenas and num_cenas > 1:
