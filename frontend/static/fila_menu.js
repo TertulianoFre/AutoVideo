@@ -609,6 +609,7 @@ async function abrirEditorDeTextos(slug) {
         ${bloqueado ? '<div class="video-meta">Esse vídeo já foi publicado: não dá mais para trocar o título aqui.</div>' : '<div class="video-meta">O texto fica exatamente como você escrever (letras maiúsculas e minúsculas incluídas). Ao salvar, a publicação precisa ser confirmada de novo.</div>'}
         <label class="et-campo"><span>Título (aparece no YouTube)</span><input type="text" class="et-titulo" maxlength="100" value="${escaparAttr(dados.titulo)}"${bloqueado ? " readonly" : ""}></label>
         <label class="et-campo"><span>Descrição do YouTube <em class="et-contagem"></em></span><textarea class="et-descricao" rows="10" maxlength="5000" placeholder="Ainda não tem descrição. Escreva ou peça para a IA escrever."${bloqueado ? " readonly" : ""}>${escaparAttr(dados.descricao_youtube)}</textarea></label>
+        ${!bloqueado && dados.hashtags_automaticas ? `<div class="video-meta">As hashtags entram sozinhas na hora de publicar (você não precisa escrever). Vão no fim da descrição: <b>${escaparAttr(dados.hashtags_automaticas)}</b></div>` : ""}
         <div class="cena-card-acoes">
           ${bloqueado ? "" : '<button type="button" class="btn-primary et-salvar">Salvar</button><button type="button" class="btn-secondary et-ia">Escrever descrição com a IA</button>'}
           <button type="button" class="btn-secondary et-fechar">${bloqueado ? "Fechar" : "Cancelar"}</button>

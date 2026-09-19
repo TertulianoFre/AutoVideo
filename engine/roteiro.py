@@ -168,6 +168,44 @@ def _hashtags_de(tags: list, limite: int = 8) -> str:
     return " ".join("#" + "".join(t.split()) for t in tags[:limite] if t.strip())
 
 
+_PALAVRAS_FRACAS_TITULO = {
+    "sobre", "porque", "para", "como", "quando", "quais", "qual", "mais", "muito", "isso", "esse", "essa", "esta", "este",
+    "seus", "suas", "você", "voce", "nunca", "sempre", "coisas", "fatos", "curiosidades",
+}
+
+
+def _hashtags_do_titulo(titulo: str, limite: int = 5) -> list:
+    saida = []
+    for palavra in re.findall(r"\w+", titulo, re.UNICODE):
+        if len(palavra) >= 4 and palavra.casefold() not in _PALAVRAS_FRACAS_TITULO and palavra.casefold() not in (s.casefold() for s in saida):
+            saida.append(palavra)
+    return saida[:limite]
+
+
+def hashtags_faltantes(descricao: str, tags: list, titulo: str = "", minimo: int = 5, total: int = 8) -> list:
+    """Hashtags que faltam na descrição: se ela tem menos de `minimo`, completa (até `total`) com as tags do
+    vídeo, ou com palavras do título se o vídeo não tem tags. O que você já escreveu nunca é mexido."""
+    existentes = [h.casefold() for h in re.findall(r"#(\w+)", descricao or "", re.UNICODE)]
+    if len(set(existentes)) >= minimo:
+        return []
+    candidatos = [re.sub(r"\W", "", "".join(t.split()), flags=re.UNICODE) for t in tags if t and t.strip()] or _hashtags_do_titulo(titulo)
+    faltam = []
+    for c in candidatos:
+        if c and c.casefold() not in existentes and c.casefold() not in (f.casefold() for f in faltam):
+            faltam.append(c)
+        if len(set(existentes)) + len(faltam) >= total:
+            break
+    return faltam
+
+
+def com_hashtags(descricao: str, tags: list, titulo: str = "") -> str:
+    """A descrição como vai para o YouTube: o seu texto intacto + as hashtags que faltarem, no fim."""
+    faltam = hashtags_faltantes(descricao, tags, titulo)
+    if not faltam:
+        return descricao
+    return (descricao or "").rstrip() + "\n\n" + " ".join("#" + f for f in faltam)
+
+
 def descricao_basica(titulo: str, roteiro: str, tags: list) -> str:
     """Descrição simples montada sem IA (plano B): abertura do roteiro + chamada + hashtags."""
     frases = re.split(r"(?<=[.!?])\s+", " ".join(roteiro.split()))

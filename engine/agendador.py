@@ -61,6 +61,8 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
         metadados["descricao_youtube"] = descricao
         _salvar_metadados(caminho_meta, metadados)
 
+    descricao = roteiro_mod.com_hashtags(descricao, tags, titulo)  # as # entram sozinhas (você não precisa lembrar)
+
     if v16.exists() and not metadados.get("youtube_video_id"):
         id_normal = youtube.publicar_video(v16, titulo, descricao, tags, nome_conta, privacidade, is_short=False)
         metadados["youtube_video_id"] = id_normal

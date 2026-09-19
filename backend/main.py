@@ -302,6 +302,7 @@ def _aplicar_edicao_do_agente(pedido: dict) -> dict:
         lista_tags = [t.strip() for t in tags_arq.read_text(encoding="utf-8").split(",")] if tags_arq.exists() else []
         roteiro_arq = pasta / "roteiro.txt"
         desc_final = metadados.get("descricao_youtube") or (roteiro_arq.read_text(encoding="utf-8") if roteiro_arq.exists() else metadados.get("titulo", ""))
+        desc_final = roteiro_mod.com_hashtags(desc_final, lista_tags, metadados.get("titulo", slug))
         conta = agendador_mod._conta_youtube_do_video(metadados)
         try:
             for video_id, eh_short in ids:
@@ -861,7 +862,11 @@ def api_textos_do_video(slug: str) -> JSONResponse:
     if "/" in slug or "\\" in slug or not caminho_meta.exists():
         return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
     meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
-    return JSONResponse({"titulo": meta.get("titulo", slug), "descricao_youtube": meta.get("descricao_youtube", ""), "publicado": _video_ja_publicado(meta)})
+    tags_arq = RAIZ_SAIDA / slug / "tags.txt"
+    tags = [t.strip() for t in tags_arq.read_text(encoding="utf-8").split(",") if t.strip()] if tags_arq.exists() else []
+    automaticas = roteiro_mod.hashtags_faltantes(meta.get("descricao_youtube", ""), tags, meta.get("titulo", slug))
+    return JSONResponse({"titulo": meta.get("titulo", slug), "descricao_youtube": meta.get("descricao_youtube", ""), "publicado": _video_ja_publicado(meta),
+                         "hashtags_automaticas": " ".join("#" + h for h in automaticas)})
 
 
 @app.post("/api/videos/{slug}/textos")
