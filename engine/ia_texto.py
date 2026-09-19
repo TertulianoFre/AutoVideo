@@ -19,6 +19,7 @@ ENV = Path(__file__).resolve().parent.parent / ".env"
 PROVEDORES = {
     "groq": ("https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-120b", "GROQ_API_KEY", "console.groq.com"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-flash-latest", "GEMINI_API_KEY", "aistudio.google.com/apikey"),
+    "mistral": ("https://api.mistral.ai/v1/chat/completions", "mistral-small-latest", "MISTRAL_API_KEY", "console.mistral.ai"),
     "cerebras": ("https://api.cerebras.ai/v1/chat/completions", "gpt-oss-120b", "CEREBRAS_API_KEY", "cloud.cerebras.ai"),
     "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "google/gemma-4-31b-it:free", "OPENROUTER_API_KEY", "openrouter.ai/keys"),
 }
@@ -169,6 +170,7 @@ def _pollinations(mensagens: list, tentativas: int) -> str:
 
 MODELOS_VISAO = {
     "gemini": "gemini-flash-latest",
+    "mistral": "mistral-small-latest",
     "groq": "qwen/qwen3.8-27b",
     "openrouter": "google/gemma-4-31b-it:free",
 }

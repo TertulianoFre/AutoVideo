@@ -1,7 +1,7 @@
 // Cartão "Motores de IA" da aba Agente: mostra quais provedores estão ativos e guarda as chaves grátis no .env.
 
-const NOMES_MOTORES = { groq: "Groq", gemini: "Google Gemini", cerebras: "Cerebras", openrouter: "OpenRouter", ollama: "Ollama (local)", pollinations: "Pollinations" };
-const MOTORES_COM_VISAO = new Set(["groq", "gemini", "openrouter"]);
+const NOMES_MOTORES = { groq: "Groq", mistral: "Mistral", gemini: "Google Gemini", cerebras: "Cerebras", openrouter: "OpenRouter", ollama: "Ollama (local)", pollinations: "Pollinations" };
+const MOTORES_COM_VISAO = new Set(["groq", "gemini", "openrouter", "mistral"]);
 
 async function desenharMotoresIA() {
   const area = document.getElementById("motores-ia");
