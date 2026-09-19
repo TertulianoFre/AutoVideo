@@ -66,6 +66,14 @@ class ResultadoGeracao:
     thumbnail: Path | None = None
 
 
+def _derivar_16x9_do_vertical(pasta: Path, indice: int) -> None:
+    """Vídeo só Shorts: o painel de cenas e a thumbnail trabalham com a imagem 16:9, então ela é derivada da
+    vertical (sem gastar outra geração de IA) sempre que a cena muda."""
+    vertical = pasta / f"cena{indice:02d}_9x16.png"
+    if vertical.exists():
+        visuals._cobrir(Image.open(vertical).convert("RGB"), 1920, 1080).save(pasta / f"cena{indice:02d}_16x9.png", "PNG")
+
+
 def _preparar_som_da_base(nome_unico: str, playlist: list | None, opcoes: dict | None, duracao: float, destino: Path) -> None:
     """Som de fundo vindo da Base: uma playlist de áudios (com tempo por áudio, transição suave e fade final)
     ou, sem playlist, o áudio único repetido em loop até o fim do vídeo."""
@@ -401,6 +409,24 @@ _travas_de_video: dict = {}
 _travas_lock = threading.Lock()
 
 
+_travas_de_edicao: dict = {}
+
+
+def _com_trava_de_edicao(funcao):
+    """Decorator: serializa as edições estruturais (tempos, cenas, legenda) do MESMO vídeo. RLock porque uma
+    edição chama outra (editar_estrutura -> aplicar_duracoes)."""
+    import functools
+
+    @functools.wraps(funcao)
+    def embrulhada(slug, *args, **kwargs):
+        with _travas_lock:
+            trava = _travas_de_edicao.setdefault(slug, threading.RLock())
+        with trava:
+            return funcao(slug, *args, **kwargs)
+
+    return embrulhada
+
+
 def _trava_do_video(slug: str) -> "threading.Lock":
     """Várias cenas do mesmo vídeo podem gerar a imagem ao mesmo tempo, mas a
     remontagem do mp4 é uma de cada vez (senão duas escrevem o mesmo arquivo)."""
@@ -440,6 +466,7 @@ def _cues_ajustados(pasta: Path, metadados: dict) -> list:
     ]
 
 
+@_com_trava_de_edicao
 def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
     """Muda o tempo de cada cena. As outras cenas NUNCA mudam de duração por causa disso: só andam pra
     frente (cena alongada) ou pra trás (cena encurtada). Alongar vira uma pausa depois da fala daquela
@@ -538,6 +565,7 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
     return {"video_16_9": nomes.get("16:9"), "video_9_16": nomes.get("9:16")}
 
 
+@_com_trava_de_edicao
 def editar_estrutura(
     slug: str, operacao: str, indice: int | None = None, posicao: int | None = None, texto: str = "",
     descricao_imagem: str = "", midia_tipo: str = "", midia_nome: str = "", edicoes: dict | None = None,
@@ -696,6 +724,8 @@ def editar_estrutura(
                     visuals.gerar_fundo(m.get("estilo_imagem", "procedural"), estilo["largura"], estilo["altura"], png, cena=descricao_imagem.strip() or texto, estilo_extra=m.get("descricao_video", ""), contexto=titulo)
                 except RuntimeError:
                     visuals.gerar_fundo_procedural(estilo["largura"], estilo["altura"], png, semente=texto)
+        if "16:9" not in formatos_ativos:
+            _derivar_16x9_do_vertical(pasta, k_nova)
         if midia_tipo == "video" and biblioteca.caminho_video_valido(midia_nome):
             videos_base[str(k_nova)] = midia_nome
         elif midia_tipo == "imagem" and biblioteca.caminho_imagem_valida(midia_nome):
@@ -725,6 +755,7 @@ def editar_estrutura(
     return aplicar_duracoes(slug, {}, progresso=lambda etapa, pct: avisar(etapa, 70 + 0.3 * pct))
 
 
+@_com_trava_de_edicao
 def regenerar_legenda(slug: str, config: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
     """Refaz só a legenda (estilo, tamanho, posição, cor...) e remonta os vídeos,
     sem mexer em roteiro, narração nem imagens. Precisa de cues.json (salvo em
@@ -863,6 +894,9 @@ def regenerar_cena(slug: str, indice: int, progresso: Callable[[str, float], Non
             caminho_video = pasta / f"video_{sufixo}.mp4"
             render.renderizar_slideshow(imagens_com_duracao, audio_path, legenda_path, formato, caminho_video, transicao=metadados.get("transicao", "fade"))
             nomes_video[formato] = caminho_video.name
+
+    if "16:9" not in formatos_ativos:
+        _derivar_16x9_do_vertical(pasta, indice)
 
     if indice == 0:
         avisar("Atualizando a thumbnail", 95)
