@@ -105,8 +105,10 @@ def gerar_roteiro(
         n_total = max(num_cenas or 0, len(cenas_midia))
         lista = "\n".join(f"Cena {i + 1}: {d}" for i, d in enumerate(cenas_midia))
         extra = "" if n_total == len(cenas_midia) else f" As cenas {len(cenas_midia) + 1} a {n_total} não têm imagem definida: continue o assunto naturalmente."
+        por_cena = max(8, round(palavras_alvo / n_total))
         partes.append(
             f"O vídeo terá {n_total} cenas, cada uma com uma imagem/vídeo já escolhido, nesta ordem:\n{lista}\n"
+            f"Cada parágrafo deve ter cerca de {por_cena} palavras (o vídeo todo, {palavras_alvo} palavras).\n"
             f"Escreva EXATAMENTE {n_total} parágrafos, separados por uma linha em branco: o parágrafo N narra o que aparece na cena N "
             f"(use o que está descrito, sem inventar detalhes visuais que contradigam) e liga naturalmente com o anterior.{extra}"
         )

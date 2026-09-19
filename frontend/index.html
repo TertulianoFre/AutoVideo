@@ -180,6 +180,33 @@
         </div>
 
         <div class="card">
+          <div class="card-head">Roteiro a partir das imagens da Base</div>
+          <p class="hint" style="margin:0 0 14px">
+            Escolha as imagens (ou vídeos) da sua Base na ordem em que devem aparecer, diga a duração do vídeo e o agente escreve um roteiro com um parágrafo para cada uma, dividindo o tempo entre elas. A IA gratuita não enxerga imagens: ela segue a <b>descrição</b> que você escreve em cada uma (fica salva na Base). Depois é só enviar para o Novo vídeo.
+          </p>
+          <div class="form" style="gap:12px">
+            <div class="row-2">
+              <label><span>Título do vídeo</span><input type="text" id="ag-titulo" placeholder="Ex.: 5 curiosidades sobre os polvos"></label>
+              <label><span>Duração do vídeo (minutos)</span><input type="number" id="ag-duracao" value="1" min="0.3" step="any"></label>
+            </div>
+            <label><span>Instruções para o roteiro (opcional)</span><textarea id="ag-instrucoes" rows="2" placeholder="Ex.: tom empolgado, começar com uma pergunta"></textarea></label>
+            <div id="ag-base-grade" class="cena-base-grade"></div>
+            <div id="ag-base-sequencia" class="sequencia-midias"></div>
+            <span class="video-meta" id="ag-resumo">Escolha as imagens para começar.</span>
+            <div class="preview-row">
+              <button type="button" class="btn-primary" id="btn-ag-roteiro" disabled>Gerar roteiro com base nas imagens</button>
+              <span class="video-meta" id="ag-roteiro-status"></span>
+              <div class="barra-indeterminada" id="ag-barra" hidden><div></div></div>
+            </div>
+          </div>
+          <div id="ag-roteiro-resultado" hidden style="margin-top:14px">
+            <textarea id="ag-roteiro-texto" class="roteiro-edicao" rows="10"></textarea>
+            <div id="ag-roteiro-cenas" class="roteiro-cenas"></div>
+            <button type="button" class="btn-primary" id="btn-ag-usar" style="margin-top:12px">Usar no Novo vídeo</button>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-head">Sugestões de ideias</div>
           <p class="hint" style="margin:0 0 14px">
             Combina o contexto do canal ativo com o que está em alta no YouTube agora (se estiver conectado) e sugere títulos novos. Não copia os títulos em alta, só usa como pista.
@@ -338,6 +365,7 @@
             <div class="midias-base-bloco">
               <span class="video-meta">Imagens e vídeos da sua Base para as cenas (opcional). Clique na ordem em que devem aparecer: o 1º vai na cena 1, o 2º na cena 2... Se escolher a mesma quantidade de cenas, nenhuma imagem é gerada por IA.</span>
               <div id="novo-base-grade" class="cena-base-grade" style="margin-top:8px"></div>
+              <div id="novo-base-sequencia" class="sequencia-midias"></div>
               <input type="hidden" name="imagens_base" id="campo-imagens-base">
               <label hidden>
                 <span>Cenas sem mídia escolhida</span>
@@ -658,6 +686,7 @@
 <script src="/static/anotacoes.js"></script>
 <script src="/static/calendario.js"></script>
 <script src="/static/base.js"></script>
+<script src="/static/sequencia.js"></script>
 <script src="/static/legenda.js"></script>
 <script src="/static/fila_menu.js"></script>
 <script src="/static/app.js"></script>

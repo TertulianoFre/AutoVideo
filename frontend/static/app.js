@@ -9,6 +9,7 @@ function trocarAba(nome) {
   if (nome === "canais") carregarCanais();
   if (nome === "base") carregarBase();
   if (nome === "novo") montarSeletorBaseNovoVideo();
+  if (nome === "agente") montarSequenciaAgente();
   if (nome === "afiliados") carregarAfiliados();
   if (nome === "anotacoes") carregarAnotacoes();
 }
