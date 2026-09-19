@@ -133,7 +133,7 @@ def _gerar_em_branco(pasta: Path, titulo: str, formatos: str, num_cenas: int | N
         pasta,
         cenas=[{"texto": "", "duracao_segundos": por_cena, "duracao_natural": por_cena} for _ in range(n)],
         num_cenas=n, narracao_arquivo=narracao.name, audio_natural=narracao.name, audio_arquivo=narracao.name,
-        imagens_base_cenas={}, videos_base_cenas={}, descricoes_cenas={}, descricao_youtube="",
+        imagens_base_cenas={}, videos_base_cenas={}, descricoes_cenas={},
         duracao_segundos=round(por_cena * n, 1),
     )
     resultado = aplicar_duracoes(pasta.name, {}, progresso=lambda etapa, pct: avisar(etapa, 20 + 0.75 * pct))
@@ -191,6 +191,7 @@ def gerar_video(
     reaproveitar_imagens: bool = False,
     slug_pasta: str | None = None,
     em_branco: bool = False,
+    descricao_youtube: str = "",
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -236,6 +237,7 @@ def gerar_video(
         duracao_alvo_minutos=duracao_alvo_minutos,
         canal_id=canal_id,
         em_branco=em_branco,
+        **({"descricao_youtube": descricao_youtube} if descricao_youtube.strip() else {}),  # escrita por você: a IA não sobrescreve
     )
 
     if em_branco:
