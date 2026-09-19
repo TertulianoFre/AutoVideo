@@ -102,6 +102,7 @@ function linhaDeVideo(v, comRegenerar) {
            ${v.tem_cenas ? `<button type="button" data-acao="cenas" data-slug="${v.slug}">Cenas e roteiro</button>` : ""}
            ${!v.sem_narracao ? `<button type="button" data-acao="legenda" data-slug="${v.slug}">Legenda e transição</button>` : ""}
            <button type="button" data-acao="thumb" data-slug="${v.slug}">Thumbnail</button>
+           <button type="button" data-acao="textos" data-slug="${v.slug}">Título e descrição</button>
            ${v.aprovado ? `<button type="button" class="btn-desfazer-confirmacao" data-slug="${v.slug}" data-titulo="${tituloAttr}">Desfazer confirmação de publicação</button>` : ""}
          </div>
        </div>`

@@ -134,7 +134,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
   display: flex; align-items: center; justify-content: center; color: var(--text-dim);
 }
 .video-info { flex-grow: 1; min-width: 0; }
-.video-title { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+.video-title { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .video-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .video-links { display: flex; gap: 8px; flex-shrink: 0; }
 .video-links a {
@@ -682,3 +682,9 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .lt-vazia { border-style: dashed; }
 .lt-tempo { font-size: 10px; color: var(--text-dim); }
 .cena-destaque { outline: 2px solid #F2C230; outline-offset: 2px; transition: outline-color .3s; }
+
+.editor-textos-caixa { width: min(720px, 100%); }
+.et-campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.et-campo input, .et-campo textarea { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 13.5px; }
+.et-campo textarea { resize: vertical; line-height: 1.45; }
+.et-contagem { font-style: normal; }

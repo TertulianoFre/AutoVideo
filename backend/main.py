@@ -848,6 +848,58 @@ def api_criar_video(
     return {"job_id": job.id}
 
 
+def _video_ja_publicado(meta: dict) -> bool:
+    return bool(meta.get("publicado") or meta.get("youtube_video_id") or meta.get("youtube_short_id"))
+
+
+@app.get("/api/videos/{slug}/textos")
+def api_textos_do_video(slug: str) -> JSONResponse:
+    """Título e descrição do YouTube do vídeo (a descrição foi escrita pela IA ou por você)."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    return JSONResponse({"titulo": meta.get("titulo", slug), "descricao_youtube": meta.get("descricao_youtube", ""), "publicado": _video_ja_publicado(meta)})
+
+
+@app.post("/api/videos/{slug}/textos")
+def api_salvar_textos_do_video(slug: str, titulo: str = Form(...), descricao_youtube: str = Form("")) -> JSONResponse:
+    """Troca título e descrição exatamente como escritos (sem mexer nas letras). Só antes de publicar; a pasta
+    do vídeo não muda. A publicação precisa ser confirmada de novo."""
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if _video_ja_publicado(meta):
+        return JSONResponse({"erro": "esse vídeo já foi publicado: não dá mais para trocar o título aqui"}, status_code=409)
+    titulo = titulo.strip()
+    if not titulo:
+        return JSONResponse({"erro": "o título não pode ficar vazio"}, status_code=400)
+    meta["titulo"] = titulo[:100]
+    meta["descricao_youtube"] = descricao_youtube.strip()[:5000]
+    meta["aprovado"] = False
+    caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return JSONResponse({"ok": True, "titulo": meta["titulo"]})
+
+
+@app.post("/api/videos/{slug}/textos/descricao-ia")
+def api_descricao_ia_do_video(slug: str, titulo: str = Form("")) -> JSONResponse:
+    """A IA escreve uma descrição nova (não salva: só devolve, você decide)."""
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    roteiro_arq, tags_arq = pasta / "roteiro.txt", pasta / "tags.txt"
+    roteiro = roteiro_arq.read_text(encoding="utf-8") if roteiro_arq.exists() else ""
+    tags = [t.strip() for t in tags_arq.read_text(encoding="utf-8").split(",") if t.strip()] if tags_arq.exists() else []
+    try:
+        texto = roteiro_mod.gerar_descricao(titulo.strip() or meta.get("titulo", slug), roteiro or meta.get("titulo", slug), tags, canal.obter_contexto(meta.get("canal_id")))
+    except RuntimeError as erro:
+        return JSONResponse({"erro": f"a IA não respondeu agora: {erro}"}, status_code=502)
+    return JSONResponse({"descricao": texto})
+
+
 @app.post("/api/videos/{slug}/editado")
 def api_editado(slug: str, editado: bool = Form(...)) -> dict:
     """Marca (ou desmarca) que você já editou/revisou esse vídeo. Só vídeo "editado" pode ter a publicação confirmada."""

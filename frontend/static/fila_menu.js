@@ -39,6 +39,7 @@ function executarAcaoMenu(item) {
     case "cenas": alternarPainelCenas(alvo); break;
     case "legenda": alternarPainelLegenda(alvo); break;
     case "thumb": alternarPainelThumb(alvo); break;
+    case "textos": abrirEditorDeTextos(slug); break;
     case "regen-mesmo": confirmarRegenerar(slug, item.dataset.titulo, true); break;
     case "regen-novo": confirmarRegenerar(slug, item.dataset.titulo, false); break;
   }
@@ -585,3 +586,71 @@ document.addEventListener("click", (ev) => {
   card.classList.add("cena-destaque");
   setTimeout(() => card.classList.remove("cena-destaque"), 1600);
 });
+
+
+// ---------------- título e descrição do vídeo (só antes de publicar) ----------------
+
+function fecharEditorDeTextos() {
+  document.getElementById("editor-textos")?.remove();
+}
+
+async function abrirEditorDeTextos(slug) {
+  fecharEditorDeTextos();
+  const dados = await fetch(`/api/videos/${slug}/textos`).then((r) => r.json()).catch(() => ({ erro: "Sem conexão." }));
+  if (dados.erro) {
+    alert(dados.erro);
+    return;
+  }
+  const bloqueado = !!dados.publicado;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="editor-textos" class="previa-cena">
+      <div class="previa-caixa editor-textos-caixa">
+        <div class="previa-topo"><strong>Título e descrição do vídeo</strong><button type="button" class="previa-fechar et-fechar" aria-label="Fechar">✕</button></div>
+        ${bloqueado ? '<div class="video-meta">Esse vídeo já foi publicado: não dá mais para trocar o título aqui.</div>' : '<div class="video-meta">O texto fica exatamente como você escrever (letras maiúsculas e minúsculas incluídas). Ao salvar, a publicação precisa ser confirmada de novo.</div>'}
+        <label class="et-campo"><span>Título (aparece no YouTube)</span><input type="text" class="et-titulo" maxlength="100" value="${escaparAttr(dados.titulo)}"${bloqueado ? " readonly" : ""}></label>
+        <label class="et-campo"><span>Descrição do YouTube <em class="et-contagem"></em></span><textarea class="et-descricao" rows="10" maxlength="5000" placeholder="Ainda não tem descrição. Escreva ou peça para a IA escrever."${bloqueado ? " readonly" : ""}>${escaparAttr(dados.descricao_youtube)}</textarea></label>
+        <div class="cena-card-acoes">
+          ${bloqueado ? "" : '<button type="button" class="btn-primary et-salvar">Salvar</button><button type="button" class="btn-secondary et-ia">Escrever descrição com a IA</button>'}
+          <button type="button" class="btn-secondary et-fechar">${bloqueado ? "Fechar" : "Cancelar"}</button>
+          <span class="video-meta et-status"></span>
+        </div>
+      </div>
+    </div>`);
+  const janela = document.getElementById("editor-textos");
+  const descricao = janela.querySelector(".et-descricao");
+  const contar = () => { janela.querySelector(".et-contagem").textContent = `(${descricao.value.length}/5000)`; };
+  contar();
+  descricao.addEventListener("input", contar);
+  janela.querySelectorAll(".et-fechar").forEach((b) => b.addEventListener("click", fecharEditorDeTextos));
+  janela.addEventListener("click", (ev) => { if (ev.target === janela) fecharEditorDeTextos(); });
+  if (bloqueado) return;
+  const status = janela.querySelector(".et-status");
+  janela.querySelector(".et-ia").addEventListener("click", async (ev) => {
+    if (descricao.value.trim() && !confirm("Substituir a descrição atual pela que a IA escrever? (Só aparece aqui: você ainda decide se salva.)")) return;
+    const botao = ev.currentTarget;
+    botao.disabled = true;
+    status.textContent = "A IA está escrevendo…";
+    const corpo = new FormData();
+    corpo.set("titulo", janela.querySelector(".et-titulo").value);
+    const r = await fetch(`/api/videos/${slug}/textos/descricao-ia`, { method: "POST", body: corpo }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+    botao.disabled = false;
+    if (r.erro) { status.textContent = r.erro; return; }
+    descricao.value = r.descricao;
+    contar();
+    status.textContent = "Pronto. Revise e clique em Salvar.";
+  });
+  janela.querySelector(".et-salvar").addEventListener("click", async (ev) => {
+    const titulo = janela.querySelector(".et-titulo").value;
+    if (!titulo.trim()) { status.textContent = "O título não pode ficar vazio."; return; }
+    ev.currentTarget.disabled = true;
+    const corpo = new FormData();
+    corpo.set("titulo", titulo);
+    corpo.set("descricao_youtube", descricao.value);
+    const r = await fetch(`/api/videos/${slug}/textos`, { method: "POST", body: corpo }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+    if (r.erro) { status.textContent = r.erro; ev.currentTarget.disabled = false; return; }
+    fecharEditorDeTextos();
+    carregarFila(true);
+  });
+}
+
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") fecharEditorDeTextos(); });
