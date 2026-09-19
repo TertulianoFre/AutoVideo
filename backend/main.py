@@ -416,8 +416,10 @@ def _usos_biblioteca() -> dict:
         except (json.JSONDecodeError, OSError):
             continue
         titulo = meta.get("titulo", pasta.name)
-        if meta.get("som_fundo_biblioteca"):
-            usos.setdefault(("audios", meta["som_fundo_biblioteca"]), []).append(titulo)
+        nomes_som = [i["nome"] for i in (meta.get("som_fundo_playlist") or [])] or ([meta["som_fundo_biblioteca"]] if meta.get("som_fundo_biblioteca") else [])
+        for nome_som in nomes_som:
+            if titulo not in usos.setdefault(("audios", nome_som), []):
+                usos[("audios", nome_som)].append(titulo)
         for nome_vid in (meta.get("videos_base_cenas") or {}).values():
             if titulo not in usos.setdefault(("videos", nome_vid), []):
                 usos[("videos", nome_vid)].append(titulo)
@@ -457,7 +459,8 @@ def api_listar_biblioteca(canal: str = "") -> dict:
             "usado_em": usos.get((tipo, nome), []),
         }
 
-    audios = [i for i in (info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()) if do_canal(i)]
+    audios = [{**i, "duracao_segundos": biblioteca.duracao_de(biblioteca.PASTA_AUDIOS / i["nome"])}
+              for i in (info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()) if do_canal(i)]
     return {
         "audios": [a["url"] for a in audios],
         "audios_nomes": [a["nome"] for a in audios],
@@ -684,6 +687,10 @@ def api_criar_video(
     som_fundo_tipo: str = Form(""),
     som_fundo_descricao: str = Form(""),
     som_fundo_biblioteca: str = Form(""),
+    som_fundo_playlist: str = Form(""),
+    som_fundo_repetir: str = Form("repetir"),
+    som_fundo_suave: bool = Form(False),
+    som_fundo_fade: bool = Form(False),
     privacidade: str = Form("public"),
     formatos: str = Form("ambos"),
     num_cenas: int | None = Form(None),
@@ -710,6 +717,14 @@ def api_criar_video(
                 {"erro": f'Já existe um vídeo igual ou muito parecido: "{parecido}". Gerar mesmo assim? (título igual sobrescreve o anterior)', "duplicado": True},
                 status_code=409,
             )
+    playlist_som = []
+    try:
+        for item in json.loads(som_fundo_playlist) if som_fundo_playlist.strip() else []:
+            if biblioteca.caminho_audio_valido(str(item.get("nome", ""))):
+                seg = item.get("segundos")
+                playlist_som.append({"nome": item["nome"], "segundos": float(seg) if seg else None})
+    except (ValueError, AttributeError, TypeError):
+        playlist_som = []
     roteiro_limpo = roteiro.strip()
     narracao_customizada = False
 
@@ -743,7 +758,9 @@ def api_criar_video(
         sem_narracao=sem_narracao,
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao.strip(),
-        som_fundo_biblioteca=som_fundo_biblioteca.strip(),
+        som_fundo_biblioteca=(playlist_som[0]["nome"] if playlist_som else som_fundo_biblioteca.strip()),
+        som_fundo_playlist=playlist_som,
+        som_fundo_opcoes={"repetir": "silencio" if som_fundo_repetir == "silencio" else "repetir", "suave": som_fundo_suave, "fade": som_fundo_fade},
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
         formatos=formatos if formatos in ("ambos", "normal", "shorts") else "ambos",
@@ -866,6 +883,8 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         som_fundo_tipo=metadados.get("som_fundo_tipo", ""),
         som_fundo_descricao=metadados.get("som_fundo_descricao", ""),
         som_fundo_biblioteca=metadados.get("som_fundo_biblioteca", ""),
+        som_fundo_playlist=metadados.get("som_fundo_playlist") or [],
+        som_fundo_opcoes=metadados.get("som_fundo_opcoes") or {},
         narracao_customizada=metadados.get("narracao_customizada", False),
         privacidade=metadados.get("privacidade", "public"),
         formatos=metadados.get("formatos", "ambos"),

@@ -310,3 +310,71 @@ def remover_cena_padrao(id_: str) -> bool:
         return False
     _gravar_cenas_padrao(restantes)
     return True
+
+
+_cache_duracao: dict = {}
+
+
+def duracao_de(caminho: Path) -> float:
+    """Duração (s) de um áudio/vídeo, com cache por data de modificação."""
+    chave = (str(caminho), caminho.stat().st_mtime)
+    if chave not in _cache_duracao:
+        from engine.ferramentas import caminho_ffprobe
+        r = subprocess.run([caminho_ffprobe(), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(caminho)], capture_output=True, text=True)
+        try:
+            _cache_duracao[chave] = round(float(r.stdout.strip()), 2)
+        except ValueError:
+            _cache_duracao[chave] = 0.0
+    return _cache_duracao[chave]
+
+
+def preparar_playlist_para_video(itens: list, duracao_segundos: float, destino: Path, repetir: bool = True, suave: bool = True, fade_final: bool = True) -> Path:
+    """Monta o som de fundo com VÁRIOS áudios da Base, um depois do outro (com transição suave entre eles),
+    cobrindo exatamente a duração do vídeo. `itens` = [{"nome": ..., "segundos": tempo máximo de cada áudio ou None}].
+    Se a playlist for mais curta que o vídeo: repete (repetir=True) ou termina em silêncio. Se for mais longa, corta no fim."""
+    faixas = []
+    for item in itens:
+        caminho = caminho_audio_valido(item.get("nome", ""))
+        if caminho is None:
+            raise ValueError(f'áudio "{item.get("nome")}" não encontrado na biblioteca')
+        total = duracao_de(caminho)
+        uso = min(total, float(item["segundos"])) if item.get("segundos") else total
+        faixas.append((caminho, max(1.0, uso)))
+    if not faixas:
+        raise ValueError("nenhum áudio na playlist")
+
+    cruzamento = 2.0 if suave else 0.0
+    sequencia, coberto, i = [], 0.0, 0
+    while True:
+        caminho, uso = faixas[i % len(faixas)]
+        sequencia.append((caminho, uso))
+        coberto += uso - (cruzamento if len(sequencia) > 1 else 0)
+        i += 1
+        if coberto >= duracao_segundos or (not repetir and i >= len(faixas)) or len(sequencia) > 300:
+            break
+    cruz = min(cruzamento, min(u for _, u in sequencia) / 2) if len(sequencia) > 1 else 0.0
+
+    entradas, filtros = [], []
+    for k, (caminho, uso) in enumerate(sequencia):
+        entradas += ["-t", f"{uso:.3f}", "-i", str(caminho)]
+        filtros.append(f"[{k}:a]aresample=44100,aformat=channel_layouts=stereo[a{k}]")
+    if len(sequencia) == 1:
+        anterior = "[a0]"
+    elif cruz > 0:
+        anterior = "[a0]"
+        for k in range(1, len(sequencia)):
+            filtros.append(f"{anterior}[a{k}]acrossfade=d={cruz:.2f}[x{k}]")
+            anterior = f"[x{k}]"
+    else:
+        filtros.append("".join(f"[a{k}]" for k in range(len(sequencia))) + f"concat=n={len(sequencia)}:v=0:a=1[cat]")
+        anterior = "[cat]"
+    final = f"{anterior}atrim=0:{duracao_segundos:.3f},asetpts=PTS-STARTPTS"
+    if fade_final:
+        final += f",afade=t=out:st={max(0.0, duracao_segundos - 3):.2f}:d=3"
+    final += f",apad=whole_dur={duracao_segundos:.3f}[saida]"
+    filtros.append(final)
+    comando = [caminho_ffmpeg(), "-y", *entradas, "-filter_complex", ";".join(filtros), "-map", "[saida]", "-t", f"{duracao_segundos:.3f}", "-ar", "44100", "-ac", "2", str(destino)]
+    resultado = subprocess.run(comando, capture_output=True, text=True)
+    if resultado.returncode != 0:
+        raise RuntimeError(f"FFmpeg falhou ao montar a playlist de áudio:\n{resultado.stderr[-1500:]}")
+    return destino

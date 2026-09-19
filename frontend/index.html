@@ -446,6 +446,26 @@
                   <span class="video-meta" id="som-base-descricao"></span>
                 </label>
               </div>
+              <div id="som-playlist-bloco" class="som-playlist" hidden>
+                <label class="som-tempo-linha"><span>Tocar o 1º áudio por</span> <input type="number" id="som-tempo-0" min="1" step="1" placeholder="inteiro"> <span>s (vazio = o áudio todo)</span></label>
+                <div id="som-extras"></div>
+                <button type="button" class="btn-secondary btn-compacto" id="btn-add-audio">+ Juntar outro áudio</button>
+                <div class="row-2">
+                  <label>
+                    <span>Se o vídeo for mais longo que os áudios</span>
+                    <select name="som_fundo_repetir">
+                      <option value="repetir">Repetir a sequência de áudios</option>
+                      <option value="silencio">Terminar em silêncio</option>
+                    </select>
+                  </label>
+                  <div>
+                    <label class="checkbox-row"><input type="checkbox" name="som_fundo_suave" checked><span>Transição suave entre os áudios (2 s)</span></label>
+                    <label class="checkbox-row"><input type="checkbox" name="som_fundo_fade" checked><span>Sumir aos poucos no fim do vídeo</span></label>
+                  </div>
+                </div>
+                <span class="video-meta" id="som-playlist-resumo"></span>
+                <input type="hidden" name="som_fundo_playlist" id="campo-som-playlist">
+              </div>
               <p class="hint">Chuva, música, ondas do mar, fogueira e vento são sintetizados de verdade (localmente, grátis); em "outro", o texto descrito escolhe o mais parecido desses e ainda soma camadas extra por cima se aparecerem na descrição — pássaros, trovão, multidão, passos, sino/carrilhão, trânsito/buzina (ex: "floresta com pássaros", "tempestade com trovão", "cafeteria movimentada", "rua da cidade com trânsito") — sem nada reconhecido, cai pra chuva. Em "Base", usa um áudio que você mesmo importou (aba Base).</p>
             </div>
 

@@ -1010,12 +1010,14 @@ async function popularSelectAudiosBiblioteca() {
     const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(seletorCanal.value || "")}`).then((r) => r.json());
     const audios = dados.audios_info || [];
     descricoesAudiosBase = Object.fromEntries(audios.map((a) => [a.nome, a.descricao || ""]));
+    window.audiosBase = audios;
     const valorAtual = campoSomFundoBiblioteca.value;
     campoSomFundoBiblioteca.innerHTML = audios.length
-      ? audios.map((a) => `<option value="${escaparAttr(a.nome)}">${escaparAttr(a.nome)}${a.descricao ? " — " + escaparAttr(a.descricao) : ""}</option>`).join("")
+      ? audios.map((a) => `<option value="${escaparAttr(a.nome)}">${escaparAttr(a.descricao || a.nome)} (${Math.floor((a.duracao_segundos || 0) / 60)}:${String(Math.round((a.duracao_segundos || 0) % 60)).padStart(2, "0")})</option>`).join("")
       : '<option value="">Nenhum importado ainda — vá na aba Base</option>';
     if (audios.some((a) => a.nome === valorAtual)) campoSomFundoBiblioteca.value = valorAtual;
     mostrarDescricaoDoAudioBase();
+    if (typeof window.aoCarregarAudiosBase === "function") window.aoCarregarAudiosBase();
   } catch {
     // silencioso — se falhar, o select só fica com a opção padrão
   }
@@ -1053,6 +1055,7 @@ campoSomFundoBiblioteca.addEventListener("change", async () => {
 campoSomFundoTipo.addEventListener("change", () => {
   linhaSomFundoDescricao.hidden = campoSomFundoTipo.value !== "outro";
   linhaSomFundoBiblioteca.hidden = campoSomFundoTipo.value !== "biblioteca";
+  document.getElementById("som-playlist-bloco").hidden = campoSomFundoTipo.value !== "biblioteca";
   if (campoSomFundoTipo.value === "biblioteca") popularSelectAudiosBiblioteca();
   aplicarEstadoSomFundo();
 });

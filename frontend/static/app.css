@@ -610,3 +610,10 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .piscar { animation: piscar 1s ease-in-out 2; }
 @keyframes piscar { 0%, 100% { background: transparent; } 50% { background: rgba(242, 194, 48, .22); } }
 @media (max-width: 700px) { .cal-dia { min-height: 64px; } .cal-item-titulo { display: none; } .btn-calendario span { display: none; } }
+
+.som-playlist { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.som-tempo-linha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-dim); }
+.som-tempo-linha input, .som-extra input { width: 84px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.som-extra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.som-extra select { flex: 1; min-width: 200px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font: inherit; }
+.som-extra label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }

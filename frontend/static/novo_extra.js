@@ -167,3 +167,82 @@ document.getElementById("btn-ouvir-voz").addEventListener("click", async (ev) =>
 ["voz", "idioma"].forEach((nome) => formNovo[nome].addEventListener("change", () => {
   if (audioAmostra) { audioAmostra.pause(); audioAmostra = null; document.getElementById("btn-ouvir-voz").textContent = "▶ Ouvir"; }
 }));
+
+
+// ---------------- som de fundo com vários áudios da Base (playlist) ----------------
+
+const blocoSom = document.getElementById("som-playlist-bloco");
+const listaExtrasSom = document.getElementById("som-extras");
+
+function nomeDoAudio(a) {
+  return `${a.descricao || a.nome} (${Math.floor((a.duracao_segundos || 0) / 60)}:${String(Math.round((a.duracao_segundos || 0) % 60)).padStart(2, "0")})`;
+}
+
+function duracaoDoVideoEstimada() {
+  const roteiro = formNovo.roteiro.value.trim();
+  if (roteiro && !formNovo.sem_narracao.checked) return estimarNarracao(roteiro).segundos;
+  return (parseFloat(formNovo.duracao_alvo.value) || 1) * 60;
+}
+
+function minSeg(s) {
+  const t = Math.round(s);
+  return t >= 60 ? `${Math.floor(t / 60)} min ${t % 60} s` : `${t} s`;
+}
+
+function atualizarPlaylistSom() {
+  const audios = window.audiosBase || [];
+  const itens = [];
+  const primeiro = formNovo.som_fundo_biblioteca.value;
+  if (primeiro) itens.push({ nome: primeiro, segundos: parseFloat(document.getElementById("som-tempo-0").value) || null });
+  listaExtrasSom.querySelectorAll(".som-extra").forEach((linha) => {
+    const nome = linha.querySelector(".som-extra-audio").value;
+    if (nome) itens.push({ nome, segundos: parseFloat(linha.querySelector(".som-extra-tempo").value) || null });
+  });
+  document.getElementById("campo-som-playlist").value = itens.length > 1 || itens[0]?.segundos ? JSON.stringify(itens) : "";
+  const total = itens.reduce((soma, it, i) => {
+    const dur = audios.find((a) => a.nome === it.nome)?.duracao_segundos || 0;
+    return soma + Math.max(1, it.segundos ? Math.min(dur, it.segundos) : dur) - (i && formNovo.som_fundo_suave.checked ? 2 : 0);
+  }, 0);
+  const video = duracaoDoVideoEstimada();
+  const resumo = document.getElementById("som-playlist-resumo");
+  if (!itens.length) resumo.textContent = "";
+  else if (total >= video) resumo.textContent = `Os áudios somam ${minSeg(total)} e o vídeo tem cerca de ${minSeg(video)}: o som corta no fim do vídeo.`;
+  else resumo.textContent = `Os áudios somam ${minSeg(total)} e o vídeo tem cerca de ${minSeg(video)}: faltam ${minSeg(video - total)}, então ${formNovo.som_fundo_repetir.value === "repetir" ? "a sequência se repete" : "o final fica em silêncio"}. Junte mais um áudio para variar.`;
+}
+
+function adicionarLinhaAudioSom() {
+  const audios = window.audiosBase || [];
+  if (!audios.length) return;
+  const linha = document.createElement("div");
+  linha.className = "som-extra";
+  linha.innerHTML = `
+    <select class="som-extra-audio">${audios.map((a) => `<option value="${escaparAttr(a.nome)}">${escaparAttr(nomeDoAudio(a))}</option>`).join("")}</select>
+    <label>por <input type="number" class="som-extra-tempo" min="1" step="1" placeholder="inteiro"> s</label>
+    <button type="button" class="btn-regenerar btn-regenerar-sutil som-extra-remover" title="Tirar esse áudio">✕</button>`;
+  listaExtrasSom.appendChild(linha);
+  atualizarPlaylistSom();
+}
+
+window.aoCarregarAudiosBase = () => {
+  // as opções das linhas extras acompanham a Base (sem perder o que já foi escolhido)
+  listaExtrasSom.querySelectorAll(".som-extra-audio").forEach((sel) => {
+    const atual = sel.value;
+    sel.innerHTML = (window.audiosBase || []).map((a) => `<option value="${escaparAttr(a.nome)}">${escaparAttr(nomeDoAudio(a))}</option>`).join("");
+    if ((window.audiosBase || []).some((a) => a.nome === atual)) sel.value = atual;
+  });
+  atualizarPlaylistSom();
+};
+
+document.getElementById("btn-add-audio").addEventListener("click", adicionarLinhaAudioSom);
+listaExtrasSom.addEventListener("click", (ev) => {
+  if (ev.target.closest(".som-extra-remover")) {
+    ev.target.closest(".som-extra").remove();
+    atualizarPlaylistSom();
+  }
+});
+blocoSom.addEventListener("input", atualizarPlaylistSom);
+blocoSom.addEventListener("change", atualizarPlaylistSom);
+formNovo.som_fundo_biblioteca.addEventListener("change", atualizarPlaylistSom);
+formNovo.duracao_alvo.addEventListener("input", atualizarPlaylistSom);
+formNovo.roteiro.addEventListener("input", atualizarPlaylistSom);
+document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { listaExtrasSom.innerHTML = ""; document.getElementById("som-tempo-0").value = ""; atualizarPlaylistSom(); }, 60));

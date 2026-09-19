@@ -66,6 +66,19 @@ class ResultadoGeracao:
     thumbnail: Path | None = None
 
 
+def _preparar_som_da_base(nome_unico: str, playlist: list | None, opcoes: dict | None, duracao: float, destino: Path) -> None:
+    """Som de fundo vindo da Base: uma playlist de áudios (com tempo por áudio, transição suave e fade final)
+    ou, sem playlist, o áudio único repetido em loop até o fim do vídeo."""
+    opcoes = opcoes or {}
+    itens = playlist or [{"nome": nome_unico, "segundos": None}]
+    biblioteca.preparar_playlist_para_video(
+        itens, duracao, destino,
+        repetir=opcoes.get("repetir", "repetir") != "silencio",
+        suave=bool(opcoes.get("suave", True)),
+        fade_final=bool(opcoes.get("fade", True)),
+    )
+
+
 def _salvar_metadados(pasta: Path, **campos) -> None:
     caminho = pasta / "metadata.json"
     dados = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
@@ -87,6 +100,8 @@ def gerar_video(
     som_fundo_tipo: str = "",
     som_fundo_descricao: str = "",
     som_fundo_biblioteca: str = "",
+    som_fundo_playlist: list | None = None,
+    som_fundo_opcoes: dict | None = None,
     narracao_customizada: bool = False,
     privacidade: str = "public",
     formatos: str = "ambos",
@@ -124,6 +139,8 @@ def gerar_video(
         som_fundo_tipo=som_fundo_tipo,
         som_fundo_descricao=som_fundo_descricao,
         som_fundo_biblioteca=som_fundo_biblioteca,
+        som_fundo_playlist=som_fundo_playlist or [],
+        som_fundo_opcoes=som_fundo_opcoes or {},
         narracao_customizada=narracao_customizada,
         privacidade=privacidade,
         formatos=formatos,
@@ -148,7 +165,7 @@ def gerar_video(
         audio_path = pasta / "audio.wav"
         if som_fundo_tipo == "biblioteca" and som_fundo_biblioteca:
             avisar(f"Preparando o áudio da biblioteca ({som_fundo_biblioteca})", 15)
-            biblioteca.preparar_audio_para_video(som_fundo_biblioteca, duracao_real, audio_path)
+            _preparar_som_da_base(som_fundo_biblioteca, som_fundo_playlist, som_fundo_opcoes, duracao_real, audio_path)
         else:
             tipo_efetivo = som_fundo_tipo or "chuva"
             avisar(f"Gerando o som de fundo ({tipo_efetivo})", 15)
@@ -235,7 +252,7 @@ def gerar_video(
             som_fundo_path = pasta / "som_fundo.wav"
             if som_fundo_tipo == "biblioteca" and som_fundo_biblioteca:
                 avisar(f"Preparando o som de fundo ({som_fundo_biblioteca})", 14)
-                biblioteca.preparar_audio_para_video(som_fundo_biblioteca, duracao_real, som_fundo_path)
+                _preparar_som_da_base(som_fundo_biblioteca, som_fundo_playlist, som_fundo_opcoes, duracao_real, som_fundo_path)
             else:
                 avisar(f"Gerando o som de fundo ({som_fundo_tipo})", 14)
                 ambiente.gerar_som_ambiente(som_fundo_tipo, duracao_real, som_fundo_path, descricao=som_fundo_descricao)
@@ -482,6 +499,9 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
             raise RuntimeError(f"FFmpeg falhou ao inserir as pausas:\n{r.stderr[-1500:]}")
         final = pasta / "audio_ajustado.m4a"
         som_fundo = pasta / "som_fundo.wav"
+        if metadados.get("som_fundo_tipo") == "biblioteca" and (metadados.get("som_fundo_playlist") or metadados.get("som_fundo_biblioteca")):
+            avisar("Ajustando o som de fundo ao novo tamanho", 12)
+            _preparar_som_da_base(metadados.get("som_fundo_biblioteca", ""), metadados.get("som_fundo_playlist"), metadados.get("som_fundo_opcoes"), sum(novos), som_fundo)
         if metadados.get("som_fundo_tipo") and som_fundo.exists():
             render.mixar_audio_com_fundo(com_pausas, som_fundo, final, VOLUME_SOM_DE_FUNDO)
         else:
