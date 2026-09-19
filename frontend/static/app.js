@@ -138,7 +138,7 @@ function linhaDeVideo(v, comRegenerar) {
       </div>
       ${comRegenerar && !publicado ? `<div class="painel-barra" data-slug="${v.slug}" hidden><span class="painel-barra-titulo"></span><button type="button" class="btn-minimizar-painel" title="Fecha a edição e volta o vídeo ao tamanho normal">▲ Minimizar edição</button></div>` : ""}
       ${comRegenerar ? `<div class="thumb-painel" data-slug="${v.slug}" data-texto="${(v.thumbnail_texto || v.titulo).replace(/"/g, "&quot;")}" data-cor="${v.thumbnail_cor || ""}" data-posicao="${v.thumbnail_posicao || "baixo-centro"}" data-tamanho-px="${v.thumbnail_tamanho_px || 80}" data-pos-x="${v.thumbnail_pos_x ?? ""}" data-pos-y="${v.thumbnail_pos_y ?? ""}" data-base="${v.thumbnail_base || ""}" data-efeito="${v.thumbnail_efeito || "nenhum"}" data-short="${v.thumbnail_short ? encodeURIComponent(JSON.stringify(v.thumbnail_short)) : ""}"></div>` : ""}
-      ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}"></div>` : ""}
+      ${comRegenerar && v.tem_cenas && !publicado ? `<div class="cenas-painel" data-slug="${v.slug}" data-canal="${v.canal_id || ""}"></div>` : ""}
       ${comRegenerar && !publicado && !v.sem_narracao ? `<div class="legenda-painel" data-slug="${v.slug}" data-tem-cues="${v.tem_cues}" data-legenda="${encodeURIComponent(JSON.stringify(v.legenda || {}))}" data-transicao="${v.transicao || "fade"}"></div>` : ""}
     </div>`;
 }
@@ -787,7 +787,8 @@ async function alternarEscolhaBaseCena(botao) {
   grade.hidden = !grade.hidden;
   if (grade.hidden || grade.dataset.carregado) return;
   grade.dataset.carregado = "true";
-  const dados = await fetch("/api/biblioteca").then((r) => r.json());
+  const canalDoVideo = botao.closest(".cenas-painel")?.dataset.canal || "";
+  const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(canalDoVideo)}`).then((r) => r.json());
   const itens = [
     ...(dados.imagens || []).map((i) => ({ ...i, tipo: "imagem" })),
     ...(dados.videos || []).map((v) => ({ ...v, tipo: "video" })),
@@ -872,6 +873,7 @@ async function popularSeletorCanal() {
 seletorCanal.addEventListener("change", async () => {
   await fetch(`/api/canais/${seletorCanal.value}/ativar`, { method: "POST" });
   await popularSeletorCanal();
+  baseFiltroInicializado = false; // a aba Base volta a mostrar o canal que ficou ativo
   // perfil (YouTube) e estatísticas do Painel são sempre do canal ativo
   atualizarStatusYoutube();
   if (document.getElementById("tab-painel").classList.contains("active")) carregarPainel();
@@ -1005,7 +1007,7 @@ function mostrarDescricaoDoAudioBase() {
 
 async function popularSelectAudiosBiblioteca() {
   try {
-    const dados = await fetch("/api/biblioteca").then((r) => r.json());
+    const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(seletorCanal.value || "")}`).then((r) => r.json());
     const audios = dados.audios_info || [];
     descricoesAudiosBase = Object.fromEntries(audios.map((a) => [a.nome, a.descricao || ""]));
     const valorAtual = campoSomFundoBiblioteca.value;

@@ -28,6 +28,7 @@ from PIL import Image
 
 from backend import jobs
 from engine import afiliados, agendador, agente, biblioteca, canal, roteiro as roteiro_mod
+from engine import canal as canais_mod  # o parâmetro "canal" de alguns endpoints esconde o módulo
 from engine import thumbnail as thumbnail_mod
 from engine import tts as tts_mod
 from engine import estimativa as estimativa_mod
@@ -433,9 +434,20 @@ def _usos_biblioteca() -> dict:
     return usos
 
 
+def _atribuir_canal_ativo(tipo: str, nome: str) -> None:
+    """Item recém-importado fica no canal ativo (só aparece nele); dá pra compartilhar com todos na aba Base."""
+    meta = _meta_biblioteca()
+    item = meta.setdefault(tipo, {}).setdefault(nome, {})
+    item["canal_id"] = canal.canal_ativo_id()
+    biblioteca.RAIZ.mkdir(parents=True, exist_ok=True)
+    (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 @app.get("/api/biblioteca")
-def api_listar_biblioteca() -> dict:
+def api_listar_biblioteca(canal: str = "") -> dict:
+    """?canal=ID devolve só o que é desse canal + o que é compartilhado (sem canal). Sem o parâmetro, tudo."""
     meta, usos = _meta_biblioteca(), _usos_biblioteca()
+    do_canal = lambda item: not canal or item["canal_id"] in ("", canal)  # noqa: E731
 
     def info(tipo: str, nome: str, url: str) -> dict:
         extra = (meta.get(tipo) or {}).get(nome, {})
@@ -445,13 +457,15 @@ def api_listar_biblioteca() -> dict:
             "usado_em": usos.get((tipo, nome), []),
         }
 
+    audios = [i for i in (info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()) if do_canal(i)]
     return {
-        "audios": [f"/biblioteca/audios/{nome}" for nome in biblioteca.listar_audios()],
-        "audios_nomes": biblioteca.listar_audios(),
-        "audios_info": [info("audios", n, f"/biblioteca/audios/{n}") for n in biblioteca.listar_audios()],
-        "imagens": [info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()],
-        "videos": [info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()],
-        "canais": [{"id": c["id"], "nome": c["nome"]} for c in canal.listar_canais()],
+        "audios": [a["url"] for a in audios],
+        "audios_nomes": [a["nome"] for a in audios],
+        "audios_info": audios,
+        "imagens": [i for i in (info("imagens", n, f"/biblioteca/imagens/{n}") for n in biblioteca.listar_imagens()) if do_canal(i)],
+        "videos": [i for i in (info("videos", n, f"/biblioteca/videos/{n}") for n in biblioteca.listar_videos()) if do_canal(i)],
+        "canais": [{"id": c["id"], "nome": c["nome"]} for c in canais_mod.listar_canais()],
+        "canal_ativo": canais_mod.canal_ativo_id(),
     }
 
 
@@ -477,6 +491,7 @@ async def api_upload_audio_biblioteca(arquivo: UploadFile = File(...)) -> JSONRe
         nome = biblioteca.salvar_audio(arquivo.filename or "audio", conteudo)
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=400)
+    _atribuir_canal_ativo("audios", nome)
     return JSONResponse({"nome": nome, "url": f"/biblioteca/audios/{nome}"})
 
 
@@ -496,6 +511,7 @@ async def api_upload_video_biblioteca(arquivo: UploadFile = File(...)) -> JSONRe
         nome = await asyncio.to_thread(biblioteca.salvar_video, arquivo.filename or "video", conteudo)
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=400)
+    _atribuir_canal_ativo("videos", nome)
     return JSONResponse({"nome": nome, "url": f"/biblioteca/videos/{nome}"})
 
 
@@ -533,6 +549,7 @@ async def api_upload_imagem_biblioteca(arquivo: UploadFile = File(...)) -> JSONR
         nome = biblioteca.salvar_imagem(arquivo.filename or "imagem", conteudo)
     except Exception:
         return JSONResponse({"erro": "não consegui abrir esse arquivo como imagem"}, status_code=400)
+    _atribuir_canal_ativo("imagens", nome)
     return JSONResponse({"nome": nome, "url": f"/biblioteca/imagens/{nome}"})
 
 
@@ -1255,16 +1272,17 @@ def api_estrutura_das_cenas(
 
 
 @app.get("/api/cenas-padrao")
-def api_listar_cenas_padrao() -> dict:
-    return {"cenas": biblioteca.listar_cenas_padrao()}
+def api_listar_cenas_padrao(canal: str = "") -> dict:
+    return {"cenas": [c for c in biblioteca.listar_cenas_padrao() if not canal or c.get("canal_id", "") in ("", canal)]}
 
 
 @app.post("/api/cenas-padrao")
 def api_salvar_cena_padrao(
     id: str = Form(""), nome: str = Form(""), texto: str = Form(""), midia_tipo: str = Form(""), midia_nome: str = Form(""),
+    posicao_padrao: str = Form("fim"),
 ) -> JSONResponse:
     try:
-        return JSONResponse(biblioteca.salvar_cena_padrao(id or None, nome, texto, midia_tipo, midia_nome))
+        return JSONResponse(biblioteca.salvar_cena_padrao(id or None, nome, texto, midia_tipo, midia_nome, canais_mod.canal_ativo_id(), posicao_padrao))
     except ValueError as erro:
         return JSONResponse({"erro": str(erro)}, status_code=400)
 

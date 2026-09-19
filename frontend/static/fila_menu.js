@@ -208,7 +208,7 @@ document.addEventListener("click", async (ev) => {
   const n = painel.querySelectorAll(".cena-card").length;
   let presets = [];
   if (padrao) {
-    presets = (await fetch("/api/cenas-padrao").then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || [];
+    presets = (await fetch(`/api/cenas-padrao?canal=${encodeURIComponent(painel.dataset.canal || "")}`).then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || [];
     if (!presets.length) {
       form.hidden = false;
       form.innerHTML = '<div class="cenas-status">Nenhuma cena padrão ainda. Crie na aba Base → Cenas padrão.</div>';
@@ -233,6 +233,7 @@ document.addEventListener("click", async (ev) => {
   const escolherPreset = () => {
     const p = presets[parseInt(form.querySelector(".nc-preset").value, 10)];
     texto.value = p.texto;
+    form.querySelector(".nc-posicao").value = p.posicao_padrao === "inicio" ? "0" : String(n); // introdução vai pro começo, o resto pro fim
     form.querySelector(".nc-midia").textContent = p.midia_nome ? `${p.midia_tipo === "video" ? "Vídeo" : "Imagem"} da Base: ${p.midia_nome}` : "Sem imagem definida: a imagem será feita a partir do texto.";
     atualizar();
   };

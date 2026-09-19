@@ -242,19 +242,39 @@ def _ler_cenas_padrao() -> list:
         return None
 
 
+def _cenas_de_fabrica() -> list:
+    return [
+        {"id": "introducao", "nome": "Introdução (abertura)", "posicao_padrao": "inicio", "midia_tipo": "", "midia_nome": "",
+         "texto": "Olá, tudo bem? Prepare-se, porque o vídeo de hoje vai te surpreender!"},
+        {"id": "inscreva-se", "nome": "Inscreva-se e curta", "posicao_padrao": "fim", "midia_tipo": "imagem", "midia_nome": "",
+         "texto": "Gostou do vídeo? Então se inscreva no canal e deixe o seu like!"},
+    ]
+
+
 def listar_cenas_padrao() -> list:
-    """Lista as cenas padrão. Na primeira vez cria a "Inscreva-se e curta" pronta pra usar."""
+    """Lista as cenas padrão. As de fábrica (introdução e "inscreva-se") são criadas uma única vez: se você
+    apagar uma, ela não volta."""
     _garantir_pastas()
-    cenas = _ler_cenas_padrao()
-    if cenas is None:
-        cenas = [{
-            "id": "inscreva-se",
-            "nome": "Inscreva-se e curta",
-            "texto": "Gostou do vídeo? Então se inscreva no canal e deixe o seu like!",
-            "midia_tipo": "imagem",
-            "midia_nome": _imagem_inscreva_se(),
-        }]
+    cenas = _ler_cenas_padrao() or []
+    marcador = RAIZ / "cenas_padrao_criadas.json"
+    try:
+        criadas = json.loads(marcador.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        criadas = [c["id"] for c in cenas]  # instalação anterior: o que já existe conta como criado
+    mudou = False
+    for padrao in _cenas_de_fabrica():
+        if padrao["id"] in criadas:
+            continue
+        if padrao["id"] == "inscreva-se":
+            padrao["midia_nome"] = _imagem_inscreva_se()
+        cenas.append(padrao)
+        criadas.append(padrao["id"])
+        mudou = True
+    for c in cenas:  # cenas antigas ganham a posição padrão
+        c.setdefault("posicao_padrao", "inicio" if c["id"] == "introducao" else "fim")
+    if mudou or not ARQUIVO_CENAS_PADRAO.exists():
         _gravar_cenas_padrao(cenas)
+        marcador.write_text(json.dumps(criadas), encoding="utf-8")
     return cenas
 
 
@@ -263,7 +283,7 @@ def _gravar_cenas_padrao(cenas: list) -> None:
     ARQUIVO_CENAS_PADRAO.write_text(json.dumps(cenas, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, midia_nome: str) -> dict:
+def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, midia_nome: str, canal_id: str = "", posicao_padrao: str = "fim") -> dict:
     nome, texto = nome.strip()[:80], texto.strip()[:600]
     if not nome or len(texto) < 3:
         raise ValueError("dê um nome e o texto da narração dessa cena")
@@ -276,9 +296,9 @@ def salvar_cena_padrao(id_: str | None, nome: str, texto: str, midia_tipo: str, 
     cenas = listar_cenas_padrao()
     item = next((c for c in cenas if c["id"] == id_), None) if id_ else None
     if item is None:
-        item = {"id": uuid.uuid4().hex[:10]}
+        item = {"id": uuid.uuid4().hex[:10], "canal_id": canal_id}  # nova: fica no canal ativo
         cenas.append(item)
-    item.update(nome=nome, texto=texto, midia_tipo=midia_tipo, midia_nome=midia_nome)
+    item.update(nome=nome, texto=texto, midia_tipo=midia_tipo, midia_nome=midia_nome, posicao_padrao="inicio" if posicao_padrao == "inicio" else "fim")
     _gravar_cenas_padrao(cenas)
     return item
 

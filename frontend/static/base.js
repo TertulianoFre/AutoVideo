@@ -1,5 +1,6 @@
 // Aba Base: áudios e imagens importados, com descrição, canal e "usado em quais vídeos".
 let dadosBase = null;
+let baseFiltroInicializado = false; // na 1ª vez a Base já mostra só o canal ativo (mais o que é compartilhado)
 
 function escaparAttr(texto) {
   return String(texto || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -20,7 +21,9 @@ function blocoInfoBase(tipo, item, canais) {
 }
 
 function linhaBase(tipo, item, canais, miniatura, preview) {
-  const usos = item.usado_em?.length ? `<span class="base-selo base-selo-usado">em ${item.usado_em.length} vídeo${item.usado_em.length > 1 ? "s" : ""}</span>` : '<span class="base-selo">livre</span>';
+  const nomeCanal = (dadosBase?.canais || []).find((c) => c.id === item.canal_id)?.nome;
+  const seloCanal = `<span class="base-selo" title="Canal dono desse item">${nomeCanal ? escaparAttr(nomeCanal) : "todos os canais"}</span>`;
+  const usos = seloCanal + (item.usado_em?.length ? `<span class="base-selo base-selo-usado">em ${item.usado_em.length} vídeo${item.usado_em.length > 1 ? "s" : ""}</span>` : '<span class="base-selo">livre</span>');
   const titulo = item.descricao || item.nome;
   const rotuloBotao = { audios: "áudio", imagens: "imagem", videos: "vídeo" }[tipo];
   return `
@@ -56,9 +59,10 @@ async function carregarBase() {
   try {
     dadosBase = await fetch("/api/biblioteca").then((r) => r.json());
     const filtro = document.getElementById("base-filtro-canal");
-    const filtroAtual = filtro.value;
+    const filtroAtual = baseFiltroInicializado ? filtro.value : dadosBase.canal_ativo || "";
     filtro.innerHTML = opcoesCanais(dadosBase.canais, filtroAtual).replace("Todos os canais", "Todos os canais (mostrar tudo)");
     filtro.value = filtroAtual;
+    baseFiltroInicializado = true;
     const passa = (item) => !filtro.value || !item.canal_id || item.canal_id === filtro.value;
     const canais = dadosBase.canais;
 
@@ -106,7 +110,7 @@ let selecionadasBase = []; // "imagem:nome" | "video:nome"
 async function montarSeletorBaseNovoVideo() {
   const grade = document.getElementById("novo-base-grade");
   if (!grade) return;
-  const dados = await fetch("/api/biblioteca").then((r) => r.json());
+  const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(seletorCanal.value || "")}`).then((r) => r.json());
   const itens = [
     ...(dados.imagens || []).map((i) => ({ ...i, tipo: "imagem" })),
     ...(dados.videos || []).map((v) => ({ ...v, tipo: "video" })),
@@ -188,7 +192,8 @@ async function salvarCenaPadrao(campos) {
 
 async function carregarCenasPadrao(dados) {
   const lista = document.getElementById("base-cenas-padrao-lista");
-  const cenas = (await fetch("/api/cenas-padrao").then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || [];
+  const filtroCanal = document.getElementById("base-filtro-canal").value;
+  const cenas = ((await fetch(`/api/cenas-padrao?canal=${encodeURIComponent(filtroCanal)}`).then((r) => r.json()).catch(() => ({ cenas: [] }))).cenas || []);
   document.getElementById("base-cenas-contagem").textContent = `(${cenas.length})`;
   lista.innerHTML = cenas.length ? cenas.map((c) => {
     const miniatura = c.midia_tipo === "imagem" ? `<img src="/biblioteca/imagens/${encodeURIComponent(c.midia_nome)}" alt="">` : c.midia_tipo === "video" ? "🎬" : "🎞";
@@ -197,12 +202,13 @@ async function carregarCenasPadrao(dados) {
         <summary>
           <span class="base-linha-mini">${miniatura}</span>
           <span class="base-linha-textos"><span class="base-linha-titulo">${escaparAttr(c.nome)}</span><span class="base-linha-arquivo">${escaparAttr(c.texto)}</span></span>
-          <span class="base-selo">${c.midia_tipo === "video" ? "com vídeo" : c.midia_tipo === "imagem" ? "com imagem" : "sem mídia"}</span>
+          <span class="base-selo">${c.posicao_padrao === "inicio" ? "começo" : "fim"}</span><span class="base-selo">${c.midia_tipo === "video" ? "com vídeo" : c.midia_tipo === "imagem" && c.midia_nome ? "com imagem" : "sem mídia"}</span>
         </summary>
         <div class="base-linha-corpo">
           <label style="width:100%"><span class="video-meta">Nome</span><input type="text" class="base-descricao cp-nome" value="${escaparAttr(c.nome)}" maxlength="80"></label>
           <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao cp-texto" rows="3" maxlength="600">${escaparAttr(c.texto)}</textarea></label>
           <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base</span><select class="base-canal cp-midia">${opcoesMidiaBase(dados, c.midia_tipo, c.midia_nome)}</select></label>
+          <label style="width:100%"><span class="video-meta">Onde entra por padrão</span><select class="base-canal cp-posicao"><option value="inicio"${c.posicao_padrao === "inicio" ? " selected" : ""}>No começo do vídeo (introdução)</option><option value="fim"${c.posicao_padrao !== "inicio" ? " selected" : ""}>No fim do vídeo</option></select></label>
           <div class="cena-card-acoes">
             <button type="button" class="btn-secondary cp-salvar" data-id="${c.id}">Salvar</button>
             <button type="button" class="btn-regenerar btn-regenerar-sutil cp-remover" data-id="${c.id}" data-nome="${escaparAttr(c.nome)}">remover cena padrão</button>
@@ -214,7 +220,7 @@ async function carregarCenasPadrao(dados) {
   lista.querySelectorAll(".cp-salvar").forEach((b) => b.addEventListener("click", async () => {
     const linha = b.closest("[data-cena-padrao]");
     const [tipo, nome] = linha.querySelector(".cp-midia").value.split("|");
-    if (await salvarCenaPadrao({ id: b.dataset.id, nome: linha.querySelector(".cp-nome").value, texto: linha.querySelector(".cp-texto").value, midia_tipo: tipo, midia_nome: nome })) carregarBase();
+    if (await salvarCenaPadrao({ id: b.dataset.id, nome: linha.querySelector(".cp-nome").value, texto: linha.querySelector(".cp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: linha.querySelector(".cp-posicao").value })) carregarBase();
   }));
   lista.querySelectorAll(".cp-remover").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm(`Remover a cena padrão "${b.dataset.nome}"? (Os vídeos que já usam ela não mudam.)`)) return;
@@ -230,10 +236,11 @@ async function carregarCenasPadrao(dados) {
       <label style="width:100%"><span class="video-meta">Nome (só pra você achar)</span><input type="text" class="base-descricao" id="ncp-nome" maxlength="80" placeholder="Ex.: Inscreva-se e curta"></label>
       <label style="width:100%"><span class="video-meta">Texto que a IA narra</span><textarea class="base-descricao" id="ncp-texto" rows="3" maxlength="600" placeholder="Ex.: Gostou do vídeo? Então se inscreva no canal e deixe o seu like!"></textarea></label>
       <label style="width:100%"><span class="video-meta">Imagem ou vídeo da Base (opcional)</span><select class="base-canal" id="ncp-midia">${opcoesMidiaBase(dados, "", "")}</select></label>
+      <label style="width:100%"><span class="video-meta">Onde entra por padrão</span><select class="base-canal" id="ncp-posicao"><option value="inicio">No começo do vídeo (introdução)</option><option value="fim" selected>No fim do vídeo</option></select></label>
       <div class="cena-card-acoes"><button type="button" class="btn-primary" id="ncp-salvar">Criar cena padrão</button></div>`;
     document.getElementById("ncp-salvar").onclick = async () => {
       const [tipo, nome] = document.getElementById("ncp-midia").value.split("|");
-      if (await salvarCenaPadrao({ nome: document.getElementById("ncp-nome").value, texto: document.getElementById("ncp-texto").value, midia_tipo: tipo, midia_nome: nome })) {
+      if (await salvarCenaPadrao({ nome: document.getElementById("ncp-nome").value, texto: document.getElementById("ncp-texto").value, midia_tipo: tipo, midia_nome: nome, posicao_padrao: document.getElementById("ncp-posicao").value })) {
         form.hidden = true;
         carregarBase();
       }
