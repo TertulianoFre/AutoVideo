@@ -20,7 +20,7 @@ PROVEDORES = {
     "groq": ("https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-120b", "GROQ_API_KEY", "console.groq.com"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-flash-latest", "GEMINI_API_KEY", "aistudio.google.com/apikey"),
     "cerebras": ("https://api.cerebras.ai/v1/chat/completions", "gpt-oss-120b", "CEREBRAS_API_KEY", "cloud.cerebras.ai"),
-    "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "qwen/qwen3.8-27b:free", "OPENROUTER_API_KEY", "openrouter.ai/keys"),
+    "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "google/gemma-4-31b-it:free", "OPENROUTER_API_KEY", "openrouter.ai/keys"),
 }
 OLLAMA_URL = "http://localhost:11434/v1/chat/completions"
 POLLINATIONS_URL = "https://text.pollinations.ai/openai"
@@ -170,7 +170,7 @@ def _pollinations(mensagens: list, tentativas: int) -> str:
 MODELOS_VISAO = {
     "gemini": "gemini-flash-latest",
     "groq": "qwen/qwen3.8-27b",
-    "openrouter": "qwen/qwen3.8-27b:free",
+    "openrouter": "google/gemma-4-31b-it:free",
 }
 
 PEDIDO_DESCRICAO = (
