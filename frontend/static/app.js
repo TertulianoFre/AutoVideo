@@ -798,13 +798,11 @@ async function alternarEscolhaBaseCena(botao) {
     grade.innerHTML = '<span class="video-meta">Nada na Base ainda — importe imagens ou vídeos na aba Base.</span>';
     return;
   }
-  grade.innerHTML = itens
-    .map((it) => {
+  grade.innerHTML = agruparPorUso(itens, (it) => {
       const dica = `${it.nome}${it.descricao ? " — " + it.descricao : ""}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
       const midia = it.tipo === "video" ? `<video src="${it.url}#t=0.5" muted preload="metadata"></video><span class="base-ordem">vídeo</span>` : `<img src="${it.url}" alt="">`;
       return `<div class="base-opcao"><button type="button" class="thumb-img-opcao" data-nome="${escaparAttr(it.nome)}" data-tipo="${it.tipo}" title="${escaparAttr(dica)}">${midia}</button><span class="base-legenda" title="${escaparAttr(it.descricao || it.nome)}">${escaparAttr(it.descricao || it.nome)}</span></div>`;
-    })
-    .join("");
+  });
   grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
     op.addEventListener("click", async () => {
       const item = itens.find((i) => i.nome === op.dataset.nome && i.tipo === op.dataset.tipo);

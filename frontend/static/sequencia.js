@@ -7,6 +7,14 @@ function chaveDe(it) {
   return `${it.tipo}:${it.nome}`;
 }
 
+// Separa as mídias da Base em "Ainda não usadas" e "Já usadas em algum vídeo" (imagens e vídeos juntos em cada seção).
+function agruparPorUso(itens, htmlDe) {
+  const secao = (titulo, lista) => (lista.length ? `<div class="base-secao"><div class="base-secao-titulo">${titulo} <span class="video-meta">(${lista.length})</span></div><div class="base-secao-itens">${lista.map(htmlDe).join("")}</div></div>` : "");
+  const novas = itens.filter((it) => !(it.usado_em || []).length);
+  const usadas = itens.filter((it) => (it.usado_em || []).length);
+  return secao("Ainda não usadas", novas) + secao("Já usadas em algum vídeo", usadas);
+}
+
 async function montarSequencia(cfg) {
   const { grade, strip, campo, lista, aoMudar } = cfg;
   if (!grade) return;
@@ -22,11 +30,11 @@ async function montarSequencia(cfg) {
   const desenhar = () => {
     if (campo) campo.value = lista.join("|");
     grade.innerHTML = itens.length
-      ? itens.map((it) => {
+      ? agruparPorUso(itens, (it) => {
           const ordem = lista.indexOf(chaveDe(it));
           const dica = `${it.nome}${it.descricao ? " — " + it.descricao : ""}${it.usado_em.length ? " — já usado em: " + it.usado_em.join(", ") : ""}`;
           return `<div class="base-opcao"><button type="button" class="thumb-img-opcao${ordem >= 0 ? " selecionada" : ""}" data-chave="${escaparAttr(chaveDe(it))}" title="${escaparAttr(dica)}">${miniatura(it)}${it.tipo === "video" ? '<span class="base-tipo">vídeo</span>' : ""}${ordem >= 0 ? `<span class="base-ordem">cena ${ordem + 1}</span>` : ""}</button><span class="base-legenda" title="${escaparAttr(it.descricao || it.nome)}">${escaparAttr(it.descricao || it.nome)}</span></div>`;
-        }).join("")
+        })
       : '<span class="video-meta">Nada na Base ainda — importe imagens ou vídeos na aba Base.</span>';
 
     if (strip) {
