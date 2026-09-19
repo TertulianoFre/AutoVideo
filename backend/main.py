@@ -928,6 +928,76 @@ def api_descricao_ia_do_video(slug: str, titulo: str = Form("")) -> JSONResponse
     return JSONResponse({"descricao": texto})
 
 
+def _playlist_som_valida(texto: str) -> list:
+    try:
+        itens = json.loads(texto) if texto.strip() else []
+    except ValueError:
+        return []
+    saida = []
+    for item in itens if isinstance(itens, list) else []:
+        if isinstance(item, dict) and biblioteca.caminho_audio_valido(str(item.get("nome", ""))):
+            seg = item.get("segundos")
+            saida.append({"nome": item["nome"], "segundos": float(seg) if seg else None})
+    return saida
+
+
+_TIPOS_SOM = ("", "biblioteca", "outro", "chuva", "musica", "oceano", "fogueira", "vento")
+
+
+@app.get("/api/videos/{slug}/som-fundo")
+def api_som_de_fundo(slug: str) -> JSONResponse:
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    return JSONResponse({
+        "tipo": meta.get("som_fundo_tipo") or "", "descricao": meta.get("som_fundo_descricao") or "",
+        "playlist": meta.get("som_fundo_playlist") or ([{"nome": meta["som_fundo_biblioteca"], "segundos": None}] if meta.get("som_fundo_biblioteca") else []),
+        "opcoes": meta.get("som_fundo_opcoes") or {}, "volume": meta.get("som_fundo_volume", pipeline_mod.VOLUME_SOM_DE_FUNDO),
+        "duracao_video": round(sum(c.get("duracao_segundos", 0) for c in meta.get("cenas") or []), 1),
+        "sem_narracao": bool(meta.get("sem_narracao")), "publicado": _video_ja_publicado(meta),
+    })
+
+
+@app.post("/api/videos/{slug}/som-fundo/previa")
+def api_previa_som_de_fundo(slug: str, tipo: str = Form(""), descricao: str = Form(""), playlist: str = Form(""), volume: float = Form(0.2)) -> JSONResponse:
+    if tipo not in _TIPOS_SOM or not tipo:
+        return JSONResponse({"erro": "escolha um som para ouvir"}, status_code=400)
+    lista = _playlist_som_valida(playlist)
+    try:
+        caminho = pipeline_mod.previa_som_de_fundo(slug, tipo, descricao.strip()[:200], lista, {}, volume)
+    except RuntimeError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    return JSONResponse({"url": f"/videos/{slug}/{caminho.name}?v={int(time.time())}"})
+
+
+@app.post("/api/videos/{slug}/som-fundo")
+def api_alterar_som_de_fundo(
+    slug: str, tipo: str = Form(""), descricao: str = Form(""), playlist: str = Form(""), repetir: str = Form("repetir"),
+    suave: bool = Form(False), fade: bool = Form(False), volume: float = Form(0.2),
+) -> dict:
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    if tipo not in _TIPOS_SOM:
+        return JSONResponse({"erro": "tipo de som inválido"}, status_code=400)
+    metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if _video_ja_publicado(metadados):
+        return JSONResponse({"erro": "esse vídeo já foi publicado"}, status_code=409)
+    if metadados.get("sem_narracao"):
+        return JSONResponse({"erro": "vídeo sem narração: o som de fundo já é o áudio dele"}, status_code=400)
+    lista = _playlist_som_valida(playlist)
+    if tipo == "biblioteca" and not lista:
+        return JSONResponse({"erro": "escolha pelo menos um áudio da Base"}, status_code=400)
+    opcoes = {"repetir": "silencio" if repetir == "silencio" else "repetir", "suave": suave, "fade": fade}
+    job = jobs.criar_job_funcao(
+        metadados.get("titulo", slug),
+        lambda cb: _resultado_videos(slug, pipeline_mod.alterar_som_de_fundo(slug, tipo, descricao.strip()[:200], lista, opcoes, volume, progresso=cb)),
+        estimativa=45.0,
+    )
+    return {"job_id": job.id}
+
+
 @app.post("/api/videos/{slug}/editado")
 def api_editado(slug: str, editado: bool = Form(...)) -> dict:
     """Marca (ou desmarca) que você já editou/revisou esse vídeo. Só vídeo "editado" pode ter a publicação confirmada."""

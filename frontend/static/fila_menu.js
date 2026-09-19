@@ -40,6 +40,7 @@ function executarAcaoMenu(item) {
     case "legenda": alternarPainelLegenda(alvo); break;
     case "thumb": alternarPainelThumb(alvo); break;
     case "textos": abrirEditorDeTextos(slug); break;
+    case "som": abrirEditorDeSom(slug); break;
     case "regen-mesmo": confirmarRegenerar(slug, item.dataset.titulo, true); break;
     case "regen-novo": confirmarRegenerar(slug, item.dataset.titulo, false); break;
   }

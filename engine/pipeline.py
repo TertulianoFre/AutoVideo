@@ -637,7 +637,7 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
                 r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(som_fundo), "-af", f"volume=enable='{'+'.join(trechos)}':volume=0", str(fundo_usado)], capture_output=True, text=True)
                 if r.returncode != 0:
                     raise RuntimeError(f"FFmpeg falhou ao silenciar o som de fundo: {r.stderr[-800:]}")
-            render.mixar_audio_com_fundo(com_pausas, fundo_usado, final, VOLUME_SOM_DE_FUNDO)
+            render.mixar_audio_com_fundo(com_pausas, fundo_usado, final, float(metadados.get("som_fundo_volume", VOLUME_SOM_DE_FUNDO)))
             if fundo_usado != som_fundo:
                 fundo_usado.unlink(missing_ok=True)
         else:
@@ -900,6 +900,84 @@ def editar_estrutura(
         narracao.unlink(missing_ok=True)  # a versão anterior da narração editada
 
     return aplicar_duracoes(slug, {}, progresso=lambda etapa, pct: avisar(etapa, 70 + 0.3 * pct))
+
+
+def _peca_som_de_fundo(tipo: str, descricao: str, playlist: list | None, opcoes: dict | None, duracao: float, destino: Path) -> None:
+    if tipo == "biblioteca":
+        if not playlist:
+            raise RuntimeError("Escolha pelo menos um áudio da Base.")
+        _preparar_som_da_base(playlist[0]["nome"], playlist, opcoes, duracao, destino)
+    else:
+        ambiente.gerar_som_ambiente(tipo, duracao, destino, descricao=descricao)
+
+
+@_com_trava_de_edicao
+def alterar_som_de_fundo(
+    slug: str, tipo: str, descricao: str = "", playlist: list | None = None, opcoes: dict | None = None,
+    volume: float | None = None, progresso: Callable[[str, float], None] | None = None,
+) -> dict:
+    """Coloca, troca ou tira o som de fundo de um vídeo JÁ gerado (e ajusta o volume), sem refazer roteiro,
+    narração nem imagens: refaz só o áudio final e remonta o vídeo."""
+    def avisar(etapa: str, pct: float) -> None:
+        if progresso is not None:
+            progresso(etapa, pct)
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+    m = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if m.get("publicado"):
+        raise RuntimeError("Esse vídeo já foi publicado.")
+    if m.get("sem_narracao"):
+        raise RuntimeError("Vídeo sem narração: o som de fundo já é o áudio dele.")
+    total = sum(c["duracao_segundos"] for c in m.get("cenas") or [])
+    som_fundo = pasta / "som_fundo.wav"
+    playlist = playlist or []
+    if tipo == "":
+        som_fundo.unlink(missing_ok=True)
+    elif tipo != "biblioteca":
+        avisar("Criando o som de fundo", 8)
+        _peca_som_de_fundo(tipo, descricao, None, None, total, som_fundo)
+    elif not playlist:
+        raise RuntimeError("Escolha pelo menos um áudio da Base.")
+    m.update(
+        som_fundo_tipo=tipo, som_fundo_descricao=descricao,
+        som_fundo_biblioteca=(playlist[0]["nome"] if tipo == "biblioteca" else ""),
+        som_fundo_playlist=(playlist if tipo == "biblioteca" else []), som_fundo_opcoes=opcoes or {},
+        som_fundo_volume=VOLUME_SOM_DE_FUNDO if volume is None else max(0.0, min(1.0, float(volume))), aprovado=False,
+    )
+    caminho_meta.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+    return aplicar_duracoes(slug, {}, progresso=lambda etapa, pct: avisar(etapa, 15 + 0.85 * pct))
+
+
+def previa_som_de_fundo(slug: str, tipo: str, descricao: str, playlist: list | None, opcoes: dict | None, volume: float) -> Path:
+    """Trecho de ~12 s (começo da narração + o som de fundo no volume escolhido) para ouvir antes de aplicar."""
+    import subprocess
+    import tempfile
+
+    from engine.ferramentas import caminho_ffmpeg
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if not caminho_meta.exists():
+        raise RuntimeError("Vídeo não encontrado.")
+    m = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    narracao = pasta / (m.get("narracao_arquivo") or "narracao.mp3")
+    if not narracao.exists():
+        raise RuntimeError("Narração do vídeo não encontrada.")
+    trecho = 12.0
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fala, fundo = tmp / "fala.wav", tmp / "fundo.wav"
+        r = subprocess.run([caminho_ffmpeg(), "-y", "-i", str(narracao), "-t", str(trecho), "-ar", "44100", "-ac", "2", str(fala)], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError("Não consegui preparar o trecho de narração.")
+        primeiro = [{"nome": playlist[0]["nome"], "segundos": None}] if playlist else []
+        _peca_som_de_fundo(tipo, descricao, primeiro, opcoes, trecho, fundo)
+        saida = pasta / "_previa_som.m4a"
+        render.mixar_audio_com_fundo(fala, fundo, saida, max(0.0, min(1.0, volume)))
+    return saida
 
 
 @_com_trava_de_edicao
