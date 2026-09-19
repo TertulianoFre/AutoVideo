@@ -670,3 +670,15 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .cartao-minimizavel > .card-head::after { content: "▾"; color: var(--text-dim); font-size: 14px; transition: transform .15s; }
 .cartao-minimizavel.recolhido > .card-head::after { transform: rotate(-90deg); }
 .cartao-minimizavel.recolhido > :not(.card-head) { display: none; }
+
+/* linha do tempo das cenas */
+.linha-tempo-bloco { margin: 10px 0 14px; }
+.linha-tempo { display: flex; gap: 3px; overflow-x: auto; padding: 6px 0 4px; }
+.lt-item { min-width: 46px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.lt-bloco { position: relative; height: 58px; border-radius: 6px; border: 1px solid var(--border); background: #000 center / cover no-repeat; overflow: hidden; }
+.lt-item:hover .lt-bloco { border-color: #F2C230; }
+.lt-rotulo { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 5px 3px; font-size: 10.5px; font-weight: 600; color: #fff; white-space: nowrap; background: linear-gradient(transparent, rgba(0, 0, 0, .85)); }
+.lt-video { border-color: #F2C230; }
+.lt-vazia { border-style: dashed; }
+.lt-tempo { font-size: 10px; color: var(--text-dim); }
+.cena-destaque { outline: 2px solid #F2C230; outline-offset: 2px; transition: outline-color .3s; }

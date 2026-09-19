@@ -689,6 +689,7 @@ async function alternarPainelCenas(botao) {
   const total = dados.cenas.reduce((soma, c) => soma + (c.duracao_segundos || 0), 0);
   painel.innerHTML = `
     <div class="cenas-status">${dados.cenas.length} cenas na ordem em que aparecem no vídeo (<b class="cenas-total" data-original="${total}">${formatarTempo(total)}</b> no total), cada uma com o trecho do roteiro que ela cobre. As trocas de imagem/vídeo valem na hora e várias podem rodar ao mesmo tempo. O lápis (✎) edita o texto: você pode mexer em várias cenas e salvar tudo de uma vez.</div>
+    <div class="linha-tempo-bloco"><div class="lt-cabeca video-meta"></div><div class="linha-tempo"></div></div>
     <div class="cenas-grid">${dados.cenas.map((c, k) => `${botaoInserirCena(k)}${cardDeCena(slug, c, dados.tempo_editavel && !c.audio_do_video)}`).join("")}${botaoInserirCena(dados.cenas.length)}</div>
     <div class="cenas-adicionar">
       <button type="button" class="btn-secondary btn-nova-cena" title="Adiciona uma cena nova, com a narração que você escrever">+ Cena</button>
@@ -702,6 +703,7 @@ async function alternarPainelCenas(botao) {
       <span class="video-meta cenas-rodape-status"></span>
     </div>`;
 
+  if (typeof atualizarLinhaDoTempo === "function") atualizarLinhaDoTempo(painel);
   painel.querySelector(".btn-concluir-cenas").addEventListener("click", () => {
     const status = painel.querySelector(".cenas-rodape-status");
     if (painel.querySelector(".cena-card button:disabled")) {

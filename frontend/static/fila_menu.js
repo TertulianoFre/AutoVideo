@@ -392,6 +392,7 @@ function recalcularTemposDasCenas(painel) {
   });
   const total = painel.querySelector(".cenas-total");
   if (total) total.textContent = formatarTempo(acumulado);
+  atualizarLinhaDoTempo(painel);
   const botao = painel.querySelector(".btn-aplicar-tempos");
   const mudou = temposAlterados(painel);
   botao.hidden = !mudou;
@@ -546,3 +547,41 @@ document.addEventListener("click", (ev) => {
 });
 
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") fecharPreviaDaCena(); });
+
+
+// ---------------- linha do tempo das cenas ----------------
+
+function atualizarLinhaDoTempo(painel) {
+  const faixa = painel.querySelector(".linha-tempo");
+  if (!faixa) return;
+  const cartoes = [...painel.querySelectorAll(".cena-card")];
+  let acumulado = 0;
+  faixa.innerHTML = cartoes.map((card, i) => {
+    const campo = card.querySelector(".cena-duracao");
+    const dur = campo ? Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo) || 0) : parseFloat(card.dataset.duracao || 0);
+    const inicio = acumulado;
+    acumulado += dur;
+    const texto = (card.querySelector(".cena-card-texto")?.textContent || "").trim();
+    const comVideo = card.classList.contains("cena-audio-video");
+    const vazia = !texto && !comVideo;
+    const capa = card.dataset.img16 ? `background-image:url('${card.dataset.img16}')` : "";
+    const classe = `lt-bloco${comVideo ? " lt-video" : ""}${vazia ? " lt-vazia" : ""}`;
+    const dica = comVideo ? "Vídeo com o áudio dele" : vazia ? "Cena vazia (sem texto)" : texto.slice(0, 90);
+    return `<div class="lt-item" style="flex:${Math.max(dur, 0.5)} 1 0px" data-indice="${card.dataset.indice}">
+      <div class="${classe}" style="${capa}" title="${escaparAttr(`Cena ${i + 1} · ${dica}`)}"><span class="lt-rotulo">${comVideo ? "🎬 " : ""}${i + 1} · ${Math.round(dur * 10) / 10}s</span></div>
+      <span class="lt-tempo">${formatarTempo(inicio)}</span></div>`;
+  }).join("");
+  const cabeca = painel.querySelector(".lt-cabeca");
+  if (cabeca) cabeca.textContent = `Linha do tempo · ${cartoes.length} cena(s) · total ${formatarTempo(acumulado)} (clique numa cena para ir até ela)`;
+}
+
+document.addEventListener("click", (ev) => {
+  const item = ev.target.closest(".lt-item");
+  if (!item) return;
+  const painel = item.closest(".cenas-painel");
+  const card = painel.querySelector(`.cena-card[data-indice="${item.dataset.indice}"]`);
+  if (!card) return;
+  card.scrollIntoView({ block: "center", behavior: "smooth" });
+  card.classList.add("cena-destaque");
+  setTimeout(() => card.classList.remove("cena-destaque"), 1600);
+});
