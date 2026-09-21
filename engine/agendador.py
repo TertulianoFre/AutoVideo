@@ -37,6 +37,29 @@ def _thumbnail_shorts(pasta: Path, metadados: dict) -> Path | None:
     return thumbnail_mod.gerar_shorts(pasta, metadados)
 
 
+def enviar_thumbnail(nome_conta: str, video_id: str, caminho: Path, tentativas: int = 5, espera: float = 8.0) -> None:
+    """Envia a thumbnail com tentativas: logo depois do upload o YouTube ainda está processando o vídeo e costuma
+    recusar a thumbnail nesse instante. Uma imagem acima de 2 MB (limite do YouTube) é convertida para JPEG."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    arquivo = caminho
+    if caminho.stat().st_size > 1_900_000:
+        arquivo = caminho.with_name(f"_yt_{caminho.stem}.jpg")
+        Image.open(caminho).convert("RGB").save(arquivo, "JPEG", quality=92, optimize=True)
+    ultimo = None
+    for tentativa in range(1, tentativas + 1):
+        try:
+            youtube.definir_thumbnail(nome_conta, video_id, arquivo)
+            return
+        except Exception as erro:
+            ultimo = erro
+            if tentativa < tentativas:
+                time.sleep(espera * tentativa)
+    raise RuntimeError(str(ultimo))
+
+
 def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: str) -> None:
     """Publica os dois formatos. Salva o ID de cada um assim que sobe — se o
     16:9 subir e o Short falhar (ou vice-versa), o próximo ciclo só tenta de
@@ -72,11 +95,14 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
     thumb = pasta / "thumbnail.png"
     if metadados.get("youtube_video_id") and thumb.exists() and not metadados.get("thumbnail_enviada"):
         try:
-            youtube.definir_thumbnail(nome_conta, metadados["youtube_video_id"], thumb)
+            enviar_thumbnail(nome_conta, metadados["youtube_video_id"], thumb)
             metadados["thumbnail_enviada"] = True
+            metadados.pop("thumbnail_erro", None)
             print(f"[agendador] thumbnail enviada: {titulo}")
         except Exception as erro:
-            # não trava a publicação: a causa comum é canal sem verificação por telefone
+            # não trava a publicação: a causa comum é canal sem verificação por telefone. O motivo fica guardado
+            # (aparece na Fila, com botão para reenviar) e os próximos ciclos tentam de novo.
+            metadados["thumbnail_erro"] = str(erro)[:300]
             print(f"[agendador] thumbnail não enviada ({titulo}): {erro}")
         _salvar_metadados(caminho_meta, metadados)
 
@@ -90,10 +116,11 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
         try:
             thumb_short = _thumbnail_shorts(pasta, metadados)
             if thumb_short:
-                youtube.definir_thumbnail(nome_conta, metadados["youtube_short_id"], thumb_short)
+                enviar_thumbnail(nome_conta, metadados["youtube_short_id"], thumb_short)
                 metadados["thumbnail_short_enviada"] = True
                 print(f"[agendador] thumbnail do short enviada: {titulo}")
         except Exception as erro:
+            metadados["thumbnail_short_erro"] = str(erro)[:300]
             print(f"[agendador] thumbnail do short não enviada ({titulo}): {erro}")
         _salvar_metadados(caminho_meta, metadados)
 
@@ -117,6 +144,7 @@ def publicar_pendentes() -> None:
 
         metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
         if metadados.get("publicado"):
+            _retentar_thumbnails(pasta, metadados, caminho_meta)  # já publicado, mas a thumbnail pode ter falhado
             continue
         if not metadados.get("aprovado", False) or not metadados.get("editado", False):
             continue  # só sobe depois de você marcar "Editado" e confirmar a publicação na Fila
@@ -144,6 +172,40 @@ def publicar_pendentes() -> None:
             metadados["publicacao_erro"] = str(erro)
             _salvar_metadados(caminho_meta, metadados)
             print(f"[agendador] falha ao publicar '{metadados.get('titulo')}': {erro}")
+
+
+def _retentar_thumbnails(pasta: Path, metadados: dict, caminho_meta: Path) -> None:
+    """Vídeo publicado cuja thumbnail não subiu (o YouTube ainda processava, rede caiu...): tenta de novo nos
+    próximos ciclos, até 6 vezes. Depois disso fica só o botão "Reenviar thumbnail" da Fila."""
+    if metadados.get("thumbnail_retentativas", 0) >= 6:
+        return
+    nome_conta = _conta_youtube_do_video(metadados)
+    if not youtube.esta_conectado(nome_conta):
+        return
+    mudou = False
+    thumb = pasta / "thumbnail.png"
+    if metadados.get("youtube_video_id") and thumb.exists() and not metadados.get("thumbnail_enviada"):
+        mudou = True
+        try:
+            enviar_thumbnail(nome_conta, metadados["youtube_video_id"], thumb, tentativas=2, espera=5)
+            metadados["thumbnail_enviada"] = True
+            metadados.pop("thumbnail_erro", None)
+            print(f"[agendador] thumbnail enviada (nova tentativa): {metadados.get('titulo')}")
+        except Exception as erro:
+            metadados["thumbnail_erro"] = str(erro)[:300]
+    if metadados.get("youtube_short_id") and not metadados.get("thumbnail_short_enviada"):
+        mudou = True
+        try:
+            thumb_short = _thumbnail_shorts(pasta, metadados)
+            if thumb_short:
+                enviar_thumbnail(nome_conta, metadados["youtube_short_id"], thumb_short, tentativas=2, espera=5)
+                metadados["thumbnail_short_enviada"] = True
+                metadados.pop("thumbnail_short_erro", None)
+        except Exception as erro:
+            metadados["thumbnail_short_erro"] = str(erro)[:300]
+    if mudou:
+        metadados["thumbnail_retentativas"] = metadados.get("thumbnail_retentativas", 0) + 1
+        _salvar_metadados(caminho_meta, metadados)
 
 
 def iniciar_agendador() -> None:

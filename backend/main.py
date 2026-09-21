@@ -219,6 +219,47 @@ def api_youtube_cancelar(canal_id: str | None = Form(None)) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/videos/{slug}/thumbnail/enviar-youtube")
+def api_enviar_thumbnail_ao_youtube(slug: str) -> JSONResponse:
+    """Manda (de novo) a thumbnail atual para o vídeo JÁ publicado no YouTube — a 16:9 e, se existir, a do Short."""
+    from engine import agendador as agendador_mod
+
+    pasta = RAIZ_SAIDA / slug
+    caminho_meta = pasta / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    if not (meta.get("youtube_video_id") or meta.get("youtube_short_id")):
+        return JSONResponse({"erro": "esse vídeo ainda não foi publicado no YouTube"}, status_code=409)
+    conta = agendador_mod._conta_youtube_do_video(meta)
+    if not youtube_mod.esta_conectado(conta):
+        return JSONResponse({"erro": "a conta do YouTube deste canal não está conectada"}, status_code=409)
+    enviados, erros = [], []
+    thumb = pasta / "thumbnail.png"
+    if meta.get("youtube_video_id") and thumb.exists():
+        try:
+            agendador_mod.enviar_thumbnail(conta, meta["youtube_video_id"], thumb, tentativas=3, espera=4)
+            meta["thumbnail_enviada"] = True
+            meta.pop("thumbnail_erro", None)
+            enviados.append("vídeo")
+        except Exception as erro:
+            meta["thumbnail_erro"] = str(erro)[:300]
+            erros.append(f"vídeo: {erro}")
+    if meta.get("youtube_short_id"):
+        try:
+            agendador_mod.enviar_thumbnail(conta, meta["youtube_short_id"], agendador_mod._thumbnail_shorts(pasta, meta), tentativas=3, espera=4)
+            meta["thumbnail_short_enviada"] = True
+            meta.pop("thumbnail_short_erro", None)
+            enviados.append("Short")
+        except Exception as erro:
+            meta["thumbnail_short_erro"] = str(erro)[:300]
+            erros.append(f"Short: {erro}")
+    caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    if erros and not enviados:
+        return JSONResponse({"erro": "; ".join(erros)[:400]}, status_code=502)
+    return JSONResponse({"ok": True, "enviados": enviados, "avisos": erros})
+
+
 @app.get("/api/youtube/estatisticas")
 def api_youtube_estatisticas(canal_id: str | None = None) -> JSONResponse:
     try:
@@ -1767,6 +1808,8 @@ def api_listar_videos() -> list[dict]:
                 "tem_cenas": bool(metadados.get("cenas")),
                 "thumbnail_texto": metadados["thumbnail_texto"] if isinstance(metadados.get("thumbnail_texto"), str) else (metadados.get("titulo") or pasta.name.replace("-", " ")),
                 "youtube_short_id": metadados.get("youtube_short_id"),
+                "thumbnail_enviada": bool(metadados.get("thumbnail_enviada")),
+                "thumbnail_erro": metadados.get("thumbnail_erro") or metadados.get("thumbnail_short_erro") or "",
                 "thumbnail_cor": metadados.get("thumbnail_cor", ""),
                 "thumbnail_posicao": metadados.get("thumbnail_posicao", "baixo-centro"),
                 "thumbnail_tamanho_px": _tamanho_fonte_de(metadados),

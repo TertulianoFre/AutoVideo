@@ -751,3 +751,23 @@ async function abrirEditorDeTextos(slug) {
 }
 
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") fecharEditorDeTextos(); });
+
+
+// ---------------- reenviar a thumbnail de um vídeo já publicado ----------------
+document.addEventListener("click", async (ev) => {
+  const botao = ev.target.closest(".btn-reenviar-thumb");
+  if (!botao) return;
+  if (!confirm("Enviar a thumbnail atual deste vídeo para o YouTube? Ela substitui a que está lá agora.")) return;
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "Enviando…";
+  const r = await fetch(`/api/videos/${botao.dataset.slug}/thumbnail/enviar-youtube`, { method: "POST" }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+  botao.disabled = false;
+  botao.textContent = rotulo;
+  if (r.erro) {
+    alert(`Não consegui enviar a thumbnail: ${r.erro}`);
+    return;
+  }
+  alert(`Thumbnail enviada (${r.enviados.join(" e ")}). O YouTube pode levar alguns minutos para mostrar.${r.avisos && r.avisos.length ? `\nAviso: ${r.avisos.join("; ")}` : ""}`);
+  carregarFila(true);
+});

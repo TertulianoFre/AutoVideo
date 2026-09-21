@@ -203,7 +203,7 @@ def definir_thumbnail(nome_conta: str, video_id: str, caminho_imagem: Path) -> N
         raise RuntimeError(f"Conta '{nome_conta}' não está conectada ao YouTube.")
     youtube = build("youtube", "v3", credentials=creds)
     youtube.thumbnails().set(
-        videoId=video_id, media_body=MediaFileUpload(str(caminho_imagem), mimetype="image/png")
+        videoId=video_id, media_body=MediaFileUpload(str(caminho_imagem), mimetype="image/jpeg" if str(caminho_imagem).lower().endswith((".jpg", ".jpeg")) else "image/png")
     ).execute()
 
 

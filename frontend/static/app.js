@@ -52,7 +52,10 @@ const ICONE_VIDEO = '<svg viewBox="0 0 20 20" width="18" height="18" fill="none"
 function statusPublicacao(v) {
   if (v.publicado) {
     const link = v.youtube_video_id ? `<a href="https://youtu.be/${v.youtube_video_id}" target="_blank">assistir</a>` : "";
-    return `<span class="dot dot-positive"></span> publicado ${link}`;
+    const aviso = v.youtube_video_id && !v.thumbnail_enviada
+      ? ` <span class="aviso-thumb" title="${escaparAttr(v.thumbnail_erro || "A thumbnail ainda não foi enviada ao YouTube.")}">⚠ thumbnail não enviada ao YouTube</span>`
+      : "";
+    return `<span class="dot dot-positive"></span> publicado ${link}${aviso}`;
   }
   if (v.publicacao_erro) {
     return `<span class="dot dot-negative"></span> erro ao publicar: ${v.publicacao_erro}`;
@@ -133,6 +136,7 @@ function linhaDeVideo(v, comRegenerar) {
         <div class="video-links">
           ${v.youtube_video_id ? `<a href="https://www.youtube.com/watch?v=${v.youtube_video_id}" target="_blank" rel="noopener" title="Abrir este vídeo no YouTube">16:9 ↗ YouTube</a>` : v.video_16_9 ? `<a href="${v.video_16_9}" target="_blank">16:9</a>` : ""}
           ${v.youtube_short_id ? `<a href="https://www.youtube.com/shorts/${v.youtube_short_id}" target="_blank" rel="noopener" title="Abrir este Short no YouTube">Shorts ↗ YouTube</a>` : v.video_9_16 ? `<a href="${v.video_9_16}" target="_blank">Shorts</a>` : ""}
+          ${v.publicado && (v.youtube_video_id || v.youtube_short_id) ? `<button type="button" class="btn-regenerar btn-reenviar-thumb" data-slug="${v.slug}" title="Manda a thumbnail atual deste vídeo para o YouTube (troca a que está lá)">↻ Enviar thumbnail</button>` : ""}
           ${acoesEdicao}
           ${comRegenerar && !publicado && !v.aprovado ? `<button type="button" class="btn-confirmar-publicacao" data-slug="${v.slug}" data-titulo="${tituloAttr}"${v.editado ? "" : " disabled"} title="${v.editado ? "Sem confirmar, o vídeo NÃO é publicado" : "Marque a caixinha Editado primeiro"}">Confirmar publicação</button>` : ""}
           ${menuRegenerar}
