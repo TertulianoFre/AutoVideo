@@ -777,6 +777,8 @@ def api_criar_video(
     confirmar_duplicado: bool = Form(False),
     em_branco: bool = Form(False),
     descricao_youtube: str = Form(""),
+    respiro_inicio: float = Form(0.0),
+    respiro_fim: float = Form(0.0),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
@@ -845,6 +847,8 @@ def api_criar_video(
         canal_id=canal.canal_ativo_id(),  # vídeo pertence ao canal ativo no momento em que foi criado
         em_branco=em_branco and not sem_narracao,
         descricao_youtube=descricao_youtube.strip()[:5000],
+        respiro_inicio=max(0.0, min(10.0, respiro_inicio)),
+        respiro_fim=max(0.0, min(15.0, respiro_fim)),
     )
 
     job = jobs.criar_job(titulo, params)
@@ -1117,6 +1121,8 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         legenda=metadados.get("legenda") or None,
         reaproveitar_imagens=reaproveitar_imagens,
         em_branco=bool(metadados.get("em_branco")),
+        respiro_inicio=float(metadados.get("respiro_inicio") or 0),
+        respiro_fim=float(metadados.get("respiro_fim") or 0),
         slug_pasta=slug,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
@@ -1476,6 +1482,7 @@ def api_listar_cenas(slug: str) -> dict:
                 "duracao_segundos": duracao,
                 "duracao_natural_segundos": cena.get("duracao_natural", duracao),
                 "duracao_minima_segundos": max(1.0, round(cena.get("duracao_natural", duracao) / pipeline_mod.VELOCIDADE_MAXIMA_FALA + 0.05, 1)),
+                "pausa_antes_segundos": cena.get("pausa_antes", 0) or 0,
                 "inicio_segundos": round(acumulado, 1),
                 "imagem": _url(i, "16x9"),
                 "imagem_vertical": _url(i, "9x16"),
@@ -1604,7 +1611,7 @@ def api_remover_cena_padrao(id: str) -> JSONResponse:
 
 
 @app.post("/api/videos/{slug}/cenas/duracoes")
-def api_duracoes_das_cenas(slug: str, duracoes: str = Form(...)) -> dict:
+def api_duracoes_das_cenas(slug: str, duracoes: str = Form(...), pausas_antes: str = Form("")) -> dict:
     """Novo tempo de cada cena ({"indice": segundos}). Só aumenta: as cenas seguintes são empurradas pra frente."""
     caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
     if "/" in slug or "\\" in slug or not caminho_meta.exists():
@@ -1616,7 +1623,11 @@ def api_duracoes_das_cenas(slug: str, duracoes: str = Form(...)) -> dict:
         pedido = {str(int(k)): float(v) for k, v in json.loads(duracoes).items()}
     except (ValueError, AttributeError, TypeError):
         return JSONResponse({"erro": "tempos inválidos"}, status_code=400)
-    job = jobs.criar_job_funcao(metadados.get("titulo", slug), lambda cb: _resultado_videos(slug, pipeline_mod.aplicar_duracoes(slug, pedido, progresso=cb)), estimativa=60.0)
+    try:
+        pausas = {str(int(k)): max(0.0, min(30.0, float(v))) for k, v in json.loads(pausas_antes).items()} if pausas_antes.strip() else None
+    except (ValueError, AttributeError, TypeError):
+        return JSONResponse({"erro": "pausas inválidas"}, status_code=400)
+    job = jobs.criar_job_funcao(metadados.get("titulo", slug), lambda cb: _resultado_videos(slug, pipeline_mod.aplicar_duracoes(slug, pedido, progresso=cb, pausas_antes=pausas)), estimativa=60.0)
     return {"job_id": job.id}
 
 

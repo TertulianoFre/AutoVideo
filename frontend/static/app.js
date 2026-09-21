@@ -626,6 +626,14 @@ function cardDeCena(slug, cena, tempoEditavel) {
   const natural = Math.round((cena.duracao_natural_segundos ?? cena.duracao_segundos ?? 0) * 10) / 10;
   const minimo = cena.duracao_minima_segundos ?? natural;
   const atual = Math.round((cena.duracao_segundos || 0) * 10) / 10;
+  const antesCena = Math.round((cena.pausa_antes_segundos || 0) * 10) / 10;
+  const depoisCena = Math.max(0, Math.round((atual - antesCena - natural) * 10) / 10);
+  const pausas = tempoEditavel
+    ? `<div class="cena-pausas" title="Silêncio no começo e no fim da cena, em volta da fala. Muda o tempo total da cena; as outras só andam no tempo.">
+         <label>Pausa antes da fala <input type="number" class="cena-pausa-antes" min="0" max="30" step="0.1" value="${antesCena}" data-original="${antesCena}"> s</label>
+         <label>Pausa depois da fala <input type="number" class="cena-pausa-depois" min="0" max="120" step="0.1" value="${depoisCena}"> s</label>
+       </div>`
+    : "";
   const tempo = tempoEditavel
     ? `<label class="cena-tempo" title="Tempo que a cena fica na tela. As outras cenas não mudam de duração: só andam pra frente (se você aumentar) ou pra trás (se diminuir).">
          Tempo da cena
@@ -642,6 +650,7 @@ function cardDeCena(slug, cena, tempoEditavel) {
         </div>
         <p class="cena-card-texto">${cena.audio_do_video ? "🎬 Vídeo com o áudio dele (sem narração) — a duração é a do vídeo" : texto}</p>
         ${tempo}
+        ${pausas}
         <div class="cena-edicao" hidden>
           <textarea class="cena-edicao-texto" rows="4" data-original="${texto}">${texto}</textarea>
           <div class="video-meta cena-edicao-info"></div>

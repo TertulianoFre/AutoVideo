@@ -192,6 +192,8 @@ def gerar_video(
     slug_pasta: str | None = None,
     em_branco: bool = False,
     descricao_youtube: str = "",
+    respiro_inicio: float = 0.0,
+    respiro_fim: float = 0.0,
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -237,6 +239,7 @@ def gerar_video(
         duracao_alvo_minutos=duracao_alvo_minutos,
         canal_id=canal_id,
         em_branco=em_branco,
+        respiro_inicio=respiro_inicio, respiro_fim=respiro_fim,
         **({"descricao_youtube": descricao_youtube} if descricao_youtube.strip() else {}),  # escrita por você: a IA não sobrescreve
     )
 
@@ -424,6 +427,7 @@ def gerar_video(
     )
 
     formatos_ativos = _formatos_de(formatos)
+    com_respiro = (not sem_narracao) and (respiro_inicio > 0.01 or respiro_fim > 0.01)
     total_imagens = len(lista_cenas) * len(formatos_ativos)
     imagens_feitas = 0
 
@@ -477,10 +481,32 @@ def gerar_video(
             imagens_feitas += 1
             avisar(f"Gerando imagens ({formato})", 20 + 65 * imagens_feitas / total_imagens)
 
+        if com_respiro:  # a montagem final vem depois, já com as pausas do começo e do fim
+            videos[formato] = pasta / f"video_{sufixo}.mp4"
+            continue
         avisar(f"Montando o vídeo ({formato})", 88 if formato == "16:9" else 94)
         videos[formato] = render.renderizar_slideshow(
             imagens_com_duracao, audio_path, legenda_path, formato, pasta / f"video_{sufixo}.mp4", transicao=transicao
         )
+
+    if com_respiro:
+        # pausa curta antes da 1ª fala e depois da última (o vídeo não começa nem acaba "de repente"): usa a mesma
+        # remontagem do "tempo das cenas", que refaz áudio (com o som de fundo), legenda e vídeo de uma vez
+        try:
+            meta_atual = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
+            duracoes = {str(i): c["duracao_segundos"] for i, c in enumerate(meta_atual.get("cenas") or [])}
+            ultimo = str(len(duracoes) - 1)
+            duracoes["0"] = round(duracoes["0"] + max(0.0, respiro_inicio), 3)  # a pausa do começo soma ao tempo (a fala não acelera)
+            duracoes[ultimo] = round(duracoes[ultimo] + max(0.0, respiro_fim), 3)
+            aplicar_duracoes(pasta.name, duracoes, progresso=lambda etapa, pct: avisar(etapa, 88 + 0.09 * pct), pausas_antes={"0": max(0.0, respiro_inicio)})
+        except Exception as erro:  # sem as pausas o vídeo ainda sai: refaz a montagem simples
+            print(f"[aviso] pausas do começo/fim falharam ({erro}); montando sem elas")
+            for formato, estilo in formatos_ativos.items():
+                sufixo = formato.replace(":", "x")
+                imagens_simples = [(pasta / f"cena{i:02d}_{sufixo}.png", d) for i, (_, d) in enumerate(lista_cenas)]
+                legenda_simples = (pasta / f"legenda_{sufixo}.ass") if (pasta / f"legenda_{sufixo}.ass").exists() else None
+                videos[formato] = render.renderizar_slideshow(imagens_simples, audio_path, legenda_simples, formato, pasta / f"video_{sufixo}.mp4", transicao=transicao)
+        audio_path = pasta / "audio_ajustado.m4a" if (pasta / "audio_ajustado.m4a").exists() else audio_path
 
     if "16:9" not in videos:
         # só Shorts: as telas de thumbnail/cenas trabalham com as imagens
@@ -537,6 +563,7 @@ def _cues_ajustados(pasta: Path, metadados: dict) -> list:
     cenas = metadados.get("cenas") or []
     naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
     novos = [c["duracao_segundos"] for c in cenas]
+    antes = [float(c.get("pausa_antes", 0) or 0) for c in cenas]  # silêncio no começo de cada cena, antes da fala
     ini_natural, ini_novo = [0.0], [0.0]
     for n, d in zip(naturais, novos):
         ini_natural.append(ini_natural[-1] + n)
@@ -547,8 +574,9 @@ def _cues_ajustados(pasta: Path, metadados: dict) -> list:
         for i in range(len(naturais)):
             if ini_natural[i] <= t + 1e-6:
                 idx = i
-        fator = novos[idx] / naturais[idx] if novos[idx] < naturais[idx] - 0.05 else 1.0  # só encurtar muda o ritmo
-        return ini_novo[idx] + (t - ini_natural[idx]) * fator
+        espaco = novos[idx] - antes[idx]  # o que sobra da cena depois da pausa inicial
+        fator = espaco / naturais[idx] if espaco < naturais[idx] - 0.05 else 1.0  # só encurtar muda o ritmo
+        return ini_novo[idx] + antes[idx] + (t - ini_natural[idx]) * fator
 
     dados = json.loads((pasta / "cues.json").read_text(encoding="utf-8"))
     return [
@@ -558,7 +586,7 @@ def _cues_ajustados(pasta: Path, metadados: dict) -> list:
 
 
 @_com_trava_de_edicao
-def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float], None] | None = None) -> dict:
+def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float], None] | None = None, pausas_antes: dict | None = None) -> dict:
     """Muda o tempo de cada cena. As outras cenas NUNCA mudam de duração por causa disso: só andam pra
     frente (cena alongada) ou pra trás (cena encurtada). Alongar vira uma pausa depois da fala daquela
     cena; encurtar acelera a fala dela (até 1,5x). Refaz o áudio (com o som de fundo), a legenda e os vídeos."""
@@ -587,13 +615,18 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
     for i, c in enumerate(cenas):
         natural = c.get("duracao_natural", c["duracao_segundos"])
         c["duracao_natural"] = natural
+        pedido_antes = (pausas_antes or {}).get(str(i), (pausas_antes or {}).get(i))
+        antes_i = max(0.0, min(30.0, float(pedido_antes if pedido_antes is not None else c.get("pausa_antes", 0) or 0)))
         desejado = float(duracoes.get(str(i), duracoes.get(i, c["duracao_segundos"])))
-        c["duracao_segundos"] = round(max(natural / VELOCIDADE_MAXIMA_FALA, 1.0, min(desejado, natural + 300)), 2)
+        c["duracao_segundos"] = round(max(antes_i + natural / VELOCIDADE_MAXIMA_FALA, 1.0, min(desejado, antes_i + natural + 300)), 2)
+        c["pausa_antes"] = round(antes_i, 2)
         if c.get("audio_do_video"):
             c["duracao_segundos"] = natural  # vídeo com som próprio: não estica nem acelera
+            c["pausa_antes"] = 0.0
     naturais = [c["duracao_natural"] for c in cenas]
     novos = [c["duracao_segundos"] for c in cenas]
-    extras = [round(d - n, 3) for d, n in zip(novos, naturais)]
+    antes = [c.get("pausa_antes", 0.0) for c in cenas]
+    extras = [round(d - a - n, 3) for d, a, n in zip(novos, antes, naturais)]  # >0: pausa depois da fala; <0: fala acelerada
 
     # --- áudio: narração original com uma pausa depois de cada cena que ganhou tempo ---
     avisar("Refazendo o áudio com as pausas", 10)
@@ -604,12 +637,13 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
             inicio = t
             t += nat
             trecho = f"atrim=start={inicio:.3f}" + (f":end={t:.3f}" if i < n - 1 else "")
+            atraso = f",adelay={round(antes[i] * 1000)}|{round(antes[i] * 1000)}" if antes[i] > 0.01 else ""  # pausa antes da fala
             if ext > 0.01:
-                ajuste = f",apad=pad_dur={ext:.3f}"  # cena mais longa: pausa depois da fala
+                ajuste = f"{atraso},apad=pad_dur={ext:.3f}"  # cena mais longa: pausa depois da fala
             elif ext < -0.01:
-                ajuste = f",atempo={nat / novos[i]:.4f}"  # cena mais curta: fala mais rápida (mesmo tom)
+                ajuste = f",atempo={nat / (novos[i] - antes[i]):.4f}{atraso}"  # cena mais curta: fala mais rápida (mesmo tom)
             else:
-                ajuste = ""
+                ajuste = atraso
             filtros.append(f"[0:a]{trecho},asetpts=PTS-STARTPTS{ajuste}[a{i}]")
         filtros.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[saida]")
         com_pausas = pasta / "narracao_com_pausas.wav"

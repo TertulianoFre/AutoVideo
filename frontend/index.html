@@ -330,6 +330,17 @@
                 <p class="hint">Se gravar ou enviar um áudio, o campo Roteiro acima precisa ter exatamente o texto que você leu — é o que permite gerar cenas e legenda sincronizadas (de forma aproximada, cortando/repetindo o áudio pra caber certinho). Voz e idioma abaixo ficam sem efeito nesse caso.</p>
               </div>
 
+              <div class="row-2" id="linha-respiro">
+                <label>
+                  <span>Pausa no começo do vídeo (s) <em>— silêncio antes da 1ª fala</em></span>
+                  <input type="number" name="respiro_inicio" min="0" max="10" step="0.1" value="0.5">
+                </label>
+                <label>
+                  <span>Pausa no fim do vídeo (s) <em>— depois da última palavra</em></span>
+                  <input type="number" name="respiro_fim" min="0" max="15" step="0.1" value="1.5">
+                </label>
+              </div>
+
               <div class="row-2" id="linha-voz-idioma">
                 <label>
                   <span>Voz (narração por IA)</span>

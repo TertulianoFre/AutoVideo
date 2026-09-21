@@ -398,8 +398,24 @@ async function abrirFormularioDeCena(painel, padrao, posicaoInicial) {
 // ---------------- tempo de cada cena (só aumenta; as seguintes andam pra frente) ----------------
 
 function temposAlterados(painel) {
-  return [...painel.querySelectorAll(".cena-duracao")].some((i) => Math.abs((parseFloat(i.value) || 0) - parseFloat(i.dataset.original)) > 0.05);
+  const total = [...painel.querySelectorAll(".cena-duracao")].some((i) => Math.abs((parseFloat(i.value) || 0) - parseFloat(i.dataset.original)) > 0.05);
+  const antes = [...painel.querySelectorAll(".cena-pausa-antes")].some((i) => Math.abs((parseFloat(i.value) || 0) - parseFloat(i.dataset.original)) > 0.05);
+  return total || antes;
 }
+
+// tempo da cena = pausa antes + fala + pausa depois: mexer numa das pausas ajusta o total; mexer no total ajusta a pausa de depois
+document.addEventListener("input", (ev) => {
+  const campo = ev.target.closest(".cena-pausa-antes, .cena-pausa-depois");
+  if (!campo) return;
+  const card = campo.closest(".cena-card");
+  const total = card.querySelector(".cena-duracao");
+  const natural = parseFloat(total.dataset.natural);
+  const antes = Math.max(0, parseFloat(card.querySelector(".cena-pausa-antes").value) || 0);
+  const depois = Math.max(0, parseFloat(card.querySelector(".cena-pausa-depois").value) || 0);
+  total.dataset.minimo = String(Math.round((antes + natural / 1.5 + 0.05) * 10) / 10);
+  total.value = Math.round((antes + natural + depois) * 10) / 10;
+  recalcularTemposDasCenas(card.closest(".cenas-painel"));
+});
 
 function recalcularTemposDasCenas(painel) {
   let acumulado = 0;
@@ -434,9 +450,20 @@ function recalcularTemposDasCenas(painel) {
   if (mudou) botao.textContent = `Aplicar tempos (vídeo de ${formatarTempo(parseFloat(total.dataset.original))} → ${formatarTempo(acumulado)})`;
 }
 
+function sincronizarPausaDepois(card) {
+  const total = card.querySelector(".cena-duracao");
+  const depois = card.querySelector(".cena-pausa-depois");
+  if (!total || !depois) return;
+  const antes = Math.max(0, parseFloat(card.querySelector(".cena-pausa-antes")?.value) || 0);
+  depois.value = Math.max(0, Math.round(((parseFloat(total.value) || 0) - antes - parseFloat(total.dataset.natural)) * 10) / 10);
+}
+
 document.addEventListener("input", (ev) => {
   const campo = ev.target.closest(".cena-duracao");
-  if (campo) recalcularTemposDasCenas(campo.closest(".cenas-painel"));
+  if (campo) {
+    sincronizarPausaDepois(campo.closest(".cena-card"));
+    recalcularTemposDasCenas(campo.closest(".cenas-painel"));
+  }
 });
 
 document.addEventListener("change", (ev) => {
@@ -444,6 +471,7 @@ document.addEventListener("change", (ev) => {
   if (!campo) return;
   const minimo = parseFloat(campo.dataset.minimo);
   if (!(parseFloat(campo.value) >= minimo)) campo.value = minimo; // abaixo disso a fala ficaria rápida demais
+  sincronizarPausaDepois(campo.closest(".cena-card"));
   recalcularTemposDasCenas(campo.closest(".cenas-painel"));
 });
 
@@ -451,14 +479,18 @@ async function aplicarTemposDasCenas(painel, slug) {
   const status = painel.querySelector(".cenas-rodape-status");
   const botao = painel.querySelector(".btn-aplicar-tempos");
   const duracoes = {};
+  const pausasAntes = {};
   painel.querySelectorAll(".cena-card").forEach((card) => {
     const campo = card.querySelector(".cena-duracao");
     if (campo) duracoes[card.dataset.indice] = Math.max(parseFloat(campo.value) || 0, parseFloat(campo.dataset.minimo));
+    const antes = card.querySelector(".cena-pausa-antes");
+    if (antes) pausasAntes[card.dataset.indice] = Math.max(0, parseFloat(antes.value) || 0);
   });
   if (!confirm("Aplicar os novos tempos? Cenas que aumentaram ganham uma pausa depois da fala; as que diminuíram têm a fala acelerada. As outras cenas só andam no tempo (não mudam de duração), a legenda acompanha e o vídeo é remontado. A publicação precisará ser confirmada de novo.")) return;
   botao.disabled = true;
   const corpo = new FormData();
   corpo.set("duracoes", JSON.stringify(duracoes));
+  corpo.set("pausas_antes", JSON.stringify(pausasAntes));
   const { job_id, erro } = await fetch(`/api/videos/${slug}/cenas/duracoes`, { method: "POST", body: corpo }).then((r) => r.json());
   if (erro) {
     status.textContent = `Deu erro: ${erro}`;
