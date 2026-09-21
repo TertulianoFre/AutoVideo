@@ -624,6 +624,23 @@ def api_preparar_pasta_de_video(canal_id: str = Form(...), nome: str = Form(...)
     return JSONResponse({"itens": itens})
 
 
+@app.post("/api/roteiro/resumo-cenas")
+def api_resumo_das_cenas(roteiro: str = Form(""), titulo: str = Form(""), descricao_video: str = Form("")) -> JSONResponse:
+    """Novo vídeo: cada parágrafo do roteiro (uma linha = uma cena) ganha uma descrição da imagem que combina com ele e um
+    pedido em inglês para colar numa IA de imagem (Grok etc.). O tempo de cada cena o próprio formulário estima."""
+    from engine import visuals as visuals_mod
+
+    paragrafos = [p.strip() for p in roteiro.replace("\r", "").split("\n") if p.strip()][:40]
+    if not paragrafos:
+        return JSONResponse({"erro": "escreva o roteiro primeiro"}, status_code=400)
+    plano = visuals_mod.planejar_visuais(titulo.strip(), paragrafos, descricao_video.strip())
+    cenas = []
+    for i, texto in enumerate(paragrafos):
+        p = plano.get(str(i)) or {}
+        cenas.append({"indice": i, "descricao": p.get("descricao") or texto[:140], "prompt": p.get("visual") or texto[:200], "ia": bool(p)})
+    return JSONResponse({"cenas": cenas, "ia": bool(plano)})
+
+
 @app.get("/api/videos/{slug}/prompts-imagens")
 def api_prompts_de_imagens(slug: str) -> JSONResponse:
     """Um pedido de imagem por cena, para colar no Grok (ou em outra IA de imagem). Usa o plano visual do roteiro;

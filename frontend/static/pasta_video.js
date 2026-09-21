@@ -114,3 +114,55 @@ document.querySelector('[data-tab="novo"]').addEventListener("click", atualizarT
 seletorCanal.addEventListener("change", () => { campoThumbBase.value = ""; atualizarThumbsDoNovo(); });
 document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { campoThumbBase.value = ""; atualizarThumbsDoNovo(); }, 80));
 atualizarThumbsDoNovo();
+
+
+// ---------------- resumo das cenas: por parágrafo, a descrição da imagem e o tempo (para pedir as imagens na IA de imagem) ----------------
+const blocoResumo = document.getElementById("resumo-cenas");
+const btnResumo = document.getElementById("btn-resumo-cenas");
+
+function segundosDaCena(texto) {
+  return Math.max(1, Math.round(estimarNarracao(texto).segundos));
+}
+
+function tempoEmTexto(s) {
+  return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+}
+
+btnResumo.addEventListener("click", async () => {
+  const paragrafos = campoRoteiro.value.split("\n").map((p) => p.trim()).filter(Boolean);
+  if (!paragrafos.length) {
+    blocoResumo.hidden = false;
+    blocoResumo.innerHTML = '<span class="video-meta">Escreva (ou cole) o roteiro primeiro: cada parágrafo vira uma cena.</span>';
+    return;
+  }
+  btnResumo.disabled = true;
+  blocoResumo.hidden = false;
+  blocoResumo.innerHTML = '<span class="video-meta">A IA está descrevendo a imagem de cada cena…</span>';
+  const dados = new FormData();
+  dados.set("roteiro", campoRoteiro.value);
+  dados.set("titulo", formNovo.titulo.value);
+  dados.set("descricao_video", formNovo.descricao_video.value);
+  const r = await fetch("/api/roteiro/resumo-cenas", { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+  btnResumo.disabled = false;
+  if (r.erro) { blocoResumo.innerHTML = `<span class="roteiro-cenas-aviso">Não deu: ${escaparAttr(r.erro)}</span>`; return; }
+  const tempos = paragrafos.map(segundosDaCena);
+  const total = tempos.reduce((a, b) => a + b, 0);
+  const texto = r.cenas.map((c, i) => `Cena ${i + 1} (${tempoEmTexto(tempos[i])}): ${c.descricao}\n${c.prompt}`).join("\n\n");
+  blocoResumo.dataset.copia = texto;
+  blocoResumo.innerHTML =
+    `<div class="resumo-topo"><b>Resumo: ${r.cenas.length} cena(s) · ≈ ${tempoEmTexto(total)} de narração</b>` +
+    `<button type="button" class="btn-secondary btn-compacto" id="btn-resumo-copiar" title="Copia todas as cenas (descrição + pedido em inglês) para colar na IA de imagem">Copiar tudo</button></div>` +
+    (r.ia ? "" : '<div class="roteiro-cenas-aviso">A IA de texto não respondeu agora: a descrição é o começo do próprio parágrafo. Tente de novo em instantes.</div>') +
+    r.cenas.map((c, i) => `<div class="resumo-cena">
+        <div class="resumo-cena-topo"><b>Cena ${i + 1}</b><span class="video-meta">≈ ${tempoEmTexto(tempos[i])}</span></div>
+        <div>${escaparAttr(c.descricao)}</div>
+        <div class="video-meta resumo-prompt">${escaparAttr(c.prompt)}</div>
+      </div>`).join("") +
+    '<span class="video-meta">A descrição é em português; a linha em cinza é o pedido em inglês (costuma dar melhor resultado na IA de imagem). O tempo é uma estimativa da narração.</span>';
+  document.getElementById("btn-resumo-copiar").addEventListener("click", async (ev) => {
+    try { await navigator.clipboard.writeText(blocoResumo.dataset.copia); ev.target.textContent = "Copiado!"; }
+    catch { prompt("Copie o resumo:", blocoResumo.dataset.copia); }
+    setTimeout(() => { ev.target.textContent = "Copiar tudo"; }, 1800);
+  });
+});
+campoRoteiro.addEventListener("input", () => { blocoResumo.hidden = true; }); // roteiro mudou: o resumo antigo não vale mais

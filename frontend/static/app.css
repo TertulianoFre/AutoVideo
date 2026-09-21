@@ -769,3 +769,11 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .entrada-pasta-nome { font-weight: 600; }
 .entrada-pasta .btn-compacto { margin-left: auto; }
 .pasta-video-bloco { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+/* resumo das cenas (Novo vídeo) */
+.resumo-cenas { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.resumo-cenas[hidden] { display: none; }
+.resumo-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.resumo-cena { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.resumo-cena-topo { display: flex; gap: 10px; align-items: baseline; }
+.resumo-prompt { font-style: italic; }

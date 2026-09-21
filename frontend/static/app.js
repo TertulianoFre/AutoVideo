@@ -1174,7 +1174,7 @@ function atualizarCenasDoRoteiro() {
       ? `<div class="roteiro-cenas-ok">Cada parágrafo vira uma cena. Edite o texto acima à vontade: os tempos abaixo se atualizam.</div>`
       : `<div class="roteiro-cenas-aviso">O roteiro tem ${paragrafos.length} parágrafo(s) e você pediu ${nCenas} cenas — pra cada parágrafo virar uma cena, separe o texto em exatamente ${nCenas} parágrafos (uma linha em branco entre eles). Do jeito que está, as cenas serão divididas por tempo.</div>`;
   }
-  const rotulo = nCenas >= 2 ? "Cena" : "Parágrafo";
+  const rotulo = "Cena";
   caixa.innerHTML = total + aviso + paragrafos.map((p, i) => `<div class="roteiro-cena"><b>${rotulo} ${i + 1}</b> <span class="video-meta">${formatarNarracao(p)}</span><div>${p.replace(/</g, "&lt;")}</div></div>`).join("");
 }
 
