@@ -16,6 +16,11 @@ async function atualizarEntrada() {
             <button type="button" class="btn-secondary btn-compacto entrada-pasta-abrir">Abrir</button>
           </div>`).join("") || '<span class="video-meta">Nenhuma pasta de vídeo ainda. Clique em "+ Nova pasta de vídeo".</span>'}
       </div>
+      <div class="entrada-pasta entrada-pasta-thumb">
+        <span class="entrada-pasta-nome">🖼 ${escaparAttr("Thumbnails")}</span>
+        <span class="video-meta">${c.thumbnails.arquivos} imagem(ns) aguardando · as que já entraram ficam na Base como "thumbnail"</span>
+        <button type="button" class="btn-secondary btn-compacto entrada-thumb-abrir">Abrir</button>
+      </div>
       <div class="preview-row">
         <button type="button" class="btn-secondary btn-compacto entrada-nova">+ Nova pasta de vídeo</button>
         <button type="button" class="btn-secondary btn-compacto entrada-abrir">Abrir a pasta do canal</button>
@@ -32,7 +37,13 @@ async function atualizarEntrada() {
       if (res.erro) document.getElementById("entrada-status").textContent = `Não consegui abrir: ${res.erro}`;
     };
     el.querySelector(".entrada-abrir").addEventListener("click", () => abrir(""));
-    el.querySelectorAll(".entrada-pasta").forEach((p) => p.querySelector(".entrada-pasta-abrir").addEventListener("click", () => abrir(p.dataset.pasta)));
+    el.querySelectorAll(".entrada-pastas .entrada-pasta").forEach((p) => p.querySelector(".entrada-pasta-abrir").addEventListener("click", () => abrir(p.dataset.pasta)));
+    el.querySelector(".entrada-thumb-abrir").addEventListener("click", async () => {
+      const dados = new FormData();
+      dados.append("canal_id", el.dataset.canal);
+      dados.append("thumbnails", "true");
+      await fetch("/api/base/abrir-entrada", { method: "POST", body: dados }).catch(() => {});
+    });
     el.querySelector(".entrada-nova").addEventListener("click", async () => {
       const dados = new FormData();
       dados.append("canal_id", el.dataset.canal);

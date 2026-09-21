@@ -15,6 +15,7 @@ from engine import biblioteca, canal
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA = RAIZ / "dados" / "entrada"
 NOME_IMPORTADOS = "importados"
+NOME_THUMBNAILS = "Thumbnails"  # dados/entrada/<canal>/Thumbnails: imagens de fundo para as thumbnails do canal
 EXT_IMAGEM = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 EXT_VIDEO = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 _trava = threading.Lock()
@@ -29,6 +30,7 @@ def garantir_pasta() -> Path:
     PASTA.mkdir(parents=True, exist_ok=True)
     for c in canal.listar_canais():
         (pasta_do_canal(c["id"]) / NOME_IMPORTADOS).mkdir(parents=True, exist_ok=True)
+        (pasta_do_canal(c["id"]) / NOME_THUMBNAILS / NOME_IMPORTADOS).mkdir(parents=True, exist_ok=True)
     (PASTA / NOME_IMPORTADOS).mkdir(exist_ok=True)
     return PASTA
 
@@ -61,7 +63,7 @@ def pendentes() -> list:
     return [f for lista in pendentes_por_canal().values() for f in lista]
 
 
-def _marcar_canal(tipo: str, nome: str, canal_id: str) -> None:
+def _marcar_canal(tipo: str, nome: str, canal_id: str, thumbnail: bool = False, original: str = "") -> None:
     caminho = biblioteca.RAIZ / "meta.json"
     try:
         meta = json.loads(caminho.read_text(encoding="utf-8"))
@@ -70,6 +72,9 @@ def _marcar_canal(tipo: str, nome: str, canal_id: str) -> None:
     item = meta.setdefault(tipo, {}).setdefault(nome, {})
     item.setdefault("descricao", "")
     item["canal_id"] = canal_id
+    if thumbnail:
+        item["thumbnail"] = True
+        item["original"] = original
     caminho.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -99,7 +104,31 @@ def importar(canal_id: str | None = None) -> dict:
             except Exception as erro:
                 erros.append({"arquivo": arquivo.name, "erro": str(erro)[:160]})
                 shutil.move(str(arquivo), str(IMPORTADOS / f"ERRO-{arquivo.name}")) if arquivo.exists() else None
+        for cid, arquivo in _thumbnails_prontas(canal_id):
+            destino_pasta = pasta_do_canal(cid) / NOME_THUMBNAILS / NOME_IMPORTADOS
+            try:
+                nome = biblioteca.salvar_imagem(f"thumb-{cid}-{arquivo.stem}", arquivo.read_bytes())
+                _marcar_canal("imagens", nome, cid, thumbnail=True, original=arquivo.name)
+                destino = destino_pasta / arquivo.name
+                n = 1
+                while destino.exists():
+                    destino = destino_pasta / f"{arquivo.stem}-{n}{arquivo.suffix}"
+                    n += 1
+                shutil.move(str(arquivo), str(destino))
+                importados.append({"arquivo": arquivo.name, "nome": nome, "tipo": "imagens", "canal_id": cid, "thumbnail": True})
+            except Exception as erro:
+                erros.append({"arquivo": arquivo.name, "erro": str(erro)[:160]})
     return {"importados": importados, "erros": erros}
+
+
+def _thumbnails_prontas(canal_id: str | None = None) -> list:
+    """[(canal, arquivo)] das imagens já baixadas nas pastas Thumbnails (só imagens)."""
+    saida = []
+    for c in canal.listar_canais():
+        if canal_id and c["id"] != canal_id:
+            continue
+        saida += [(c["id"], f) for f in _prontos(pasta_do_canal(c["id"]) / NOME_THUMBNAILS) if f.suffix.lower() in EXT_IMAGEM]
+    return saida
 
 
 def iniciar() -> None:
@@ -138,7 +167,7 @@ def _arquivos_da_pasta(pasta: Path) -> list:
 
 def _pasta_de_video_valida(canal_id: str, nome: str) -> Path | None:
     """A subpasta pedida, só se for mesmo uma pasta de vídeo desse canal (nada de sair da pasta de entrada)."""
-    if not canal.obter_canal(canal_id) or not nome or "/" in nome or "\\" in nome or nome.startswith(".") or nome == NOME_IMPORTADOS:
+    if not canal.obter_canal(canal_id) or not nome or "/" in nome or "\\" in nome or nome.startswith(".") or nome in (NOME_IMPORTADOS, NOME_THUMBNAILS):
         return None
     pasta = pasta_do_canal(canal_id) / nome
     return pasta if pasta.is_dir() else None
@@ -149,7 +178,7 @@ def pastas_de_video(canal_id: str) -> list:
     raiz = pasta_do_canal(canal_id)
     if not raiz.is_dir():
         return []
-    pastas = [p for p in raiz.iterdir() if p.is_dir() and not p.name.startswith(".") and p.name != NOME_IMPORTADOS]
+    pastas = [p for p in raiz.iterdir() if p.is_dir() and not p.name.startswith(".") and p.name not in (NOME_IMPORTADOS, NOME_THUMBNAILS)]
     pastas.sort(key=_ordem_natural)
     return [{"nome": p.name, "caminho": str(p), "arquivos": len(_arquivos_da_pasta(p))} for p in pastas]
 
@@ -195,3 +224,8 @@ def preparar_pasta_de_video(canal_id: str, nome: str) -> list:
             saida.append({"arquivo": arquivo.name, "chave": f"{'imagem' if eh_imagem else 'video'}:{anterior['nome']}", "tipo": tipo, "nome": anterior["nome"]})
         caminho_registro.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
     return saida
+
+
+def resumo_thumbnails(canal_id: str) -> dict:
+    pasta = pasta_do_canal(canal_id) / NOME_THUMBNAILS
+    return {"caminho": str(pasta), "arquivos": len([f for f in pasta.iterdir() if f.is_file() and f.suffix.lower() in EXT_IMAGEM]) if pasta.is_dir() else 0}

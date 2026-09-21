@@ -5,6 +5,7 @@ Um único fluxo pra tudo: vídeo narrado normal, com ou sem som de fundo
 som de fundo + imagem, pra vídeos longos de relaxar/dormir)."""
 
 import json
+import shutil
 import threading
 import re
 from dataclasses import dataclass, field
@@ -138,9 +139,21 @@ def _gerar_em_branco(pasta: Path, titulo: str, formatos: str, num_cenas: int | N
     )
     resultado = aplicar_duracoes(pasta.name, {}, progresso=lambda etapa, pct: avisar(etapa, 20 + 0.75 * pct))
     avisar("Gerando a thumbnail", 97)
-    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
+    caminho_thumb = _gerar_thumbnail_do_video(pasta, titulo, thumbnail_base)
     avisar("Pronto", 100)
     return ResultadoGeracao(pasta, pasta / "audio_ajustado.m4a", (pasta / "video_16x9.mp4") if resultado.get("video_16_9") else None, (pasta / "video_9x16.mp4") if resultado.get("video_9_16") else None, por_cena * n, "", [], caminho_thumb)
+
+
+def _gerar_thumbnail_do_video(pasta: Path, titulo: str, thumbnail_base: str = "") -> Path:
+    """Thumbnail inicial. Com `thumbnail_base` (uma imagem da Base, da pasta Thumbnails do canal) ela é o fundo;
+    sem ele (ou se sumiu da Base), usa a 1ª cena."""
+    origem = biblioteca.caminho_imagem_valida(thumbnail_base) if thumbnail_base else None
+    if origem is None:
+        return thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
+    fundo = pasta / f"biblioteca-{origem.name}"  # mesmo nome que a galeria de thumbnail usa, assim escolher outra depois funciona igual
+    shutil.copyfile(origem, fundo)
+    (pasta / "thumbnail_fonte.txt").write_text(fundo.name, encoding="utf-8")
+    return thumbnail_mod.gerar_thumbnail(fundo, titulo, pasta / "thumbnail.png")
 
 
 def _preparar_som_da_base(nome_unico: str, playlist: list | None, opcoes: dict | None, duracao: float, destino: Path) -> None:
@@ -194,6 +207,7 @@ def gerar_video(
     descricao_youtube: str = "",
     respiro_inicio: float = 0.0,
     respiro_fim: float = 0.0,
+    thumbnail_base: str = "",
     progresso: Callable[[str, float], None] | None = None,
 ) -> ResultadoGeracao:
     """sem_narracao=True: vídeo é só o som de fundo (som_fundo_tipo, "chuva"
@@ -240,6 +254,7 @@ def gerar_video(
         canal_id=canal_id,
         em_branco=em_branco,
         respiro_inicio=respiro_inicio, respiro_fim=respiro_fim,
+        thumbnail_base=thumbnail_base,
         **({"descricao_youtube": descricao_youtube} if descricao_youtube.strip() else {}),  # escrita por você: a IA não sobrescreve
     )
 
@@ -516,7 +531,7 @@ def gerar_video(
             visuals._cobrir(vertical, 1920, 1080).save(pasta / f"cena{i:02d}_16x9.png", "PNG")
 
     avisar("Gerando a thumbnail", 97)
-    caminho_thumb = thumbnail_mod.gerar_thumbnail(pasta / "cena00_16x9.png", titulo, pasta / "thumbnail.png")
+    caminho_thumb = _gerar_thumbnail_do_video(pasta, titulo, thumbnail_base)
 
     avisar("Pronto", 100)
     return ResultadoGeracao(pasta, audio_path, videos.get("16:9"), videos.get("9:16"), duracao_real, roteiro_final, tags, caminho_thumb)

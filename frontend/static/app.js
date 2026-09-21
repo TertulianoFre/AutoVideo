@@ -508,7 +508,7 @@ async function carregarImagensThumb(slug, painel) {
       return;
     }
     grade.innerHTML = dados.imagens
-      .map((img) => `<button type="button" class="thumb-img-opcao${img.atual ? " selecionada" : ""}" data-nome="${img.nome}" title="${img.nome}${img.descricao ? " — " + img.descricao : ""}"><img src="${img.url}" alt=""></button>`)
+      .map((img) => `<button type="button" class="thumb-img-opcao${img.atual ? " selecionada" : ""}" data-nome="${img.nome}" title="${img.thumbnail_canal ? "Pasta Thumbnails do canal — " : ""}${img.nome}${img.descricao ? " — " + img.descricao : ""}"><img src="${img.url}" alt="">${img.thumbnail_canal ? '<span class="base-tipo">thumbnail</span>' : ""}</button>`)
       .join("");
     grade.querySelectorAll(".thumb-img-opcao").forEach((op) => {
       op.addEventListener("click", () => escolherImagemThumb(slug, painel, op));

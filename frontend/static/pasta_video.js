@@ -88,3 +88,29 @@ document.querySelector('[data-tab="novo"]').addEventListener("click", atualizarP
 seletorCanal.addEventListener("change", () => { campoPastaVideo.value = ""; pastaVideoAplicada = ""; infoPastaVideo.textContent = ""; atualizarPastasDeVideoNovo(); });
 document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { campoPastaVideo.value = ""; pastaVideoAplicada = ""; infoPastaVideo.textContent = ""; btnAbrirPastaVideo.hidden = true; btnDescreverPastaVideo.hidden = true; }, 80));
 atualizarPastasDeVideoNovo();
+
+
+// ---------------- thumbnail do vídeo: escolher entre as imagens da pasta Thumbnails do canal ----------------
+const gradeThumbNovo = document.getElementById("thumb-novo-grade");
+const campoThumbBase = document.getElementById("campo-thumbnail-base");
+
+async function atualizarThumbsDoNovo() {
+  const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(seletorCanal.value || "")}`).then((x) => x.json()).catch(() => null);
+  if (!dados) return;
+  const thumbs = (dados.imagens || []).filter((i) => i.thumbnail && (i.canal_id === "" || i.canal_id === seletorCanal.value));
+  if (!thumbs.some((t) => t.nome === campoThumbBase.value)) campoThumbBase.value = "";
+  gradeThumbNovo.innerHTML = thumbs.length
+    ? thumbs.map((t) => `<div class="base-opcao"><button type="button" class="thumb-img-opcao${t.nome === campoThumbBase.value ? " selecionada" : ""}" data-nome="${escaparAttr(t.nome)}" title="${escaparAttr(t.original || t.nome)}"><img src="${t.url}" alt=""></button><span class="base-legenda" title="${escaparAttr(t.original || t.nome)}">${escaparAttr(t.original || t.nome)}</span></div>`).join("")
+    : '<span class="video-meta">Nenhuma thumbnail ainda. Salve imagens na pasta Thumbnails do canal (aba Base → Pasta de entrada).</span>';
+}
+
+gradeThumbNovo.addEventListener("click", (ev) => {
+  const botao = ev.target.closest(".thumb-img-opcao");
+  if (!botao) return;
+  campoThumbBase.value = campoThumbBase.value === botao.dataset.nome ? "" : botao.dataset.nome;
+  gradeThumbNovo.querySelectorAll(".thumb-img-opcao").forEach((b) => b.classList.toggle("selecionada", b.dataset.nome === campoThumbBase.value));
+});
+document.querySelector('[data-tab="novo"]').addEventListener("click", atualizarThumbsDoNovo);
+seletorCanal.addEventListener("change", () => { campoThumbBase.value = ""; atualizarThumbsDoNovo(); });
+document.getElementById("btn-limpar-novo").addEventListener("click", () => setTimeout(() => { campoThumbBase.value = ""; atualizarThumbsDoNovo(); }, 80));
+atualizarThumbsDoNovo();

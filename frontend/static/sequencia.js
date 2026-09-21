@@ -20,7 +20,7 @@ async function montarSequencia(cfg) {
   if (!grade) return;
   const dados = await fetch(`/api/biblioteca?canal=${encodeURIComponent(seletorCanal.value || "")}`).then((r) => r.json());
   const itens = [
-    ...(dados.imagens || []).map((i) => ({ ...i, tipo: "imagem" })),
+    ...(dados.imagens || []).filter((i) => !i.thumbnail).map((i) => ({ ...i, tipo: "imagem" })), // as da pasta Thumbnails não são para cenas
     ...(dados.videos || []).map((v) => ({ ...v, tipo: "video" })),
   ];
   for (let i = lista.length - 1; i >= 0; i--) if (!itens.some((it) => chaveDe(it) === lista[i])) lista.splice(i, 1); // sumiu da Base

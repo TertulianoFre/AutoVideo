@@ -559,7 +559,7 @@ def api_entrada_status() -> dict:
         "ativo": canal.canal_ativo_id(),
         "canais": [
             {"id": c["id"], "nome": c["nome"], "pasta": str(entrada_mod.pasta_do_canal(c["id"])), "pendentes": len(pendentes.get(c["id"], [])),
-             "pastas": entrada_mod.pastas_de_video(c["id"])}
+             "pastas": entrada_mod.pastas_de_video(c["id"]), "thumbnails": entrada_mod.resumo_thumbnails(c["id"])}
             for c in canal.listar_canais()
         ],
     }
@@ -573,14 +573,16 @@ def api_importar_entrada() -> dict:
 
 
 @app.post("/api/base/abrir-entrada")
-def api_abrir_pasta_entrada(canal_id: str | None = Form(None), pasta_video: str | None = Form(None)) -> dict:
+def api_abrir_pasta_entrada(canal_id: str | None = Form(None), pasta_video: str | None = Form(None), thumbnails: bool = Form(False)) -> dict:
     """Abre a pasta de entrada do canal no Explorador de Arquivos (o app roda no seu próprio PC)."""
     from engine import entrada as entrada_mod
 
     entrada_mod.garantir_pasta()
     try:
         alvo = entrada_mod.pasta_do_canal(canal_id) if canal_id and canal.obter_canal(canal_id) else entrada_mod.PASTA
-        if canal_id and pasta_video:
+        if canal_id and thumbnails and canal.obter_canal(canal_id):
+            alvo = entrada_mod.pasta_do_canal(canal_id) / entrada_mod.NOME_THUMBNAILS
+        elif canal_id and pasta_video:
             alvo = entrada_mod._pasta_de_video_valida(canal_id, pasta_video)
             if alvo is None:
                 return {"erro": "pasta de vídeo não encontrada"}
@@ -660,7 +662,8 @@ def api_listar_biblioteca(canal: str = "") -> dict:
         extra = (meta.get(tipo) or {}).get(nome, {})
         return {
             "nome": nome, "url": url,
-            "descricao": extra.get("descricao", ""), "canal_id": extra.get("canal_id", ""),
+            "descricao": extra.get("descricao", ""), "canal_id": extra.get("canal_id", ""), "thumbnail": bool(extra.get("thumbnail")),
+            "original": extra.get("original", ""),
             "usado_em": usos.get((tipo, nome), []),
         }
 
@@ -684,7 +687,7 @@ def api_info_biblioteca(tipo: str, nome: str, descricao: str = Form(""), canal_i
     if existentes is None or nome not in existentes:
         return JSONResponse({"erro": "item não encontrado"}, status_code=404)
     meta = _meta_biblioteca()
-    meta.setdefault(tipo, {})[nome] = {"descricao": descricao.strip()[:300], "canal_id": canal_id.strip()[:80]}
+    meta.setdefault(tipo, {})[nome] = {**(meta.get(tipo) or {}).get(nome, {}), "descricao": descricao.strip()[:300], "canal_id": canal_id.strip()[:80]}
     biblioteca.RAIZ.mkdir(parents=True, exist_ok=True)
     (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True}
@@ -720,7 +723,7 @@ def api_descrever_midia(tipo: str, nome: str) -> dict:
         return JSONResponse({"erro": str(erro)}, status_code=502)
     meta = _meta_biblioteca()
     atual = (meta.get(tipo) or {}).get(nome) or {}
-    meta.setdefault(tipo, {})[nome] = {"descricao": descricao, "canal_id": atual.get("canal_id", "")}
+    meta.setdefault(tipo, {})[nome] = {**atual, "descricao": descricao, "canal_id": atual.get("canal_id", "")}
     (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"descricao": descricao}
 
@@ -948,6 +951,7 @@ def api_criar_video(
     descricao_youtube: str = Form(""),
     respiro_inicio: float = Form(0.0),
     respiro_fim: float = Form(0.0),
+    thumbnail_base: str = Form(""),
     narracao_audio: UploadFile | None = File(None),
 ) -> dict:
     titulo = titulo.strip()
@@ -1018,6 +1022,7 @@ def api_criar_video(
         descricao_youtube=descricao_youtube.strip()[:5000],
         respiro_inicio=max(0.0, min(10.0, respiro_inicio)),
         respiro_fim=max(0.0, min(15.0, respiro_fim)),
+        thumbnail_base=thumbnail_base.strip() if biblioteca.caminho_imagem_valida(thumbnail_base.strip()) else "",
     )
 
     job = jobs.criar_job(titulo, params)
@@ -1292,6 +1297,7 @@ def api_regenerar_video(slug: str, manter_roteiro: bool = Form(True), reaproveit
         em_branco=bool(metadados.get("em_branco")),
         respiro_inicio=float(metadados.get("respiro_inicio") or 0),
         respiro_fim=float(metadados.get("respiro_fim") or 0),
+        thumbnail_base=metadados.get("thumbnail_base") or "",
         slug_pasta=slug,
         canal_id=metadados.get("canal_id"),  # mantém o canal original do vídeo, não o ativo agora
     )
@@ -1493,11 +1499,19 @@ def api_listar_imagens_thumbnail(slug: str) -> dict:
     # imagens importadas na Base também podem virar fundo de thumbnail —
     # identificadas com o prefixo "biblioteca:" pra distinguir de cenas locais
     descricoes = (_meta_biblioteca().get("imagens") or {})
-    imagens += [
+    try:
+        canal_do_video = json.loads((pasta / "metadata.json").read_text(encoding="utf-8")).get("canal_id") or ""
+    except (OSError, ValueError):
+        canal_do_video = ""
+    da_base = [
         {"nome": f"biblioteca:{nome}", "url": f"/biblioteca/imagens/{nome}", "atual": f"biblioteca-{nome}" == atual,
-         "descricao": (descricoes.get(nome) or {}).get("descricao", "")}
+         "descricao": (descricoes.get(nome) or {}).get("descricao", ""),
+         "thumbnail_canal": bool((descricoes.get(nome) or {}).get("thumbnail")) and (descricoes.get(nome) or {}).get("canal_id") in ("", canal_do_video)}
         for nome in biblioteca.listar_imagens()
     ]
+    # as imagens da pasta "Thumbnails" do canal do vídeo vêm primeiro; as de outro canal nem aparecem
+    da_base = [i for i in da_base if i["thumbnail_canal"] or not (descricoes.get(i["nome"][len("biblioteca:"):]) or {}).get("thumbnail")]
+    imagens = [i for i in da_base if i["thumbnail_canal"]] + imagens + [i for i in da_base if not i["thumbnail_canal"]]
     return {"imagens": imagens}
 
 

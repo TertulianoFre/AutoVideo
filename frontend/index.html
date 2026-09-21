@@ -396,6 +396,11 @@
                 <input type="number" name="num_cenas" min="1" max="40" step="1" placeholder="Automático (ex: 3 ou 4)">
               </label>
             </div>
+            <div class="pasta-video-bloco" id="thumb-novo-bloco">
+              <span class="video-meta">Thumbnail do vídeo (opcional) — imagens da pasta <b>Thumbnails</b> do canal (aba Base). Clique numa para ser o fundo da thumbnail; clique de novo para tirar. Sem escolher, a thumbnail usa a 1ª cena.</span>
+              <div id="thumb-novo-grade" class="cena-base-grade thumb-novo-grade"></div>
+              <input type="hidden" name="thumbnail_base" id="campo-thumbnail-base">
+            </div>
             <div class="pasta-video-bloco">
               <label>
                 <span>Pasta de vídeo do canal <em>— os arquivos "cena 1, cena 2…" da pasta viram as cenas, na ordem</em></span>
@@ -632,7 +637,7 @@
         <div class="card" id="base-entrada">
           <div class="card-head">Pasta de entrada (Grok e outros)</div>
           <p class="hint" style="margin:0 0 10px">
-            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Cada canal tem a sua pasta, e dentro dela você cria <b>pastas de vídeo</b> (Vídeo 1, Vídeo 2… com o botão "+"). Salve nelas os arquivos das cenas, nomeados <b>cena 1, cena 2, cena 3…</b>. Em <b>Novo vídeo</b> é só escolher a pasta: cada parágrafo do roteiro vira a cena de mesmo número. Arquivos soltos na pasta do canal (fora das pastas de vídeo) entram sozinhos na Base em até 15 segundos.
+            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Cada canal tem a sua pasta, e dentro dela você cria <b>pastas de vídeo</b> (Vídeo 1, Vídeo 2… com o botão "+"). Salve nelas os arquivos das cenas, nomeados <b>cena 1, cena 2, cena 3…</b>. Em <b>Novo vídeo</b> é só escolher a pasta: cada parágrafo do roteiro vira a cena de mesmo número. Arquivos soltos na pasta do canal (fora das pastas de vídeo) entram sozinhos na Base em até 15 segundos. A pasta <b>Thumbnails</b> de cada canal é só para as imagens de fundo das thumbnails: elas entram na Base marcadas como "thumbnail" e aparecem primeiro na galeria de imagens da thumbnail dos vídeos daquele canal.
           </p>
           <div id="entrada-canais" class="entrada-canais"></div>
           <div class="preview-row" style="margin-top:10px">
