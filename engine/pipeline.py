@@ -569,6 +569,14 @@ def _trava_do_video(slug: str) -> "threading.Lock":
 VELOCIDADE_MAXIMA_FALA = 1.5  # encurtar uma cena acelera a fala dela, até 1,5x (acima disso fica corrido demais)
 
 
+def _inicio_da_fala(pasta: Path) -> float:
+    """Segundo da narração em que a 1ª palavra começa (0 se não houver tempos)."""
+    try:
+        return max(0.0, float(json.loads((pasta / "cues.json").read_text(encoding="utf-8"))[0]["start"]))
+    except (OSError, ValueError, IndexError, KeyError, TypeError):
+        return 0.0
+
+
 def _cues_ajustados(pasta: Path, metadados: dict) -> list:
     """Tempos das palavras da narração já ajustados aos tempos de cada cena: cena alongada = pausa
     depois da fala; cena encurtada = fala mais rápida. Cada cena começa onde a anterior termina."""
@@ -579,7 +587,7 @@ def _cues_ajustados(pasta: Path, metadados: dict) -> list:
     naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
     novos = [c["duracao_segundos"] for c in cenas]
     antes = [float(c.get("pausa_antes", 0) or 0) for c in cenas]  # silêncio no começo de cada cena, antes da fala
-    ini_natural, ini_novo = [0.0], [0.0]
+    ini_natural, ini_novo = [_inicio_da_fala(pasta)], [0.0]  # a narração é cortada a partir da 1ª palavra (mesma conta do áudio)
     for n, d in zip(naturais, novos):
         ini_natural.append(ini_natural[-1] + n)
         ini_novo.append(ini_novo[-1] + d)
@@ -647,7 +655,7 @@ def aplicar_duracoes(slug: str, duracoes: dict, progresso: Callable[[str, float]
     avisar("Refazendo o áudio com as pausas", 10)
     natural_audio = metadados.get("audio_natural") or metadados.get("audio_arquivo")
     if True:  # sempre refaz: o áudio final nunca é reaproveitado (pode ter pausas de uma edição anterior)
-        filtros, t, n = [], 0.0, len(cenas)
+        filtros, t, n = [], _inicio_da_fala(pasta), len(cenas)
         for i, (nat, ext) in enumerate(zip(naturais, extras)):
             inicio = t
             t += nat
@@ -773,7 +781,7 @@ def editar_estrutura(
         raise RuntimeError('Esse vídeo foi gerado antes dessa edição existir — use "Regenerar" uma vez para habilitar.')
 
     naturais = [c.get("duracao_natural", c["duracao_segundos"]) for c in cenas]
-    inicios = [0.0]
+    inicios = [_inicio_da_fala(pasta)]  # cortes contados a partir da 1ª palavra, não do zero (senão cortam o fim das falas)
     for n in naturais:
         inicios.append(inicios[-1] + n)
     ordem = list(range(len(cenas)))  # >= 0: cena antiga; < 0: peça nova (-1 = novos[0], -2 = novos[1]...)
