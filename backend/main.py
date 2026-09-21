@@ -225,6 +225,26 @@ def api_youtube_cancelar(canal_id: str | None = Form(None)) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/entrada/thumbnail")
+async def api_enviar_thumbnail_do_pc(canal_id: str = Form(...), arquivo: UploadFile = File(...)) -> JSONResponse:
+    """Novo vídeo: manda uma imagem do seu computador para as thumbnails do canal (fica na Base marcada como
+    "thumbnail", igual às da pasta Thumbnails) para poder escolher na hora de gerar o vídeo."""
+    from engine import entrada as entrada_mod
+
+    if not canal.obter_canal(canal_id):
+        return JSONResponse({"erro": "canal não encontrado"}, status_code=404)
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAX_UPLOAD_BYTES:
+        return JSONResponse({"erro": "arquivo maior que 20MB"}, status_code=400)
+    original = Path(arquivo.filename or "thumbnail.png").name
+    try:
+        nome = biblioteca.salvar_imagem(f"thumb-{canal_id}-{Path(original).stem}", conteudo)
+    except Exception:
+        return JSONResponse({"erro": "não consegui abrir esse arquivo como imagem"}, status_code=400)
+    entrada_mod._marcar_canal("imagens", nome, canal_id, thumbnail=True, original=original)
+    return JSONResponse({"nome": nome, "original": original})
+
+
 @app.post("/api/videos/{slug}/thumbnail/enviar-youtube")
 def api_enviar_thumbnail_ao_youtube(slug: str) -> JSONResponse:
     """Manda (de novo) a thumbnail atual para o vídeo JÁ publicado no YouTube — a 16:9 e, se existir, a do Short."""
@@ -1597,6 +1617,10 @@ async def api_upload_imagem_thumbnail(slug: str, arquivo: UploadFile = File(...)
     imagem.save(caminho_base, "PNG")
 
     metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    imagem.save(pasta / thumbnail_mod.FUNDO_SHORTS_BASE, "PNG")  # disponível como fundo do Short ("Thumbnail escolhida")
+    if not metadados.get("thumbnail_short"):
+        metadados["thumbnail_short"] = {"fundo": "base"}
+        caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
     _rerenderizar_thumbnail(pasta, caminho_base, metadados)
     (pasta / "thumbnail_fonte.txt").write_text(caminho_base.name, encoding="utf-8")
 

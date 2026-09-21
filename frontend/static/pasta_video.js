@@ -166,3 +166,21 @@ btnResumo.addEventListener("click", async () => {
   });
 });
 campoRoteiro.addEventListener("input", () => { blocoResumo.hidden = true; }); // roteiro mudou: o resumo antigo não vale mais
+
+
+// enviar uma thumbnail do computador na hora de criar o vídeo: entra nas thumbnails do canal e já fica escolhida
+document.getElementById("thumb-novo-arquivo").addEventListener("change", async (ev) => {
+  const arquivo = ev.target.files[0];
+  if (!arquivo) return;
+  const status = document.getElementById("thumb-novo-status");
+  status.textContent = "Enviando…";
+  const dados = new FormData();
+  dados.set("canal_id", seletorCanal.value || "");
+  dados.set("arquivo", arquivo);
+  const r = await fetch("/api/entrada/thumbnail", { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+  ev.target.value = "";
+  if (r.erro) { status.textContent = `Não deu: ${r.erro}`; return; }
+  campoThumbBase.value = r.nome;
+  await atualizarThumbsDoNovo();
+  status.textContent = `"${r.original}" enviada e selecionada.`;
+});

@@ -1406,7 +1406,11 @@ function mostrarResultado(resultado) {
 
   const thumbHtml = resultado.thumbnail
     ? `<div class="resultado-formato"><h3>Thumbnail</h3><img src="${resultado.thumbnail}" style="width:100%;max-width:420px;border-radius:10px;border:1px solid var(--border);display:block">
-       <div class="resultado-actions"><a href="${resultado.thumbnail}" download>Baixar thumbnail</a></div></div>`
+       <div class="resultado-actions">
+         <label class="btn-secondary btn-compacto btn-arquivo" title="Escolha uma imagem do seu computador para ser a thumbnail deste vídeo (e do Short)">Trocar thumbnail (do meu PC)
+           <input type="file" accept="image/*" id="resultado-thumb-arquivo" hidden></label>
+         <span class="video-meta" id="resultado-thumb-status"></span>
+       </div></div>`
     : "";
 
   document.getElementById("resultado-conteudo").innerHTML = `
@@ -1426,6 +1430,23 @@ function mostrarResultado(resultado) {
       </div>
     </div>` : ""}
     ${tags ? `<div class="resultado-formato"><h3>Hashtags sugeridas</h3><div class="tags-list">${tags}</div></div>` : ""}`;
+
+  const entrada = document.getElementById("resultado-thumb-arquivo");
+  if (entrada && resultado.slug) {
+    entrada.addEventListener("change", async () => {
+      const arquivo = entrada.files[0];
+      if (!arquivo) return;
+      const status = document.getElementById("resultado-thumb-status");
+      status.textContent = "Enviando…";
+      const dados = new FormData();
+      dados.set("arquivo", arquivo);
+      const r = await fetch(`/api/videos/${encodeURIComponent(resultado.slug)}/thumbnail/upload`, { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+      entrada.value = "";
+      if (r.erro || !r.thumbnail) { status.textContent = `Não deu: ${r.erro || "erro ao enviar"}`; return; }
+      document.querySelector("#resultado-conteudo img").src = r.thumbnail;
+      status.textContent = "Thumbnail trocada. Ela vale para o vídeo e para o Short. Para mudar o texto ou o efeito, use a Fila.";
+    });
+  }
 }
 
 // ---------------- Conexão com o YouTube (perfil no menu lateral) ----------------
