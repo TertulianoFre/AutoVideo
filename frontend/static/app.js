@@ -190,8 +190,14 @@ function desenharGraficoVideos(videos) {
   });
 }
 
+async function canalAtivoDaTela() {
+  // o seletor do topo pode ainda estar sem opções (carregamento da página): pergunta ao servidor
+  return seletorCanal.value || (await buscarCanais()).ativo || "";
+}
+
 async function carregarPainel() {
-  const videos = await buscarVideos();
+  const ativo = await canalAtivoDaTela();
+  const videos = (await buscarVideos()).filter((v) => !ativo || v.canal_id === ativo);
   document.getElementById("stat-total").textContent = videos.length;
   const totalSegundos = videos.reduce((soma, v) => soma + (v.duracao_segundos || 0), 0);
   document.getElementById("stat-duracao").textContent = `${Math.round(totalSegundos / 60)} min`;
@@ -231,12 +237,13 @@ function aplicarFiltrosFila() {
   lista.innerHTML = filtrados.length
     ? visiveis.map((v) => linhaDeVideo(v, true)).join("") +
       (filtrados.length > visiveis.length ? `<button type="button" class="btn-secondary" id="btn-mostrar-mais" style="margin:12px auto;display:block">Mostrar mais (${filtrados.length - visiveis.length} restantes)</button>` : "")
-    : '<div class="empty">Nenhum vídeo bate com esses filtros.</div>';
+    : `<div class="empty">${canal && !status && !busca && editadoFiltro === "" ? 'Esse canal ainda não tem vídeos. Escolha "Todos" no filtro de canal para ver os dos outros canais.' : "Nenhum vídeo bate com esses filtros."}</div>`;
 
 
 }
 
 let filaAutoRefreshTimer = null;
+let filtroCanalDaFilaIniciado = false; // false = na próxima vez o filtro volta para o canal ativo
 
 function atualizarProcessandoNoLugar(videos) {
   videos.filter((v) => v.status === "processando").forEach((v) => {
@@ -254,12 +261,18 @@ function atualizarProcessandoNoLugar(videos) {
 async function carregarFila(forcar = false) {
   videosFilaCache = await buscarVideos();
 
+  // o filtro lista TODOS os canais (mesmo os que ainda não têm vídeo) e começa no canal ativo; "Todos" mostra tudo
   const seletorCanalFiltro = document.getElementById("filtro-canal");
-  const canaisUnicos = [...new Map(videosFilaCache.map((v) => [v.canal_id, v.canal_nome])).entries()];
+  const { canais, ativo } = await buscarCanais();
   const valorAtual = seletorCanalFiltro.value;
   seletorCanalFiltro.innerHTML =
-    '<option value="">Todos</option>' + canaisUnicos.map(([id, nome]) => `<option value="${id}">${nome}</option>`).join("");
-  seletorCanalFiltro.value = valorAtual;
+    '<option value="">Todos</option>' + canais.map((c) => `<option value="${c.id}">${escaparAttr(c.nome)}</option>`).join("");
+  if (!filtroCanalDaFilaIniciado) {
+    seletorCanalFiltro.value = ativo || "";
+    filtroCanalDaFilaIniciado = true;
+  } else {
+    seletorCanalFiltro.value = valorAtual;
+  }
 
   // enquanto você edita (painel ou menu aberto) a lista não é redesenhada — só o progresso é atualizado no lugar
   const editando = document.querySelector(".thumb-painel.aberto, .cenas-painel.aberto, .legenda-painel.aberto, .menu-suspenso.aberto");
@@ -895,6 +908,8 @@ seletorCanal.addEventListener("change", async () => {
   // perfil (YouTube) e estatísticas do Painel são sempre do canal ativo
   atualizarStatusYoutube();
   if (document.getElementById("tab-painel").classList.contains("active")) carregarPainel();
+  filtroCanalDaFilaIniciado = false; // a Fila passa a mostrar o canal que ficou ativo
+  if (document.getElementById("tab-fila").classList.contains("active")) carregarFila(true);
   if (document.getElementById("tab-canais").classList.contains("active")) carregarCanais();
 });
 
