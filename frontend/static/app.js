@@ -1430,6 +1430,13 @@ async function atualizarStatusYoutube() {
     return null;
   }
 
+  const caixaConexao = document.getElementById("brand-conexao");
+  caixaConexao.hidden = !dados.conectando;
+  if (dados.conectando) {
+    const link = document.getElementById("brand-conexao-link");
+    link.hidden = !dados.url_autorizacao;
+    if (dados.url_autorizacao) link.href = dados.url_autorizacao;
+  }
   if (dados.conectando) {
     youtubeConectando = true;
     youtubeDot.className = "dot dot-pending";
@@ -1561,12 +1568,23 @@ brandLink.addEventListener("click", async (ev) => {
   if (brandLink.getAttribute("target") === "_blank") return;
   ev.preventDefault();
   if (youtubeConectando) return;
+  iniciarConexaoYoutube();
+});
 
+async function iniciarConexaoYoutube() {
   const poller = setInterval(async () => {
     const dados = await atualizarStatusYoutube();
     if (dados && !dados.conectando) clearInterval(poller);
   }, 1500);
   await fetch("/api/youtube/conectar", { method: "POST" });
+  atualizarStatusYoutube();
+}
+
+document.getElementById("brand-conexao-cancelar").addEventListener("click", async () => {
+  await fetch("/api/youtube/cancelar", { method: "POST" });
+  youtubeConectando = false;
+  await atualizarStatusYoutube();
+  iniciarConexaoYoutube(); // tenta de novo do zero (abre outra página de login)
 });
 
 // ---------------- Agente: campo livre (perguntas, ideias, comandos) ----------------

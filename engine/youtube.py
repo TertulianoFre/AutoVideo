@@ -64,17 +64,35 @@ def esta_conectado(nome_conta: str) -> bool:
     return _carregar_credenciais(nome_conta) is not None
 
 
-def conectar(nome_conta: str) -> None:
-    """Abre o navegador pra autorizar essa conta. Bloqueia até você terminar
-    o login — sempre chamar isso numa thread separada, nunca na thread
-    principal do servidor."""
+def conectar(nome_conta: str, ao_abrir=None, tempo_limite: int = 240) -> None:
+    """Abre o navegador pra autorizar essa conta. Bloqueia até você terminar o login (ou o tempo acabar, em
+    `tempo_limite` s) — sempre chamar isso numa thread separada, nunca na thread principal do servidor.
+    `ao_abrir(url)` recebe o endereço da página de login, pra tela poder mostrar um link se o navegador não abrir."""
+    import os
+    import webbrowser
+
     if not CLIENT_SECRET_PATH.exists():
         raise RuntimeError(
             "client_secret.json não encontrado na raiz do projeto. "
             "Baixe as credenciais no Google Cloud Console primeiro."
         )
+
+    class _Captura(webbrowser.BaseBrowser):
+        def open(self, url, new=0, autoraise=True):
+            if ao_abrir:
+                ao_abrir(url)
+            try:
+                os.startfile(url)  # navegador padrão do Windows
+                return True
+            except Exception:
+                return webbrowser.open(url, new=1)
+
+    webbrowser.register("oauth_captura", None, _Captura())
     flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), ESCOPOS)
-    creds = flow.run_local_server(port=0, prompt="consent")
+    try:
+        creds = flow.run_local_server(port=0, prompt="consent", timeout_seconds=tempo_limite, browser="oauth_captura", authorization_prompt_message="")
+    except AttributeError:  # ninguém autorizou dentro do tempo: a biblioteca não devolve nenhuma resposta
+        raise RuntimeError("Tempo esgotado: a autorização no Google não foi concluída. Tente de novo.") from None
     _caminho_token(nome_conta).write_text(creds.to_json(), encoding="utf-8")
 
 

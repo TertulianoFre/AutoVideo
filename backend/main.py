@@ -172,6 +172,7 @@ def api_youtube_status(canal_id: str | None = None) -> dict:
         "conectado": youtube_mod.esta_conectado(conta),
         "conectando": estado["status"] == "conectando",
         "erro": estado["erro"],
+        "url_autorizacao": estado.get("url") if estado["status"] == "conectando" else None,
         "client_secret_presente": youtube_mod.CLIENT_SECRET_PATH.exists(),
     }
 
@@ -185,19 +186,37 @@ def api_youtube_conectar(canal_id: str | None = Form(None)) -> dict:
 
     estado["status"] = "conectando"
     estado["erro"] = None
+    estado["url"] = None
+    estado["geracao"] = estado.get("geracao", 0) + 1
+    minha_vez = estado["geracao"]
 
     def rodar() -> None:
         try:
-            youtube_mod.conectar(conta)
+            youtube_mod.conectar(conta, ao_abrir=lambda url: estado.update(url=url))
             estado["status"] = "conectado"
         except Exception as erro:
-            estado["status"] = "erro"
-            estado["erro"] = str(erro)
+            if estado.get("geracao") == minha_vez:  # se você cancelou e tentou de novo, esta tentativa velha não mexe no estado
+                estado["status"] = "erro"
+                estado["erro"] = str(erro)
+        finally:
+            if estado.get("geracao") == minha_vez:
+                estado["url"] = None
 
     # abre o navegador padrão do sistema e espera você autorizar — não pode
     # rodar na thread principal, ia travar o servidor até você terminar.
     threading.Thread(target=rodar, daemon=True).start()
     return {"status": "conectando"}
+
+
+@app.post("/api/youtube/cancelar")
+def api_youtube_cancelar(canal_id: str | None = Form(None)) -> dict:
+    """Desiste de uma conexão que ficou esperando (aba fechada, login não concluído): volta a "não conectado"."""
+    estado = _estado_de(_conta_do_canal(canal_id))
+    estado["geracao"] = estado.get("geracao", 0) + 1
+    estado["status"] = "erro"
+    estado["erro"] = "Conexão cancelada."
+    estado["url"] = None
+    return {"ok": True}
 
 
 @app.get("/api/youtube/estatisticas")
