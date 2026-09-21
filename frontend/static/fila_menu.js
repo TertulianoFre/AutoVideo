@@ -771,3 +771,28 @@ document.addEventListener("click", async (ev) => {
   alert(`Thumbnail enviada (${r.enviados.join(" e ")}). O YouTube pode levar alguns minutos para mostrar.${r.avisos && r.avisos.length ? `\nAviso: ${r.avisos.join("; ")}` : ""}`);
   carregarFila(true);
 });
+
+
+// ---------------- pedidos de imagem por cena (para colar no Grok) ----------------
+document.addEventListener("click", async (ev) => {
+  const botao = ev.target.closest(".btn-copiar-prompts");
+  if (!botao) return;
+  const painel = botao.closest(".cenas-painel");
+  const status = painel.querySelector(".cenas-rodape-status");
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "Preparando…";
+  const r = await fetch(`/api/videos/${painel.dataset.slug}/prompts-imagens`).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+  botao.disabled = false;
+  botao.textContent = rotulo;
+  if (r.erro) { status.textContent = `Deu erro: ${r.erro}`; return; }
+  const estilo = r.estilo ? `\nEstilo geral: ${r.estilo}` : "";
+  const texto = `Gere UMA imagem por pedido, em formato 16:9, sem nenhum texto dentro da imagem.${estilo}\n\n` +
+    r.cenas.map((c) => `Cena ${c.indice + 1} (${c.duracao} s) — ${c.descricao}\nPedido: ${c.prompt}`).join("\n\n");
+  try {
+    await navigator.clipboard.writeText(texto);
+    status.textContent = `Copiado: ${r.cenas.length} pedidos. Cole no Grok, baixe as imagens para a pasta de entrada (aba Base) e use "Usar da Base" em cada cena.`;
+  } catch {
+    prompt("Copie os pedidos:", texto);
+  }
+});

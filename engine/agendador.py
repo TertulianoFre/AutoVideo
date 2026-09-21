@@ -125,6 +125,7 @@ def _publicar_um(pasta: Path, metadados: dict, caminho_meta: Path, nome_conta: s
         _salvar_metadados(caminho_meta, metadados)
 
     metadados["publicado"] = True
+    metadados["publicado_em"] = datetime.now().isoformat(timespec="seconds")
     metadados.pop("publicacao_erro", None)
     _salvar_metadados(caminho_meta, metadados)
 
@@ -178,6 +179,13 @@ def _retentar_thumbnails(pasta: Path, metadados: dict, caminho_meta: Path) -> No
     """Vídeo publicado cuja thumbnail não subiu (o YouTube ainda processava, rede caiu...): tenta de novo nos
     próximos ciclos, até 6 vezes. Depois disso fica só o botão "Reenviar thumbnail" da Fila."""
     if metadados.get("thumbnail_retentativas", 0) >= 6:
+        return
+    # só nas primeiras horas depois da publicação: depois disso você pode ter trocado a thumbnail direto no YouTube
+    # e o app não deve passar por cima. (Vídeos sem a data de publicação guardada: só pelo botão da Fila.)
+    try:
+        if (datetime.now() - datetime.fromisoformat(metadados.get("publicado_em", ""))).total_seconds() > 3 * 3600:
+            return
+    except ValueError:
         return
     nome_conta = _conta_youtube_do_video(metadados)
     if not youtube.esta_conectado(nome_conta):

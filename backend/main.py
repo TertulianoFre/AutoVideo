@@ -49,7 +49,13 @@ app = FastAPI(title="Projeto YT")
 # roda junto com o app inteiro: confere de tempos em tempos se algum vídeo
 # tem data de postagem vencida e publica sozinho no YouTube (cada um na conta
 # do canal dele — engine.agendador resolve isso por vídeo).
-agendador.iniciar_agendador()
+import os as _os
+
+if not _os.environ.get("YT_SEM_AGENDADOR"):  # servidor de teste: nada de publicar nem mexer no YouTube por conta própria
+    agendador.iniciar_agendador()
+    from engine import entrada as entrada_mod
+
+    entrada_mod.iniciar()
 
 # status de conexão do YouTube é por canal (dois canais podem estar
 # conectando ao mesmo tempo, em tese) — chave é o canal_id.
@@ -539,6 +545,62 @@ def _atribuir_canal_ativo(tipo: str, nome: str) -> None:
     item["canal_id"] = canal.canal_ativo_id()
     biblioteca.RAIZ.mkdir(parents=True, exist_ok=True)
     (biblioteca.RAIZ / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.get("/api/base/entrada")
+def api_entrada_status() -> dict:
+    from engine import entrada as entrada_mod
+
+    entrada_mod.garantir_pasta()
+    return {"pasta": str(entrada_mod.PASTA), "pendentes": len(entrada_mod.pendentes())}
+
+
+@app.post("/api/base/importar-entrada")
+def api_importar_entrada() -> dict:
+    from engine import entrada as entrada_mod
+
+    return entrada_mod.importar(canal.canal_ativo_id())
+
+
+@app.post("/api/base/abrir-entrada")
+def api_abrir_pasta_entrada() -> dict:
+    """Abre a pasta de entrada no Explorador de Arquivos (o app roda no seu próprio PC)."""
+    from engine import entrada as entrada_mod
+
+    entrada_mod.garantir_pasta()
+    try:
+        _os.startfile(str(entrada_mod.PASTA))
+    except Exception as erro:
+        return {"erro": str(erro)}
+    return {"ok": True}
+
+
+@app.get("/api/videos/{slug}/prompts-imagens")
+def api_prompts_de_imagens(slug: str) -> JSONResponse:
+    """Um pedido de imagem por cena, para colar no Grok (ou em outra IA de imagem). Usa o plano visual do roteiro;
+    se o vídeo ainda não tem, a IA faz o plano agora (uma chamada) e ele fica guardado."""
+    from engine import visuals as visuals_mod
+
+    caminho_meta = RAIZ_SAIDA / slug / "metadata.json"
+    if "/" in slug or "\\" in slug or not caminho_meta.exists():
+        return JSONResponse({"erro": "vídeo não encontrado"}, status_code=404)
+    meta = json.loads(caminho_meta.read_text(encoding="utf-8"))
+    cenas = meta.get("cenas") or []
+    plano = meta.get("plano_visual") or {}
+    if not plano and any(c.get("texto") for c in cenas):
+        plano = visuals_mod.planejar_visuais(meta.get("titulo", slug), [c.get("texto", "") for c in cenas], meta.get("descricao_video", ""))
+        if plano:
+            meta["plano_visual"] = plano
+            caminho_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    saida = []
+    for i, c in enumerate(cenas):
+        p = plano.get(str(i)) or {}
+        saida.append({
+            "indice": i, "duracao": round(c.get("duracao_segundos", 0), 1),
+            "descricao": (meta.get("descricoes_cenas") or {}).get(str(i)) or p.get("descricao") or (c.get("texto") or "")[:140],
+            "prompt": p.get("visual") or (c.get("texto") or "")[:200],
+        })
+    return JSONResponse({"cenas": saida, "estilo": (meta.get("descricao_video") or "").strip()})
 
 
 @app.get("/api/biblioteca")

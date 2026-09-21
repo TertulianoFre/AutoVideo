@@ -727,6 +727,7 @@ async function alternarPainelCenas(botao) {
       <button type="button" class="btn-primary btn-aplicar-tempos" hidden>Aplicar tempos</button>
       <button type="button" class="btn-primary btn-excluir-marcadas" hidden>Excluir cenas marcadas e remontar</button>
       <button type="button" class="btn-secondary btn-concluir-cenas">Concluir e fechar</button>
+      <button type="button" class="btn-secondary btn-copiar-prompts" title="Um pedido de imagem por cena, para colar no Grok ou em outra IA de imagem">Copiar pedidos de imagem (Grok)</button>
       <span class="video-meta cenas-rodape-status"></span>
     </div>`;
 
