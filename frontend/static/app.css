@@ -762,3 +762,10 @@ main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 .entrada-canal { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
 .entrada-canal.ativo { border-color: var(--accent, #F2C230); }
 .entrada-canal-topo { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+
+/* pastas de vídeo */
+.entrada-pastas { display: flex; flex-direction: column; gap: 6px; }
+.entrada-pasta { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.entrada-pasta-nome { font-weight: 600; }
+.entrada-pasta .btn-compacto { margin-left: auto; }
+.pasta-video-bloco { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }

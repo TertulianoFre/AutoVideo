@@ -558,7 +558,8 @@ def api_entrada_status() -> dict:
         "pendentes": sum(len(v) for v in pendentes.values()),
         "ativo": canal.canal_ativo_id(),
         "canais": [
-            {"id": c["id"], "nome": c["nome"], "pasta": str(entrada_mod.pasta_do_canal(c["id"])), "pendentes": len(pendentes.get(c["id"], []))}
+            {"id": c["id"], "nome": c["nome"], "pasta": str(entrada_mod.pasta_do_canal(c["id"])), "pendentes": len(pendentes.get(c["id"], [])),
+             "pastas": entrada_mod.pastas_de_video(c["id"])}
             for c in canal.listar_canais()
         ],
     }
@@ -572,16 +573,53 @@ def api_importar_entrada() -> dict:
 
 
 @app.post("/api/base/abrir-entrada")
-def api_abrir_pasta_entrada(canal_id: str | None = Form(None)) -> dict:
+def api_abrir_pasta_entrada(canal_id: str | None = Form(None), pasta_video: str | None = Form(None)) -> dict:
     """Abre a pasta de entrada do canal no Explorador de Arquivos (o app roda no seu próprio PC)."""
     from engine import entrada as entrada_mod
 
     entrada_mod.garantir_pasta()
     try:
-        _os.startfile(str(entrada_mod.pasta_do_canal(canal_id) if canal_id and canal.obter_canal(canal_id) else entrada_mod.PASTA))
+        alvo = entrada_mod.pasta_do_canal(canal_id) if canal_id and canal.obter_canal(canal_id) else entrada_mod.PASTA
+        if canal_id and pasta_video:
+            alvo = entrada_mod._pasta_de_video_valida(canal_id, pasta_video)
+            if alvo is None:
+                return {"erro": "pasta de vídeo não encontrada"}
+        _os.startfile(str(alvo))
     except Exception as erro:
         return {"erro": str(erro)}
     return {"ok": True}
+
+
+@app.get("/api/entrada/pastas-video")
+def api_pastas_de_video(canal_id: str | None = None) -> dict:
+    from engine import entrada as entrada_mod
+
+    entrada_mod.garantir_pasta()
+    return {"pastas": entrada_mod.pastas_de_video(canal_id or canal.canal_ativo_id())}
+
+
+@app.post("/api/entrada/pastas-video")
+def api_criar_pasta_de_video(canal_id: str = Form(...)) -> JSONResponse:
+    """O "+" da Base: cria a próxima pasta de vídeo do canal (Vídeo 1, Vídeo 2...)."""
+    from engine import entrada as entrada_mod
+
+    if not canal.obter_canal(canal_id):
+        return JSONResponse({"erro": "canal não encontrado"}, status_code=404)
+    return JSONResponse(entrada_mod.criar_pasta_de_video(canal_id))
+
+
+@app.post("/api/entrada/pastas-video/preparar")
+def api_preparar_pasta_de_video(canal_id: str = Form(...), nome: str = Form(...)) -> JSONResponse:
+    """Novo vídeo: escolher uma pasta de vídeo. Os arquivos (cena 1, cena 2...) entram na Base do canal e voltam na ordem das cenas."""
+    from engine import entrada as entrada_mod
+
+    try:
+        itens = entrada_mod.preparar_pasta_de_video(canal_id, nome)
+    except ValueError as erro:
+        return JSONResponse({"erro": str(erro)}, status_code=400)
+    except Exception as erro:
+        return JSONResponse({"erro": f"não consegui importar a pasta: {str(erro)[:200]}"}, status_code=500)
+    return JSONResponse({"itens": itens})
 
 
 @app.get("/api/videos/{slug}/prompts-imagens")

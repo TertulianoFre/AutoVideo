@@ -396,6 +396,17 @@
                 <input type="number" name="num_cenas" min="1" max="40" step="1" placeholder="Automático (ex: 3 ou 4)">
               </label>
             </div>
+            <div class="pasta-video-bloco">
+              <label>
+                <span>Pasta de vídeo do canal <em>— os arquivos "cena 1, cena 2…" da pasta viram as cenas, na ordem</em></span>
+                <span class="linha-duracao">
+                  <select id="campo-pasta-video"><option value="">Nenhuma (escolher da Base ou gerar por IA)</option></select>
+                  <button type="button" class="btn-secondary btn-compacto" id="btn-pasta-video-abrir" title="Abre a pasta no Explorador de Arquivos" hidden>Abrir a pasta</button>
+                </span>
+              </label>
+              <span class="video-meta" id="pasta-video-info"></span>
+              <button type="button" class="btn-secondary btn-compacto" id="btn-pasta-video-descrever" hidden title="A IA olha cada arquivo sem descrição e escreve o que aparece nele (usa a chave grátis do Groq ou Gemini)">👁 A IA descreve os arquivos sem descrição</button>
+            </div>
             <div class="midias-base-bloco">
               <span class="video-meta">Imagens e vídeos da sua Base para as cenas (opcional). Clique na ordem em que devem aparecer: o 1º vai na cena 1, o 2º na cena 2... Se escolher a mesma quantidade de cenas, nenhuma imagem é gerada por IA.</span>
               <div id="novo-base-grade" class="cena-base-grade" style="margin-top:8px"></div>
@@ -621,7 +632,7 @@
         <div class="card" id="base-entrada">
           <div class="card-head">Pasta de entrada (Grok e outros)</div>
           <p class="hint" style="margin:0 0 10px">
-            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Cada canal tem a sua pasta: salve os arquivos na pasta <b>do canal certo</b> e eles entram sozinhos na Base <b>desse canal</b> em até 15 segundos. Depois é só usar em cada cena com "Usar da Base".
+            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Cada canal tem a sua pasta, e dentro dela você cria <b>pastas de vídeo</b> (Vídeo 1, Vídeo 2… com o botão "+"). Salve nelas os arquivos das cenas, nomeados <b>cena 1, cena 2, cena 3…</b>. Em <b>Novo vídeo</b> é só escolher a pasta: cada parágrafo do roteiro vira a cena de mesmo número. Arquivos soltos na pasta do canal (fora das pastas de vídeo) entram sozinhos na Base em até 15 segundos.
           </p>
           <div id="entrada-canais" class="entrada-canais"></div>
           <div class="preview-row" style="margin-top:10px">
@@ -750,5 +761,6 @@
 <script src="/static/cartoes.js"></script>
 <script src="/static/som_fundo.js"></script>
 <script src="/static/entrada.js"></script>
+<script src="/static/pasta_video.js"></script>
 </body>
 </html>

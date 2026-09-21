@@ -9,18 +9,37 @@ async function atualizarEntrada() {
       <div class="entrada-canal-topo"><b>${escaparAttr(c.nome)}</b>${c.id === r.ativo ? ' <span class="video-meta">(canal ativo)</span>' : ""}
         <span class="video-meta">${c.pendentes ? `${c.pendentes} aguardando…` : ""}</span></div>
       <code class="entrada-caminho">${escaparAttr(c.pasta)}</code>
+      <div class="entrada-pastas">
+        ${c.pastas.map((p) => `<div class="entrada-pasta" data-pasta="${escaparAttr(p.nome)}">
+            <span class="entrada-pasta-nome">📁 ${escaparAttr(p.nome)}</span>
+            <span class="video-meta">${p.arquivos} arquivo(s)</span>
+            <button type="button" class="btn-secondary btn-compacto entrada-pasta-abrir">Abrir</button>
+          </div>`).join("") || '<span class="video-meta">Nenhuma pasta de vídeo ainda. Clique em "+ Nova pasta de vídeo".</span>'}
+      </div>
       <div class="preview-row">
-        <button type="button" class="btn-secondary btn-compacto entrada-abrir">Abrir a pasta</button>
+        <button type="button" class="btn-secondary btn-compacto entrada-nova">+ Nova pasta de vídeo</button>
+        <button type="button" class="btn-secondary btn-compacto entrada-abrir">Abrir a pasta do canal</button>
         <button type="button" class="btn-secondary btn-compacto entrada-copiar">Copiar o caminho</button>
       </div>
     </div>`).join("");
   lista.querySelectorAll(".entrada-canal").forEach((el) => {
     const caminho = el.querySelector("code").textContent;
-    el.querySelector(".entrada-abrir").addEventListener("click", async () => {
+    const abrir = async (pastaVideo) => {
       const dados = new FormData();
       dados.append("canal_id", el.dataset.canal);
+      if (pastaVideo) dados.append("pasta_video", pastaVideo);
       const res = await fetch("/api/base/abrir-entrada", { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({}));
       if (res.erro) document.getElementById("entrada-status").textContent = `Não consegui abrir: ${res.erro}`;
+    };
+    el.querySelector(".entrada-abrir").addEventListener("click", () => abrir(""));
+    el.querySelectorAll(".entrada-pasta").forEach((p) => p.querySelector(".entrada-pasta-abrir").addEventListener("click", () => abrir(p.dataset.pasta)));
+    el.querySelector(".entrada-nova").addEventListener("click", async () => {
+      const dados = new FormData();
+      dados.append("canal_id", el.dataset.canal);
+      const res = await fetch("/api/entrada/pastas-video", { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({ erro: "Sem conexão." }));
+      document.getElementById("entrada-status").textContent = res.erro ? `Não consegui criar: ${res.erro}` : `Pasta "${res.nome}" criada. Salve nela os arquivos cena 1, cena 2, cena 3…`;
+      await atualizarEntrada();
+      if (typeof atualizarPastasDeVideoNovo === "function") atualizarPastasDeVideoNovo();
     });
     el.querySelector(".entrada-copiar").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(caminho); document.getElementById("entrada-status").textContent = "Caminho copiado."; }

@@ -3,8 +3,10 @@ vídeos gerados no Grok ou em qualquer outro lugar) entra sozinho na Base DAQUEL
 importar. Arquivos soltos na pasta principal vão para o canal ativo. Depois é só escolher na cena ("Usar da Base")."""
 
 import json
+import re
 import shutil
 import threading
+import unicodedata
 import time
 from pathlib import Path
 
@@ -111,3 +113,85 @@ def iniciar() -> None:
 
     garantir_pasta()
     threading.Thread(target=laco, daemon=True).start()
+
+
+# ---------------- pastas de vídeo: dados/entrada/<canal>/Vídeo 1, Vídeo 2... ----------------
+# Cada pasta guarda os arquivos das cenas de UM vídeo (cena 1, cena 2...). Fica onde você colocou; só entra na Base
+# (uma vez, sem duplicar) quando você escolhe a pasta no Novo vídeo.
+
+_RE_NUMERO = re.compile(r"(\d+)")
+_RE_PASTA_VIDEO = re.compile(r"^v[ií]deo\s+(\d+)$", re.IGNORECASE)
+
+
+def _ordem_natural(caminho: Path) -> tuple:
+    """cena 1, cena 2, ..., cena 10 (e não cena 1, cena 10, cena 2). Sem número no nome: depois, em ordem alfabética."""
+    achou = _RE_NUMERO.search(caminho.stem)
+    return (0, int(achou.group(1)), caminho.name.lower()) if achou else (1, 0, caminho.name.lower())
+
+
+def _arquivos_da_pasta(pasta: Path) -> list:
+    return sorted(
+        (f for f in pasta.iterdir() if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in EXT_IMAGEM | EXT_VIDEO),
+        key=_ordem_natural,
+    )
+
+
+def _pasta_de_video_valida(canal_id: str, nome: str) -> Path | None:
+    """A subpasta pedida, só se for mesmo uma pasta de vídeo desse canal (nada de sair da pasta de entrada)."""
+    if not canal.obter_canal(canal_id) or not nome or "/" in nome or "\\" in nome or nome.startswith(".") or nome == NOME_IMPORTADOS:
+        return None
+    pasta = pasta_do_canal(canal_id) / nome
+    return pasta if pasta.is_dir() else None
+
+
+def pastas_de_video(canal_id: str) -> list:
+    """[{nome, caminho, arquivos: n}] das pastas de vídeo do canal, na ordem natural (Vídeo 2 antes de Vídeo 10)."""
+    raiz = pasta_do_canal(canal_id)
+    if not raiz.is_dir():
+        return []
+    pastas = [p for p in raiz.iterdir() if p.is_dir() and not p.name.startswith(".") and p.name != NOME_IMPORTADOS]
+    pastas.sort(key=_ordem_natural)
+    return [{"nome": p.name, "caminho": str(p), "arquivos": len(_arquivos_da_pasta(p))} for p in pastas]
+
+
+def criar_pasta_de_video(canal_id: str) -> dict:
+    """Cria a próxima pasta: "Vídeo 1", "Vídeo 2"... (o número seguinte ao maior que já existe)."""
+    garantir_pasta()
+    numeros = [int(m.group(1)) for p in pastas_de_video(canal_id) if (m := _RE_PASTA_VIDEO.match(p["nome"]))]
+    nome = f"Vídeo {max(numeros, default=0) + 1}"
+    (pasta_do_canal(canal_id) / nome).mkdir(parents=True, exist_ok=True)
+    return {"nome": nome, "caminho": str(pasta_do_canal(canal_id) / nome), "arquivos": 0}
+
+
+def preparar_pasta_de_video(canal_id: str, nome: str) -> list:
+    """Coloca na Base do canal os arquivos da pasta que ainda não estão lá e devolve, na ordem das cenas,
+    [{arquivo, chave ("imagem:x"|"video:y"), descricao}]. Já importado (mesmo arquivo, sem alteração) é reaproveitado."""
+    pasta = _pasta_de_video_valida(canal_id, nome)
+    if pasta is None:
+        raise ValueError("pasta de vídeo não encontrada")
+    caminho_registro = pasta / ".base.json"
+    try:
+        registro = json.loads(caminho_registro.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        registro = {}
+    saida = []
+    with _trava:
+        for arquivo in _arquivos_da_pasta(pasta):
+            info = arquivo.stat()
+            assinatura = f"{info.st_size}:{int(info.st_mtime)}"
+            eh_imagem = arquivo.suffix.lower() in EXT_IMAGEM
+            tipo = "imagens" if eh_imagem else "videos"
+            anterior = registro.get(arquivo.name) or {}
+            existe = biblioteca.caminho_imagem_valida(anterior.get("nome", "")) if eh_imagem else biblioteca.caminho_video_valido(anterior.get("nome", ""))
+            if not (anterior.get("assinatura") == assinatura and anterior.get("tipo") == tipo and existe):
+                if info.st_size == 0 or time.time() - info.st_mtime < 4:
+                    raise ValueError(f'"{arquivo.name}" ainda está sendo salvo — espere alguns segundos e escolha a pasta de novo')
+                conteudo = arquivo.read_bytes()
+                sugerido = unicodedata.normalize("NFKD", f"{canal_id}-{pasta.name}-{arquivo.stem}").encode("ascii", "ignore").decode()
+                nome_base = biblioteca.salvar_imagem(sugerido, conteudo) if eh_imagem else biblioteca.salvar_video(sugerido, conteudo)
+                _marcar_canal(tipo, nome_base, canal_id)
+                anterior = {"nome": nome_base, "tipo": tipo, "assinatura": assinatura}
+                registro[arquivo.name] = anterior
+            saida.append({"arquivo": arquivo.name, "chave": f"{'imagem' if eh_imagem else 'video'}:{anterior['nome']}", "tipo": tipo, "nome": anterior["nome"]})
+        caminho_registro.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
+    return saida
