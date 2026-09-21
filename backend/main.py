@@ -552,24 +552,33 @@ def api_entrada_status() -> dict:
     from engine import entrada as entrada_mod
 
     entrada_mod.garantir_pasta()
-    return {"pasta": str(entrada_mod.PASTA), "pendentes": len(entrada_mod.pendentes())}
+    pendentes = entrada_mod.pendentes_por_canal()
+    return {
+        "pasta": str(entrada_mod.PASTA),
+        "pendentes": sum(len(v) for v in pendentes.values()),
+        "ativo": canal.canal_ativo_id(),
+        "canais": [
+            {"id": c["id"], "nome": c["nome"], "pasta": str(entrada_mod.pasta_do_canal(c["id"])), "pendentes": len(pendentes.get(c["id"], []))}
+            for c in canal.listar_canais()
+        ],
+    }
 
 
 @app.post("/api/base/importar-entrada")
 def api_importar_entrada() -> dict:
     from engine import entrada as entrada_mod
 
-    return entrada_mod.importar(canal.canal_ativo_id())
+    return entrada_mod.importar()
 
 
 @app.post("/api/base/abrir-entrada")
-def api_abrir_pasta_entrada() -> dict:
-    """Abre a pasta de entrada no Explorador de Arquivos (o app roda no seu próprio PC)."""
+def api_abrir_pasta_entrada(canal_id: str | None = Form(None)) -> dict:
+    """Abre a pasta de entrada do canal no Explorador de Arquivos (o app roda no seu próprio PC)."""
     from engine import entrada as entrada_mod
 
     entrada_mod.garantir_pasta()
     try:
-        _os.startfile(str(entrada_mod.PASTA))
+        _os.startfile(str(entrada_mod.pasta_do_canal(canal_id) if canal_id and canal.obter_canal(canal_id) else entrada_mod.PASTA))
     except Exception as erro:
         return {"erro": str(erro)}
     return {"ok": True}

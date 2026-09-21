@@ -621,16 +621,14 @@
         <div class="card" id="base-entrada">
           <div class="card-head">Pasta de entrada (Grok e outros)</div>
           <p class="hint" style="margin:0 0 10px">
-            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Salve os arquivos <b>nesta pasta</b> e eles entram sozinhos na Base do canal ativo em até 15 segundos. Depois é só usar em cada cena com "Usar da Base".
+            Gerou imagens ou vídeos no Grok (ou em qualquer site)? Cada canal tem a sua pasta: salve os arquivos na pasta <b>do canal certo</b> e eles entram sozinhos na Base <b>desse canal</b> em até 15 segundos. Depois é só usar em cada cena com "Usar da Base".
           </p>
-          <code class="entrada-caminho" id="entrada-caminho">…</code>
+          <div id="entrada-canais" class="entrada-canais"></div>
           <div class="preview-row" style="margin-top:10px">
-            <button type="button" class="btn-secondary btn-compacto" id="btn-entrada-abrir">Abrir a pasta</button>
-            <button type="button" class="btn-secondary btn-compacto" id="btn-entrada-copiar">Copiar o caminho</button>
             <button type="button" class="btn-secondary btn-compacto" id="btn-entrada-importar">Importar agora</button>
             <span class="video-meta" id="entrada-status"></span>
           </div>
-          <p class="hint" style="margin:10px 0 0">Dica: no navegador, mude a pasta de downloads para esta pasta (Configurações → Downloads) e tudo o que você baixar do Grok já vem para cá.</p>
+          <p class="hint" style="margin:10px 0 0">Dica: no navegador, mude a pasta de downloads para a pasta do canal (Configurações → Downloads) antes de baixar as imagens do Grok. Arquivos soltos na pasta principal vão para o canal ativo.</p>
         </div>
 
         <details class="card secao-base" open>

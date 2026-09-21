@@ -3,8 +3,30 @@
 async function atualizarEntrada() {
   const r = await fetch("/api/base/entrada").then((x) => x.json()).catch(() => null);
   if (!r) return;
-  document.getElementById("entrada-caminho").textContent = r.pasta;
-  document.getElementById("entrada-status").textContent = r.pendentes ? `${r.pendentes} arquivo(s) aguardando importação…` : "";
+  const lista = document.getElementById("entrada-canais");
+  lista.innerHTML = r.canais.map((c) => `
+    <div class="entrada-canal${c.id === r.ativo ? " ativo" : ""}" data-canal="${escaparAttr(c.id)}">
+      <div class="entrada-canal-topo"><b>${escaparAttr(c.nome)}</b>${c.id === r.ativo ? ' <span class="video-meta">(canal ativo)</span>' : ""}
+        <span class="video-meta">${c.pendentes ? `${c.pendentes} aguardando…` : ""}</span></div>
+      <code class="entrada-caminho">${escaparAttr(c.pasta)}</code>
+      <div class="preview-row">
+        <button type="button" class="btn-secondary btn-compacto entrada-abrir">Abrir a pasta</button>
+        <button type="button" class="btn-secondary btn-compacto entrada-copiar">Copiar o caminho</button>
+      </div>
+    </div>`).join("");
+  lista.querySelectorAll(".entrada-canal").forEach((el) => {
+    const caminho = el.querySelector("code").textContent;
+    el.querySelector(".entrada-abrir").addEventListener("click", async () => {
+      const dados = new FormData();
+      dados.append("canal_id", el.dataset.canal);
+      const res = await fetch("/api/base/abrir-entrada", { method: "POST", body: dados }).then((x) => x.json()).catch(() => ({}));
+      if (res.erro) document.getElementById("entrada-status").textContent = `Não consegui abrir: ${res.erro}`;
+    });
+    el.querySelector(".entrada-copiar").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(caminho); document.getElementById("entrada-status").textContent = "Caminho copiado."; }
+      catch { prompt("Copie o caminho:", caminho); }
+    });
+  });
 }
 
 async function importarEntradaAgora(silencioso) {
@@ -21,16 +43,6 @@ async function importarEntradaAgora(silencioso) {
 }
 
 document.getElementById("btn-entrada-importar").addEventListener("click", () => importarEntradaAgora(false));
-document.getElementById("btn-entrada-abrir").addEventListener("click", async () => {
-  const r = await fetch("/api/base/abrir-entrada", { method: "POST" }).then((x) => x.json()).catch(() => ({}));
-  if (r.erro) document.getElementById("entrada-status").textContent = `Não consegui abrir: ${r.erro}`;
-});
-document.getElementById("btn-entrada-copiar").addEventListener("click", async () => {
-  const caminho = document.getElementById("entrada-caminho").textContent;
-  try { await navigator.clipboard.writeText(caminho); document.getElementById("entrada-status").textContent = "Caminho copiado."; }
-  catch { prompt("Copie o caminho:", caminho); }
-});
-
 document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.tab === "base") { atualizarEntrada(); importarEntradaAgora(true); } }));
 setInterval(() => { if (document.getElementById("tab-base").classList.contains("active")) importarEntradaAgora(true); }, 15000);
 atualizarEntrada();
