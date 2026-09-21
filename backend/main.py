@@ -1448,7 +1448,8 @@ def api_fundo_thumbnail_shorts(slug: str) -> dict:
         from engine import visuals as visuals_mod
         visuals_mod.gerar_fundo_procedural(*thumbnail_mod.TAMANHO_SHORTS, fundo, semente=f"{metadados.get('titulo', slug)}{metadados.get('thumbnail_short_semente', '')}")
     return {"procedural": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(fundo.stat().st_mtime)}",
-            "cena": f"/videos/{slug}/cena00_9x16.png" if (pasta / "cena00_9x16.png").exists() else None}
+            "cena": f"/videos/{slug}/cena00_9x16.png" if (pasta / "cena00_9x16.png").exists() else None,
+            "base": f"/videos/{slug}/{thumbnail_mod.FUNDO_SHORTS_BASE}?v={int((pasta / thumbnail_mod.FUNDO_SHORTS_BASE).stat().st_mtime)}" if (pasta / thumbnail_mod.FUNDO_SHORTS_BASE).exists() else None}
 
 
 @app.post("/api/videos/{slug}/thumbnail-shorts/editar")
@@ -1478,7 +1479,7 @@ def api_editar_thumbnail_shorts(
         "pos_x": min(max(pos_x, 0.0), 1.0),
         "pos_y": min(max(pos_y, 0.0), 1.0),
         "efeito": efeito if efeito in thumbnail_mod.EFEITOS else "youtuber",
-        "fundo": fundo if fundo in ("procedural", "cena") else "procedural",
+        "fundo": fundo if fundo in ("procedural", "cena", "base") else "procedural",
     }
     if novo_fundo:
         (pasta / "thumbnail_shorts_fundo.png").unlink(missing_ok=True)
@@ -1488,7 +1489,7 @@ def api_editar_thumbnail_shorts(
     caminho_meta.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
     return {
         "thumbnail": f"/videos/{slug}/thumbnail_shorts.png?v={int(time.time())}",
-        "fundo": f"/videos/{slug}/thumbnail_shorts_fundo.png?v={int(time.time())}" if fundo == "procedural" else f"/videos/{slug}/cena00_9x16.png?v={int(time.time())}",
+        "fundo": (f"/videos/{slug}/thumbnail_shorts_fundo.png" if fundo == "procedural" else f"/videos/{slug}/{thumbnail_mod.FUNDO_SHORTS_BASE}" if fundo == "base" else f"/videos/{slug}/cena00_9x16.png") + f"?v={int(time.time())}",
     }
 
 
@@ -1550,6 +1551,7 @@ def api_escolher_imagem_thumbnail(slug: str, imagem: str = Form(...)) -> dict:
             return JSONResponse({"erro": "imagem inválida"}, status_code=400)
         nome = f"biblioteca-{origem.name}"
         shutil.copyfile(origem, pasta / nome)
+        shutil.copyfile(origem, pasta / thumbnail_mod.FUNDO_SHORTS_BASE)  # disponível como fundo do Short ("Thumbnail escolhida")
     else:
         # só aceita nomes que já existem de verdade na pasta do vídeo (cena*_16x9.png
         # ou a customizada) — nunca um caminho arbitrário vindo do cliente

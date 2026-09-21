@@ -41,6 +41,7 @@ async function montarEditorShorts(slug, painel) {
         <select class="short-fundo" title="Fundo">
           <option value="procedural"${cfg.fundo === "procedural" ? " selected" : ""}>Fundo gerado</option>
           <option value="cena"${cfg.fundo === "cena" ? " selected" : ""}>Primeira cena vertical</option>
+          <option value="base"${cfg.fundo === "base" ? " selected" : ""}>Thumbnail escolhida (pasta Thumbnails)</option>
         </select>
         <div class="thumb-tamanho-linha">
           <span class="video-meta">Tamanho</span>
@@ -78,6 +79,9 @@ async function montarEditorShorts(slug, painel) {
     const f = await r.json();
     if (!f.erro) estado.fundos = f;
     if (!estado.fundos.cena && estado.fundo === "cena") estado.fundo = "procedural";
+    if (!estado.fundos.base && estado.fundo === "base") estado.fundo = "procedural";
+    secao.querySelector(".short-fundo").value = estado.fundo;
+    secao.querySelector(".short-fundo option[value=base]").hidden = !estado.fundos.base; // só aparece se há uma imagem escolhida
     redesenhar();
   };
 

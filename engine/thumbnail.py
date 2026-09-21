@@ -223,6 +223,7 @@ def gerar_thumbnail(
 
 
 TAMANHO_SHORTS = (1080, 1920)
+FUNDO_SHORTS_BASE = "thumbnail_shorts_fundo_base.png"
 
 
 def config_shorts(metadados: dict, padrao_titulo: str) -> dict:
@@ -238,7 +239,7 @@ def config_shorts(metadados: dict, padrao_titulo: str) -> dict:
         "pos_x": salvo.get("pos_x") if isinstance(salvo.get("pos_x"), (int, float)) else 0.5,
         "pos_y": salvo.get("pos_y") if isinstance(salvo.get("pos_y"), (int, float)) else 0.5,
         "efeito": salvo.get("efeito") if salvo.get("efeito") in EFEITOS else "youtuber",
-        "fundo": salvo.get("fundo") if salvo.get("fundo") in ("procedural", "cena") else "procedural",
+        "fundo": salvo.get("fundo") if salvo.get("fundo") in ("procedural", "cena", "base") else "procedural",
     }
 
 
@@ -249,7 +250,9 @@ def gerar_shorts(pasta: Path, metadados: dict) -> Path:
 
     cfg = config_shorts(metadados, pasta.name)
     fundo = pasta / "thumbnail_shorts_fundo.png"
-    if cfg["fundo"] == "cena" and (pasta / "cena00_9x16.png").exists():
+    if cfg["fundo"] == "base" and (pasta / FUNDO_SHORTS_BASE).exists():
+        fundo = pasta / FUNDO_SHORTS_BASE  # a imagem que você escolheu (pasta Thumbnails); qualquer proporção é recortada para vertical
+    elif cfg["fundo"] == "cena" and (pasta / "cena00_9x16.png").exists():
         fundo = pasta / "cena00_9x16.png"
     elif not fundo.exists():
         visuals.gerar_fundo_procedural(*TAMANHO_SHORTS, fundo, semente=f"{metadados.get('titulo', pasta.name)}{metadados.get('thumbnail_short_semente', '')}")

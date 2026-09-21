@@ -153,6 +153,13 @@ def _gerar_thumbnail_do_video(pasta: Path, titulo: str, thumbnail_base: str = ""
     fundo = pasta / f"biblioteca-{origem.name}"  # mesmo nome que a galeria de thumbnail usa, assim escolher outra depois funciona igual
     shutil.copyfile(origem, fundo)
     (pasta / "thumbnail_fonte.txt").write_text(fundo.name, encoding="utf-8")
+    shutil.copyfile(origem, pasta / thumbnail_mod.FUNDO_SHORTS_BASE)  # o Short usa a mesma imagem (recortada na vertical)
+    try:
+        meta = json.loads((pasta / "metadata.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = {}
+    if not meta.get("thumbnail_short"):  # só se você ainda não configurou a do Short
+        _salvar_metadados(pasta, thumbnail_short={"fundo": "base"})
     return thumbnail_mod.gerar_thumbnail(fundo, titulo, pasta / "thumbnail.png")
 
 
