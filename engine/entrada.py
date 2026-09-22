@@ -10,7 +10,7 @@ import unicodedata
 import time
 from pathlib import Path
 
-from engine import biblioteca, canal
+from engine import biblioteca, canal, instancia
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA = RAIZ / "dados" / "entrada"
@@ -135,7 +135,8 @@ def iniciar() -> None:
     def laco() -> None:
         while True:
             try:
-                importar()
+                if instancia.tem_o_comando():
+                    importar()
             except Exception as erro:
                 print(f"[entrada] erro: {erro}")
             time.sleep(15)

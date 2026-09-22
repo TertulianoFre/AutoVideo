@@ -4,12 +4,14 @@ normal, 9:16 como Short). Pra funcionar precisa de client_secret.json na raiz
 do projeto e de uma conta conectada (engine.youtube.conectar)."""
 
 import json
+import os
 import threading
 import time
 from datetime import date, datetime
 from pathlib import Path
 
 from engine import canal as canal_mod
+from engine import instancia
 from engine import roteiro as roteiro_mod
 from engine import thumbnail as thumbnail_mod
 from engine import youtube
@@ -167,12 +169,26 @@ def publicar_pendentes() -> None:
             _salvar_metadados(caminho_meta, metadados)
             continue
 
+        reserva = pasta / ".publicando"  # reserva do vídeo: quem a cria primeiro publica (vale entre processos)
         try:
+            if reserva.exists() and time.time() - reserva.stat().st_mtime > 2 * 3600:
+                reserva.unlink(missing_ok=True)  # sobra de uma publicação que travou há horas
+            os.close(os.open(str(reserva), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except FileExistsError:
+            continue  # outro servidor está publicando este vídeo agora
+        except OSError:
+            continue
+        try:
+            metadados = json.loads(caminho_meta.read_text(encoding="utf-8"))  # relê: o outro pode ter acabado de publicar
+            if metadados.get("publicado"):
+                continue
             _publicar_um(pasta, metadados, caminho_meta, nome_conta)
         except Exception as erro:
             metadados["publicacao_erro"] = str(erro)
             _salvar_metadados(caminho_meta, metadados)
             print(f"[agendador] falha ao publicar '{metadados.get('titulo')}': {erro}")
+        finally:
+            reserva.unlink(missing_ok=True)
 
 
 def _retentar_thumbnails(pasta: Path, metadados: dict, caminho_meta: Path) -> None:
@@ -220,7 +236,8 @@ def iniciar_agendador() -> None:
     def loop() -> None:
         while True:
             try:
-                publicar_pendentes()
+                if instancia.tem_o_comando():  # com dois servidores abertos, só um publica
+                    publicar_pendentes()
             except Exception as erro:
                 print(f"[agendador] erro no ciclo: {erro}")
             time.sleep(INTERVALO_SEGUNDOS)
