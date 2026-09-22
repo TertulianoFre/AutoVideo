@@ -1,170 +1,129 @@
-# Projeto YT
+# AutoVideo
 
-Canal de YouTube com vídeos gerados por automação (texto → narração → imagem → legenda), testando viabilidade de monetização.
+Aplicativo local (Windows) que automatiza a produção de vídeos para o YouTube: do título ao vídeo publicado. Ele escreve o roteiro, narra, cria as imagens de cada cena, gera a legenda sincronizada, monta o vídeo em 16:9 e em 9:16 (Shorts), faz a thumbnail e publica no YouTube na data agendada.
 
-## Como funciona (visão geral do produto)
+Tudo roda na sua máquina e funciona sem nenhuma API paga. Chaves gratuitas de alguns serviços são opcionais e só aumentam a variedade e o limite de uso.
 
-1. **Agente** combina o contexto do canal ativo com o que está em alta no YouTube agora e sugere títulos — implementado (aba "Agente"); também tem um campo de texto livre pra perguntar qualquer coisa sobre o canal, pedir ideias num formato específico, ou reagendar um vídeo já gerado por nome ("muda a data do vídeo X pra sexta"). Pesquisar tendências na web em geral (fora do YouTube) ainda não.
-2. **Você** aprova uma sugestão (clica em "Usar esse título") ou digita seu próprio título/descrição.
-3. **Geração**: um único fluxo pra tudo — roteiro (levando em conta o contexto do canal ativo e a descrição do vídeo), narração (voz de IA — mulher, homem ou criança, em vários idiomas — ou sua própria gravação/upload), legenda sincronizada, e opcionalmente um som de fundo (chuva, música suave, ou um áudio importado por você na aba "Base") baixinho por baixo da narração. Também dá pra marcar "sem narração" e usar só o som de fundo como áudio do vídeo (ex: 30 min de chuva pra relaxar) — tudo no mesmo formulário, sem telas separadas.
-4. **Montagem** via FFmpeg: exporta em 16:9 (vídeo normal) e 9:16 (Shorts), com thumbnail automática.
-5. **Publicação**: você agenda a data (e opcionalmente a hora) e o app publica sozinho no YouTube (16:9 como vídeo normal, 9:16 como Short), na conta do canal a que o vídeo pertence — desde que o app fique rodando e essa conta esteja conectada.
-6. **Painel**: acompanha inscritos e visualizações do canal ativo (tempo de exibição e receita estimada ainda não implementados), com um gráfico de vídeos gerados por semana.
+## Funcionalidades
 
-Suporta **múltiplos canais** (nicho/contexto e conta do YouTube próprios de cada um) rodando no mesmo app — veja a seção "Canais" abaixo.
+- **Roteiro automático** a partir do título, com o contexto do canal (nicho, tom, público) e a duração desejada. Pode ser pré-visualizado, editado ou escrito à mão.
+- **Narração** com vozes neurais gratuitas (feminina, masculina, infantil; vários idiomas), ou gravada/enviada por você. Também dá para gerar vídeos sem narração, só com som de fundo.
+- **Som de fundo** sintetizado localmente (chuva, música suave, mar, fogueira, vento, com camadas combináveis) ou um áudio seu.
+- **Imagens por cena** em três estilos: gradiente procedural (offline), fotos livres de direitos (Openverse, Wikimedia, NASA, Pexels, Pixabay) ou ilustração gerada por IA.
+- **Legenda estilo karaokê** com destaque palavra por palavra e estilo configurável.
+- **Exportação em 16:9 e 9:16** e **thumbnails editáveis** (texto arrastável, cor, tamanho, efeitos, imagem de fundo própria), inclusive para o Short.
+- **Storyboard de cenas**: edite o texto, troque ou regenere a imagem de uma cena sem refazer o vídeo inteiro.
+- **Vários canais** no mesmo app, cada um com seu contexto e sua conta do YouTube. Cada vídeo é sempre publicado na conta do canal que o criou.
+- **Publicação agendada** no YouTube (vídeo normal + Short), com título, descrição e tags, somente após a sua confirmação.
+- **Agente** em linguagem natural: sugere títulos com base no que está em alta, responde perguntas sobre o canal e edita, reagenda ou cancela vídeos ("muda o vídeo X para sexta às 18h").
+- **Painel** com inscritos, visualizações e vídeos gerados por semana.
+- **Biblioteca de mídia** ("Base") com áudios, imagens e vídeos seus, reutilizáveis em qualquer vídeo.
 
-Tudo roda localmente no Windows, sem custo de API paga.
+## Requisitos
 
-## App (backend + tela)
+- Windows 10/11
+- [Python 3.12](https://www.python.org/downloads/)
+- [FFmpeg](https://ffmpeg.org/) com libass. O jeito mais simples é `winget install Gyan.FFmpeg`. O app encontra o FFmpeg no `PATH` ou na instalação do winget.
+- Conexão com a internet (para narração, imagens por IA/fotos e publicação)
 
-Já existe um app de verdade, não só o terminal — `backend/` (FastAPI) serve a tela em `frontend/`.
+## Instalação
 
-Rodar: dê dois cliques em `iniciar.bat` (ativa o venv, sobe o servidor na porta 8080 e abre o navegador sozinho). Se preferir manual:
+```bash
+git clone https://github.com/TertulianoFre/AutoVideo.git
+cd AutoVideo
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
 ```
-.venv\Scripts\uvicorn backend.main:app --reload --port 8080
+
+## Como rodar
+
+Dê dois cliques em `iniciar.bat`: ele ativa o ambiente virtual, sobe o servidor e abre o navegador em `http://127.0.0.1:8080`.
+
+Ou, manualmente:
+
+```bash
+.venv\Scripts\uvicorn backend.main:app --port 8080
 ```
-Abre em `http://localhost:8080`, com 6 telas: **Painel** (vídeos recentes, estatísticas do canal ativo, gráfico de vídeos por semana), **Canais** (gerenciar canais — nome, contexto, qual está ativo), **Agente** (campo livre + sugestões de título), **Novo vídeo** (formulário único com progresso real), **Fila** (todos os vídeos de todos os canais, com filtros de canal/status/duração, status calculado, e **Regenerar**, **roteiro novo**, **nova thumbnail**, **editar thumbnail** e **cenas**) e **Base** (biblioteca de áudios/imagens importados por você, reutilizáveis em qualquer vídeo). O seletor de canal ativo fica no topo do menu lateral; logo abaixo, o perfil mostra a conexão com o YouTube **do canal ativo** — clique nele pra conectar/reconectar.
 
-Na tela "Novo vídeo", só **título** e **data de postagem** são obrigatórios. É um formulário só — nada de tela separada pra "vídeo ambiente". Tudo mais é opcional:
-- **Formato e privacidade**: escolha gerar só vídeo normal (16:9), só Shorts (9:16) ou ambos; e a privacidade no YouTube (público por padrão, ou privado/não listado). Na Fila, o ✕ de cada vídeo cancela e apaga ele (não será publicado); o Agente também entende "cancele a postagem do vídeo X".
-- **Hora de postagem**: opcional, junto da data — em branco publica assim que o dia chegar (comportamento de sempre).
-- **Descrição do vídeo**: texto livre que ajusta o estilo — ex: "2D simples", "mais detalhado/realista", "infantil e colorido". Influencia tanto o roteiro quanto a imagem gerada por IA.
-- **Roteiro**: se deixar em branco, o motor escreve sozinho a partir do título (+ contexto do canal + descrição do vídeo). Tem um botão **"Pré-visualizar roteiro"** que gera só o texto primeiro (sem imagem/narração/vídeo) pra você ler, editar ou pedir de novo antes de gastar tempo gerando o vídeo inteiro.
-- **Narração gravada por você**: opcional — grave pelo microfone ou envie um arquivo de áudio, no lugar da narração por IA. Precisa colar no Roteiro o texto exato que você leu (é o que permite gerar cenas/legenda, de forma aproximada — sem os timestamps reais que só o TTS local dá).
-- **Vídeo sem narração**: vira só som de fundo + imagem (ideal pra vídeos longos, 15-60 min).
-- **Som de fundo**: chuva, música suave, ou um áudio importado por você na aba "Base", mixados bem baixo por baixo da narração — funciona tanto num vídeo narrado normal quanto sozinho (sem narração). "Outro" permite descrever o que você quer: escolhe o tipo-base mais parecido e ainda soma camadas extra combináveis por cima (pássaros, trovão, multidão, passos, sino, trânsito) se a descrição mencionar.
+Também é possível gerar um vídeo direto pelo terminal, sem a interface:
 
-## Motor de geração — como funciona por dentro
+```bash
+.venv\Scripts\python cli.py --titulo "Curiosidades sobre polvos" --imagem ia --duracao-alvo 1
+```
 
-Diagrama completo (fluxo principal + cada serviço externo usado): https://claude.ai/artifact/EaS2eEAc3MtsY3nrjSjeyx — o diagrama ainda não reflete a unificação do som de fundo (foi desenhado quando "ambiente" era um modo separado).
+Rode `python cli.py --help` para ver todas as opções.
 
-Resumo do fluxo (`engine/pipeline.py:gerar_video`, único ponto de entrada, testável também pelo `cli.py`):
+## Configuração (opcional)
 
-1. **Contexto do canal** (`engine/canal.py`) — uma descrição livre (nicho, tom, público) por canal, salva em `dados/canais.json` e usada como base sempre que um roteiro é gerado pra esse canal (veja a seção "Canais" abaixo).
-2. **Roteiro** (`engine/roteiro.py`) — opcional: se você não passar um roteiro pronto, o motor escreve um sozinho a partir do título (+ contexto do canal + descrição do vídeo), com estrutura pedida explicitamente (gancho, 2-3 detalhes concretos, frase de impacto — não genérico), do tamanho certo pra bater a duração alvo (via Pollinations.ai, chat compatível com a API da OpenAI, grátis, sem chave, `reasoning_effort: low` pra não gastar o orçamento de tokens só "pensando"), e depois passa por uma segunda chamada só de revisão (gramática/fluência, mantendo sentido e tamanho — se a revisão sair estranha, mantém o rascunho original). Também gera **hashtags/tags sugeridas** — hoje ficam disponíveis pra copiar; inserção automática no YouTube depende da integração com a YouTube Data API.
-3. **Narração** (`engine/tts.py`) — `edge-tts` (Microsoft, grátis), ou nenhuma se "sem narração" estiver marcado.
-4. **Som de fundo** (`engine/ambiente.py`, opcional) — chuva ou música suave sintetizadas localmente (numpy, sem internet). Sem narração, é o áudio inteiro do vídeo; com narração, é mixado bem baixo por baixo dela via `render.mixar_audio_com_fundo` (ffmpeg `amix`).
-5. **Cenas** (`engine/scenes.py`) — com narração, o roteiro vira cenas por frase (~5s cada); sem narração, imagens em intervalo fixo (~4 min).
-6. **Imagem de cada cena** (`engine/visuals.py`) — três estilos escolhíveis:
-   - `procedural`: gradiente gerado com Pillow, 100% local, sem internet.
-   - `foto`: foto real — tenta o Openverse.org primeiro (grátis, sem chave), depois o Pexels (grátis, precisa de `PEXELS_API_KEY`). Se a foto encontrada tiver um rosto grande/de perto (detector local do OpenCV), tenta a outra fonte antes de desistir.
-   - `ia`: traduz a cena pro inglês (MyMemory Translator, grátis), troca verbos de expressão facial de risco (bocejar, gritar...) por uma descrição de cena mais genérica, e gera a imagem via Pollinations.ai (grátis, sem chave). Estilo padrão é desenho 2D; a "descrição do vídeo" pode pedir algo diferente. Até 3 tentativas; se falhar, cai pro procedural.
-7. **Legenda** (`engine/subtitles.py`) — arquivo `.ass` com destaque de cor por palavra (efeito "karaokê"). Só existe com narração.
-8. **Montagem** (`engine/render.py`) — FFmpeg junta as imagens (slideshow) + áudio (+ legenda, se houver), exporta 16:9 e 9:16.
-9. **Thumbnail** (`engine/thumbnail.py`) — 1280x720, título em destaque por cima da primeira cena, estilo YouTube.
+### Chaves de API gratuitas
 
-**Editar uma cena específica** (`engine.pipeline.regenerar_cena`, botão "cenas" na Fila): mostra cada cena do vídeo (texto + imagem) com um botão "Regenerar essa cena" — refaz só a imagem daquela cena (a IA sorteia de novo) e remonta o vídeo com ffmpeg, sem tocar no roteiro, na narração, na legenda nem nas outras cenas. Só funciona em vídeos gerados depois desse recurso existir (precisa do `metadata.json` ter a lista de cenas salva — clique em "Regenerar" uma vez em vídeos antigos pra habilitar).
+Crie um arquivo `.env` na raiz do projeto (ele é ignorado pelo git). Nenhuma chave é obrigatória.
 
-**Editar a thumbnail** (botão "editar thumbnail" na Fila) — preview ao vivo com o texto arrastável em cima da imagem de fundo:
-- **Texto**: independente do título do vídeo.
-- **Cor**: 5 opções.
-- **Posição**: arraste o texto pra qualquer lugar da imagem (posição livre de verdade, salva como fração x/y), ou clique num ponto da grade 3x3 (topo/centro/baixo × esquerda/centro/direita) pra um atalho rápido — os dois modos se alternam automaticamente conforme você usa um ou outro.
-- **Tamanho da fonte**: controle deslizante de 24 a 190px (não é mais só pequeno/médio/grande).
-- **Imagem de fundo**: clique numa das imagens de cena já geradas pra trocar (sem sortear), ou envie sua própria imagem (upload) — útil porque a thumbnail é o que mais chama atenção pra alguém clicar no vídeo, então às vezes vale a pena usar uma imagem sua em vez de uma cena gerada.
+| Variável | Para quê | Onde obter |
+|---|---|---|
+| `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `OPENROUTER_API_KEY` | Geração de texto (roteiro, agente). Os provedores com chave são usados em rodízio; sem nenhuma, o app usa a Pollinations.ai, que é gratuita e não precisa de chave. | console.groq.com, aistudio.google.com/apikey, console.mistral.ai, cloud.cerebras.ai, openrouter.ai/keys |
+| `OLLAMA_MODEL`, `OLLAMA_VISION_MODEL` | Usar um modelo local via [Ollama](https://ollama.com), sem limite de uso | — |
+| `PEXELS_API_KEY`, `PIXABAY_API_KEY` | Mais variedade de fotos no estilo `foto` | pexels.com/api, pixabay.com/api/docs |
 
-Tudo fica salvo no `metadata.json` (`thumbnail_texto`, `thumbnail_cor`, `thumbnail_posicao`, `thumbnail_pos_x`/`thumbnail_pos_y`, `thumbnail_tamanho_px`) e sobrevive a regenerar a cena 0 do vídeo.
+As chaves de texto também podem ser cadastradas pela própria interface.
 
-### Canais (`engine/canal.py`, aba "Canais")
+### Publicação no YouTube
 
-Cada canal cadastrado tem: **id**, **nome**, **contexto** (nicho/tom/público) e **conta do YouTube própria** (mesmo id do canal — um token separado em `dados/tokens/token_<id>.json`). Tudo fica em `dados/canais.json` (não versionado no git — é dado pessoal de uso, evolui a cada canal que você adiciona; se o arquivo não existir ainda, o app cria sozinho um canal `principal` na primeira vez, migrando o contexto do antigo `dados/canal.json` se ele existir).
+A publicação usa a YouTube Data API v3 com uma credencial OAuth sua. A configuração é feita uma única vez e vale para todos os canais:
 
-Um canal fica marcado como **ativo** por vez (seletor no topo do menu lateral) — é o que "Novo vídeo" usa pra escrever o roteiro (contexto certo) e gravar o vídeo com o `canal_id` certo, e o que o **Agente** usa pra puxar tendências/contexto. A **Fila** e o **Painel** mostram vídeos de todos os canais juntos (com uma etiqueta do nome do canal em cada linha, quando há mais de um canal); trocar o canal ativo nunca esconde vídeo nenhum.
+1. Em [console.cloud.google.com](https://console.cloud.google.com/), crie um projeto e ative a **YouTube Data API v3**.
+2. Em **Tela de permissão OAuth**, escolha o tipo *Externo*, mantenha em modo *Teste* e adicione como usuário de teste o e-mail de cada conta Google que for conectar.
+3. Em **Credenciais**, crie um *ID do cliente OAuth* do tipo **App para computador** e baixe o JSON.
+4. Salve o arquivo como `client_secret.json` na raiz do projeto.
+5. No app, selecione o canal no topo do menu lateral e clique no perfil para autorizar a conta.
 
-Cada vídeo grava o `canal_id` de quem o criou no `metadata.json`, e **continua sendo desse canal pra sempre** — regenerar, editar cena ou trocar o canal ativo depois não muda isso. O agendador (`engine/agendador.py`) usa exatamente esse `canal_id` salvo pra escolher a conta do YouTube certa na hora de publicar — nunca publica um vídeo na conta errada mesmo com vários canais ativos ao mesmo tempo. Vídeos gerados antes desse recurso existir (sem `canal_id` salvo) caem no canal `principal`, mesmo comportamento de sempre.
+Em modo *Teste*, o Google expira a autorização a cada 7 dias. Quando o perfil mostrar "Não conectado", basta conectar de novo.
 
-Adicionar um canal novo é só preencher nome (+ contexto opcional) na aba "Canais". Pra conectar a conta do YouTube dele: defina ele como ativo e clique no perfil, no topo do menu — o fluxo de conexão é sempre o mesmo, só muda pra qual token ele salva. Cada card em "Canais" também tem um campo avançado **"Conta do YouTube"** (normalmente não precisa mexer, já que é o mesmo id do canal) — só é útil se quiser apontar um canal pra uma conta já conectada com outro nome, sem recriar o canal.
+O agendador roda junto com o servidor e verifica a cada 10 minutos se há vídeos confirmados com a data de postagem vencida. Para rodar sem publicar nada (por exemplo, em testes), defina `YT_SEM_AGENDADOR=1`.
 
-### Publicação automática (`engine/youtube.py`, `engine/agendador.py`)
+## Como funciona
 
-Precisa de um `client_secret.json` na raiz do projeto (credencial OAuth "App para computador", criada no Google Cloud Console — ver checklist abaixo) e de conectar a conta de cada canal pelo menos uma vez (perfil, no topo do menu, com esse canal ativo).
+```
+título ─► roteiro ─► narração ─► cenas ─► imagens ─► legenda ─► montagem (FFmpeg) ─► thumbnail ─► agendamento ─► YouTube
+```
 
-Com isso feito, um agendador roda em segundo plano junto com o backend (`agendador.iniciar_agendador()`, confere a cada 10 min): qualquer vídeo com `data_postagem` já vencida e ainda não publicado é enviado automaticamente — o 16:9 como vídeo normal e o 9:16 como Short (dois uploads separados), na conta do canal a que ele pertence, com título, descrição (o roteiro) e as hashtags sugeridas. Fica como `private` por padrão até você confiar no fluxo (ajustável em `agendador.PRIVACIDADE_PADRAO`).
+O ponto de entrada do motor é `engine/pipeline.py:gerar_video`, usado tanto pela interface quanto pelo `cli.py`. Os vídeos são gerados um de cada vez, em fila, e cada um fica em uma pasta própria em `output/` com um `metadata.json` (roteiro, cenas, canal, agendamento, configurações da thumbnail).
 
-**Mesma credencial do Google Cloud pra todos os canais**: você configura o Google Cloud Console uma única vez, não importa quantos canais/contas adicionar depois. Conectar uma conta nova é só clicar em "Conectar" de novo (com o canal certo ativo) — sem precisar mexer no Cloud Console outra vez, a menos que seja uma conta de Google totalmente diferente (aí precisa adicionar o e-mail dela como "usuário de teste" na tela de consentimento OAuth do mesmo projeto).
+### Estrutura do projeto
 
-**Limitação do Google, não do código**: como o app fica em modo "teste" (evita o processo de verificação do Google), a autorização de cada conta expira a cada 7 dias — o perfil mostra "Não conectado" pro canal ativo quando isso acontece, é só clicar em "Conectar" de novo.
-
-**Estatísticas do canal** (inscritos, visualizações totais) aparecem no perfil/Painel pro canal ativo quando conectado, e as mesmas informações alimentam o **Agente** (tendências do YouTube). Ambas usam o escopo `youtube.readonly`, que não existia nas primeiras versões — quem já tinha conectado antes precisa clicar em **"Reconectar"** (no perfil, no topo do menu) uma vez pra liberar as duas coisas de uma vez. O app avisa isso claramente, não precisa adivinhar.
-
-### Agente (`engine/agente.py`)
-
-Aba própria com dois jeitos de usar:
-- **Campo livre**: digite qualquer pedido em português — pergunta sobre o canal, pedido de ideias num formato específico, ou "reagenda o vídeo X pra dia Y". O modelo responde em JSON (`agente.responder_livre`): texto normal, ou uma ação de reagendamento com o slug do vídeo e a nova data/hora. O backend (`POST /api/agente/perguntar`) nunca executa a ação cegamente — revalida o slug contra vídeos que existem de verdade e a data/hora contra um regex estrito antes de tocar no `metadata.json`; se o modelo não seguir o formato JSON pedido ou apontar pra um vídeo que não existe, cai de volta pra uma resposta em texto simples.
-- **"Sugerir ideias"**: combina o contexto do canal **ativo** com os títulos em alta na conta do YouTube desse canal agora (`youtube.obter_tendencias`, região BR — só como inspiração, nunca copia) pra gerar títulos novos via Pollinations.ai. Cada sugestão tem um botão "Usar esse título" que já leva pra "Novo vídeo" com o título preenchido.
-
-Sem conexão com o YouTube, os dois ainda funcionam — só ficam sem o contexto de tendências.
-
-### Base — biblioteca de mídia (`engine/biblioteca.py`, aba "Base")
-
-Áudios e imagens que você mesmo importa da sua máquina (ex: músicas livres de direito autoral baixadas por você), guardados em `dados/biblioteca/` — fora da pasta de qualquer vídeo específico, então ficam disponíveis pra qualquer vídeo novo, não só o que estava sendo criado na hora do upload. Não é versionado no git (mesma lógica de `output/`).
-
-- **Áudios**: aparecem como opção "Um áudio da minha Base" no som de fundo de "Novo vídeo" — o arquivo é cortado ou repetido em loop (ffmpeg) pra caber exatamente na duração do vídeo. Upload é sempre reencodado com ffmpeg antes de salvar (rejeita qualquer coisa que não seja áudio de verdade, mesma lógica do upload de thumbnail com Pillow).
-- **Imagens**: aparecem também na galeria de "editar thumbnail" (Fila), junto das cenas geradas — escolher uma copia ela pra dentro da pasta do vídeo. Upload sempre passa pelo Pillow (decodifica, converte, resalva como PNG).
-
-### Limitações conhecidas
-
-- O estilo `ia` (imagem) ainda pode gerar imagens estranhas em assuntos muito específicos/incomuns (a lista de palavras de risco cobre os casos vistos até agora, mas não é exaustiva).
-- Checagem automática de "imagem com qualidade ruim, refazer" foi tentada com detector de rosto (OpenCV) — funciona bem em foto real, mas **não funciona em desenho/ilustração**, então só está ligada no estilo `foto`.
-- O roteiro automático passa por uma segunda chamada de revisão (corrige gramática/frases estranhas antes de devolver) mas ainda é um modelo pequeno e gratuito — de vez em quando sai uma frase esquisita mesmo assim. Use o "Pré-visualizar roteiro" pra revisar antes.
-- Som de fundo (`engine/ambiente.py`: chuva, música, ondas do mar, fogueira, vento) é sintetizado (ruído filtrado, sem gravação real) — soa genérico, ainda dá pra melhorar (ou importar um áudio de verdade na aba "Base"). Pedir "outro" com descrição livre escolhe o mais parecido desses 5 como base e ainda soma camadas extra por cima se a descrição menciona pássaros, trovão, multidão/cafeteria, passos, sino/carrilhão ou trânsito/buzina; fora essas combinações reconhecidas, ainda não sintetiza um som totalmente novo e arbitrário.
-- Narração gravada por você não tem timestamp real por palavra (só o TTS local gera isso) — cenas e legenda usam um ritmo de fala aproximado (constante), então podem sair levemente fora de sincronia se você tiver pausas grandes ou ritmo bem irregular na leitura.
-- Publicação automática depende do app ficar rodando (não é um serviço em nuvem) e da conta reconectada a cada 7 dias (limitação do modo "teste" do Google).
-
-## Requisitos já levantados, ainda não implementados
-
-- Sintetizar **qualquer** som de fundo descrito de verdade — hoje são 5 tipos-base fixos + 6 camadas combináveis (pássaros, trovão, multidão, passos, sino, trânsito) reconhecidas por palavra-chave; uma descrição sem nenhuma dessas palavras ainda cai só no tipo-base mais parecido, sem gerar nada realmente novo. Importar um áudio próprio na aba "Base" já cobre boa parte desse caso na prática.
-- **Receita estimada** no Painel — precisa do escopo `yt-analytics-monetary.readonly`, que o Google trata como escopo restrito (exige processo de verificação/CASA da Google, não é só ativar a API). Não vale a pena pra um app de uso pessoal — ficaria só inscritos/visualizações mesmo.
-- Pesquisar tendências fora do YouTube (web em geral) pro Agente — hoje só usa o que está em alta no próprio YouTube.
+```
+backend/     API FastAPI (main.py) e fila de geração (jobs.py)
+frontend/    Interface web (HTML/JS) servida pelo backend
+engine/      Motor de geração
+  pipeline.py    orquestra a geração de um vídeo
+  roteiro.py     roteiro e hashtags
+  ia_texto.py    provedores de texto por IA, com rodízio e fallback
+  tts.py         narração (edge-tts)
+  alinhamento.py sincronia entre áudio, palavras e cenas
+  scenes.py      divisão do roteiro em cenas
+  visuals.py     imagens das cenas (procedural, fotos, IA)
+  ambiente.py    síntese de som de fundo
+  subtitles.py   legenda .ass estilo karaokê
+  render.py      montagem com FFmpeg
+  thumbnail.py   thumbnails 16:9 e 9:16
+  canal.py       canais e seus contextos
+  agente.py      agente em linguagem natural
+  youtube.py     OAuth, upload e estatísticas
+  agendador.py   publicação automática
+  biblioteca.py  biblioteca de mídia (Base)
+cli.py       geração pelo terminal
+dados/       dados locais de uso (canais, tokens, biblioteca) — não versionados
+output/      vídeos gerados — não versionados
+```
 
 ## Stack
 
-- Python 3.12
-- FastAPI + Uvicorn (backend/app) — `backend/`, tela em `frontend/`
-- FFmpeg (montagem de vídeo/áudio/legenda, com libass) — localizado automaticamente via `engine/ferramentas.py`, não depende do PATH do processo
-- Pillow (imagens de fundo procedurais), NumPy (síntese de som de fundo)
-- edge-tts (narração, voz neural gratuita da Microsoft)
-- Pollinations.ai (texto do roteiro, hashtags e imagens por IA, grátis, sem chave)
-- requests + deep-translator (busca de fotos e tradução de prompt)
-- opencv-python-headless (detector de rosto, usado no estilo `foto`)
-- google-api-python-client + google-auth-oauthlib (publicação no YouTube) — YouTube Analytics API (painel de estatísticas) ainda não integrada
-- Git para versionar o projeto
+Python 3.12 · FastAPI + Uvicorn · FFmpeg · Pillow · NumPy · OpenCV (detecção de rosto nas fotos) · edge-tts · Pollinations.ai e provedores compatíveis com a API da OpenAI · deep-translator · Google API Client (YouTube Data API v3)
 
-## Status
+## Limitações conhecidas
 
-App funcionando de ponta a ponta: **múltiplos canais** (contexto e conta do YouTube próprios de cada um, publicação sempre na conta certa), Agente com campo livre (perguntas, ideias, reagendar por nome) e sugestão de ideias, pré-visualização de roteiro (com revisão automática), narração opcional (por IA ou gravada/enviada por você), som de fundo opcional (5 tipos sintetizados + 6 camadas combináveis + áudio importado na Base, mixado ou sozinho), 3 estilos de imagem, thumbnail automática e totalmente editável (texto/cor/posição arrastável/tamanho deslizante/imagem de fundo, com upload próprio ou da Base), biblioteca de mídia importada (Base), legenda com destaque, progresso real, download, regenerar (mantendo o roteiro e o canal original), editar uma cena específica sem regenerar tudo, fila com filtros/status/duração, agendamento com data e hora, gráfico de vídeos por semana no Painel, publicação automática no YouTube (upload + agendador local) e estatísticas reais do canal ativo no perfil.
-
-## Checklist do Google Cloud Console (feito uma vez, por você — vale pra todos os canais)
-
-1. [console.cloud.google.com](https://console.cloud.google.com/) → criar projeto
-2. "APIs e serviços" → "Biblioteca" → ativar **YouTube Data API v3**
-3. "Tela de permissão OAuth" → tipo Externo → preencher nome/e-mails → em "Usuários de teste", adicionar o e-mail de cada conta do Google que for conectar (uma por canal) → deixar em "Teste" (sem verificação)
-4. "Credenciais" → "Criar credenciais" → "ID do cliente OAuth" → tipo **App para computador** → baixar o JSON
-5. Salvar o arquivo como `client_secret.json` na raiz do projeto
-6. No app, com o canal certo ativo (seletor no topo do menu), clicar no perfil (canto superior esquerdo) e autorizar — repita esse último passo pra cada canal/conta que quiser conectar
-
-## Próximos passos
-
-1. Sintetizar algo verdadeiramente arbitrário a partir de qualquer descrição de som de fundo (hoje são 6 camadas combináveis reconhecidas por palavra-chave, mais importar um áudio pronto na Base — ainda não é "descreva qualquer coisa e sintetiza")
-
-## Novidades (thumbnails, cenas, Base, agente)
-
-- **Thumbnail do Short**: em Fila → "editar thumbnail" há um editor vertical 9:16 com prévia ao vivo (arrastar título, tamanho, cor, efeito, fundo gerado ou primeira cena). O que for salvo ali é enviado ao YouTube na publicação. O corte agora é proporcional (não estica mais).
-- **Efeitos de texto** (16:9 e Shorts): sombra, neon, explosão e "estilo YouTuber" (fonte pesada, contorno preto, degradê amarelo, raios de luz).
-- **Cenas**: "Quantidade de cenas" no Novo vídeo; o painel "cenas" da Fila vira um storyboard (ordem, trecho do roteiro, tempo, imagem 16:9 e 9:16), com "Gerar outra imagem" ou "Enviar imagem" do seu computador. Some depois de publicado.
-- **Roteiro**: barra de progresso, "Atualizar roteiro" e ajuste automático ao número de palavras da duração alvo.
-- **Base**: seções, descrição e canal por item, "usado em quais vídeos", aviso ao reutilizar áudio.
-- **Anotações**: bloco de notas simples (salva sozinho em `dados/anotacoes.txt`).
-- **Agente**: além de reagendar/cancelar, edita título, descrição, tags, privacidade e texto da thumbnail; em vídeo já publicado atualiza também no YouTube (exige reconectar a conta para autorizar a permissão `youtube`).
-
-## Vários vídeos e Pexels
-
-- Depois de clicar em "Gerar vídeo" o formulário fica livre: dá para pedir outro na hora. Os vídeos são gerados **um de cada vez**, na ordem, e aparecem na Fila como "processando" ou "na fila".
-- Fotos reais: fontes sem direitos autorais (Openverse CC0/domínio público, Wikimedia Commons, NASA). Para mais variedade, crie uma chave grátis em pexels.com/api e coloque no arquivo `.env` (raiz do projeto): `PEXELS_API_KEY=sua_chave`. Reinicie o servidor.
-
-## Fila, edição e estimativas (atualização)
-
-- **Fila:** cada vídeo tem **Editar vídeo ▾** (Cenas e roteiro, Legenda e transição, Thumbnail), **Confirmar publicação** e **Regenerar ▾** (pede confirmação). Nada é publicado sem a sua confirmação.
-- **Cenas:** o lápis (✎) edita o texto de cada cena; um único botão salva todas as edições e refaz só a narração (imagens das cenas que não mudaram são mantidas). A cena aceita imagem, imagem da Base ou **vídeo da Base** (cortado no formato, em loop, sem o áudio dele).
-- **Legenda e transição:** estilo, tamanho, posição, cor e fundo, com prévia ao vivo, no Novo vídeo e na Fila. Transições só suaves.
-- **Tempo:** estimativa de produção no Novo vídeo (aprende com os vídeos que você gera, em `dados/tempos.json`), e barra + tempo restante na Fila, nas cenas e na legenda. O roteiro mostra o tempo de narração por parágrafo enquanto você escreve.
-- **Agente:** conhece o canal e todos os vídeos; o botão "Sugerir" da duração usa o agente. A descrição do YouTube é escrita automaticamente para cada vídeo.
+- A publicação depende de o app estar rodando: não é um serviço em nuvem.
+- Modelos de texto e imagem gratuitos às vezes produzem frases ou imagens estranhas. Use a pré-visualização do roteiro e o editor de cenas para revisar antes de publicar.
+- O som de fundo sintetizado soa genérico. Para algo específico, importe um áudio seu na Base.
+- Com narração gravada por você, a sincronia da legenda é aproximada, porque não há marcação de tempo por palavra como na voz gerada.
+- Receita estimada não aparece no painel: o escopo de monetização do YouTube Analytics exige verificação do Google.
